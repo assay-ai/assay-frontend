@@ -24,6 +24,15 @@ name: Deploy
 #     CLOUDFLARE_API_TOKEN       a token with "Cloudflare Pages: Edit"
 #     CLOUDFLARE_ACCOUNT_ID
 #
+# Two jobs, so the Cloudflare credentials never share a runner with the app's
+# dependencies:
+#   build   checks the environment, installs, tests and builds with pnpm, and
+#           uploads out/. It has no Cloudflare credential: a compromised
+#           package that runs during install or build has nothing to steal.
+#   deploy  downloads out/ and deploys it with the wrangler pinned in
+#           deploy/wrangler (npm ci from its lockfile, no install scripts). It
+#           never checks out or installs the app.
+#
 # See DEPLOY.md for the one-time setup.
 
 on:
@@ -39,12 +48,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Pinned, not ubuntu-latest: the header check drives the runner's preinstalled
+  # Chrome, and the ubuntu-latest move to Ubuntu 26 (October 2026) is gradual.
+  build:
     if: github.ref_name == 'main' || github.ref_name == 'develop' || github.ref_name == 'demo'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    # The environment is bound only to read its NEXT_PUBLIC_* values. This job
+    # must never reference CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID.
     environment:
       name: ${{ github.ref_name == 'main' && 'production' || github.ref_name }}
-      url: ${{ vars.NEXT_PUBLIC_BASE_URL }}
     env:
       NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL || secrets.NEXT_PUBLIC_BASE_URL }}
       NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || secrets.NEXT_PUBLIC_API_BASE_URL }}
@@ -54,25 +68,23 @@ jobs:
       NEXT_PUBLIC_SHOW_KITCHEN_SINK: ${{ vars.NEXT_PUBLIC_SHOW_KITCHEN_SINK || secrets.NEXT_PUBLIC_SHOW_KITCHEN_SINK }}
       CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || secrets.CLOUDFLARE_PAGES_PROJECT }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # wrangler 4 needs Node 22+.
+          persist-credentials: false
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
           node-version: 24
           cache: pnpm
 
+      # The Cloudflare credentials are checked in the deploy job, which is the
+      # only job that may read them.
       - name: Check the environment is configured
-        env:
-          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
-          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
           missing=0
           for name in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_PRIVY_APP_ID CLOUDFLARE_PAGES_PROJECT; do
             if [ -z "${!name}" ]; then echo "::error::$name is not set in this environment (neither as a Variable nor as a Secret)"; missing=1; fi
           done
-          [ "$HAS_TOKEN" = true ] || { echo "::error::Secret CLOUDFLARE_API_TOKEN is not set"; missing=1; }
-          [ "$HAS_ACCOUNT" = true ] || { echo "::error::Secret CLOUDFLARE_ACCOUNT_ID is not set"; missing=1; }
           [ ${#NEXT_PUBLIC_PRIVY_APP_ID} -eq 25 ] || { echo "::error::NEXT_PUBLIC_PRIVY_APP_ID must be 25 characters"; missing=1; }
           # The demo data layer only ever ships from the demo branch.
           if [ "${{ github.ref_name }}" = demo ]; then
@@ -86,11 +98,68 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-      # Demo pages hold made-up data: keep them out of search results.
-      - name: Keep the demo out of search engines
-        if: github.ref_name == 'demo'
+      # Only production may be indexed: demo holds made-up data and develop is a
+      # test deployment.
+      - name: Keep demo and develop out of search engines
+        if: github.ref_name != 'main'
         run: |
           printf '\n/*\n  X-Robots-Tag: noindex, nofollow\n' >> out/_headers
+
+      - name: Upload the built site
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: site
+          path: out/
+          if-no-files-found: error
+          # A re-run of the whole workflow replaces the earlier attempt's copy.
+          overwrite: true
+          retention-days: 1
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name }}
+      url: ${{ vars.NEXT_PUBLIC_BASE_URL }}
+    env:
+      CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || secrets.CLOUDFLARE_PAGES_PROJECT }}
+    steps:
+      - name: Check the Cloudflare credentials are configured
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+          HAS_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+        run: |
+          missing=0
+          [ "$HAS_TOKEN" = true ] || { echo "::error::Secret CLOUDFLARE_API_TOKEN is not set"; missing=1; }
+          [ "$HAS_ACCOUNT" = true ] || { echo "::error::Secret CLOUDFLARE_ACCOUNT_ID is not set"; missing=1; }
+          exit $missing
+
+      # Only deploy/wrangler: the pinned wrangler and its lockfile. The app and
+      # its dependencies never reach this job.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          sparse-checkout: deploy/wrangler
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          # wrangler 4 needs Node 22+.
+          node-version: 24
+
+      # npm ci installs exactly the lockfile (integrity-checked) and
+      # --ignore-scripts runs no package code at install. wrangler pages deploy
+      # needs no install script: workerd and esbuild ship their binaries as
+      # platform packages, and a static deploy uses neither.
+      - name: Install the pinned wrangler
+        working-directory: deploy/wrangler
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Download the built site
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: site
+          path: out
 
       # Each environment has its own Pages project, so every deploy is that
       # project's production deployment: deploy under the project's own
@@ -105,7 +174,7 @@ jobs:
             | jq -r '.result.production_branch // empty')
           [ -n "$branch" ] || { echo "::error::Could not read the production branch of Pages project $CLOUDFLARE_PAGES_PROJECT"; exit 1; }
           echo "Deploying as production (branch $branch)"
-          pnpm dlx wrangler@4.147.0 pages deploy out \
+          deploy/wrangler/node_modules/.bin/wrangler pages deploy out \
             --project-name "$CLOUDFLARE_PAGES_PROJECT" \
             --branch "$branch" \
             --commit-hash "${{ github.sha }}" \

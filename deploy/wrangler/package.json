@@ -1,0 +1,9 @@
+{
+  "name": "assay-frontend-deploy-wrangler",
+  "private": true,
+  "description": "Pinned wrangler for the deploy job in .github/workflows/deploy.yml. Installed with npm ci from the lockfile.",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "wrangler": "4.147.0"
+  }
+}
