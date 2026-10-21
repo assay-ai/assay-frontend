@@ -9,7 +9,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Chip } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
-import { DECISION_NOTE_MAX, DECISION_NOTE_MIN, disputeErrorText, REFUND_PLAN_TEXT, shortRef, slaMarks } from "@/features/call-disputes/model";
+import { DECISION_NOTE_MAX, DECISION_NOTE_MIN, disputeErrorText, refundPlanText, shortRef, slaMarks } from "@/features/call-disputes/model";
 import { DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes/ui";
 import { collectionLabel } from "@/features/operator/dispute-money";
 import { mayDecideCallDisputes } from "@/features/operator/provider-tool-review";
@@ -69,7 +69,7 @@ function DisputeScreen() {
   }
   const d = detail.data;
   const marks = slaMarks(d, now);
-  const plan = d.intent?.refundPlan ? (REFUND_PLAN_TEXT[d.intent.refundPlan] ?? d.intent.refundPlan) : null;
+  const plan = d.intent?.refundPlan ? refundPlanText(d.intent.refundPlan, d.state) : null;
   const h = d.buyerHistory;
 
   return (
