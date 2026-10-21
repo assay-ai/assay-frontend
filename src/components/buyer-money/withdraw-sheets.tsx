@@ -14,7 +14,7 @@ import { withdrawAllHeldReason, withdrawHeldText } from "@/features/buyer-debt/d
 import { useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
 import { useOpenHoldIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
-import { describeMoneyError } from "@/features/buyer-money/money-errors";
+import { describeMoneyError, WITHDRAWALS_FROZEN_TEXT } from "@/features/buyer-money/money-errors";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { withdrawGasGrantNote } from "@/features/escrow/withdraw-gas-grant-note";
 import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
@@ -52,6 +52,24 @@ export function withdrawPauseWarning(chainName: string | null): string {
 }
 
 /** The tick that confirms the pause and the payout, beside the warning. */
+/**
+ * True only when `GET /escrow` says the withdrawal path is frozen (the last
+ * reconciliation was CRITICAL, lot 1 D16). Unknown (`null`) and an older
+ * backend (absent) are not frozen: the server still refuses, as before.
+ */
+export function withdrawalsFrozen(escrow: { withdrawalsFrozen?: boolean | null } | null | undefined): boolean {
+  return escrow?.withdrawalsFrozen === true;
+}
+
+/** The frozen banner, shown before anything is signed. */
+function FrozenBanner() {
+  return (
+    <p role="status" data-testid="withdrawals-frozen" className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700">
+      {WITHDRAWALS_FROZEN_TEXT}
+    </p>
+  );
+}
+
 export function withdrawAcknowledgement(chainName: string | null): string {
   return `I understand paid calls on ${chainName ?? "this chain"} stop until I claim or cancel this, and I may receive less than I ask for.`;
 }
@@ -143,8 +161,11 @@ export function WithdrawSheet({
     </Button>
   );
 
+  const frozen = withdrawalsFrozen(escrow);
   const disabledReason = readOnly
     ? "Your account is blocked, so withdrawals are paused."
+    : frozen
+      ? "Withdrawals are paused for now."
     : !escrow?.exists
       ? "You have no escrow yet, so there is nothing to withdraw."
       : cancelling
@@ -233,6 +254,7 @@ export function WithdrawSheet({
       }
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
     >
+      {frozen ? <FrozenBanner /> : null}
       {cancelling ? null : (
         <>
           <StatusTimeline
@@ -307,7 +329,10 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   const label = payout ? `Claim ${formatLimit(payout)}` : "Claim";
   const { hasPassed: matured } = useCountdown(escrow?.withdrawAvailableAt);
-  const notYet = !requested || BigInt(requested.amount || "0") === 0n
+  const frozen = withdrawalsFrozen(escrow);
+  const notYet = frozen
+    ? "Withdrawals are paused for now."
+    : !requested || BigInt(requested.amount || "0") === 0n
     ? "There is no withdrawal to claim. Request one first."
     : !matured
       ? "Not ready yet: the hour after your request has not passed."
@@ -377,6 +402,7 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
       successDescription="Your agents can pay for calls again with what is left in your escrow."
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
     >
+      {frozen ? <FrozenBanner /> : null}
       {evm ? (
         <p className="text-body-13 text-02">
           This is a transaction you send yourself, so it costs a small network fee in ETH from your wallet.
