@@ -241,12 +241,13 @@ describe("parseAmountInput", () => {
     expect(parseAmountInput("20.5", { decimals: 6 })).toMatchObject({ atomic: "20500000", error: null });
     expect(parseAmountInput("1,000", { decimals: 6 }).atomic).toBe("1000000000");
     expect(parseAmountInput("12,345.5", { decimals: 6 }).atomic).toBe("12345500000");
+    expect(parseAmountInput("1,000,000.25", { decimals: 6 }).atomic).toBe("1000000250000");
     expect(parseAmountInput(" $20 ", { decimals: 6 }).atomic).toBe("20000000");
   });
 
   // BUG-BUY-MONEY-03: what a person types is never read as another number.
   it("refuses a decimal comma, a sign and an exponent instead of reading them as digits", () => {
-    for (const text of ["1,5", "1,50", "12,34,567", "-5", "-1", "1e3", "abc", "5$"]) {
+    for (const text of ["1,5", "1,50", "12,34,567", "0,500", "00,123", ",500", "1,000,", "-5", "-1", "1e3", "abc", "5$"]) {
       expect(parseAmountInput(text, { decimals: 6 }).error).toBe("Enter an amount like 20 or 20.50.");
     }
   });
