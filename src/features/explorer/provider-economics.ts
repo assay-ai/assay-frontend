@@ -111,6 +111,10 @@ export function setupHref(mode: ListingMode, price: string, calls: string): stri
 export function coverTimeText(days: string): string {
   const n = new Decimal(days);
   if (n.gt(3650)) return "more than 10 years of earnings";
-  if (n.gt(365)) return `≈ ${n.div(365).toDecimalPlaces(1, Decimal.ROUND_UP).toString()} years of earnings`;
-  return `≈ ${formatDecimal(n, { decimals: 1, exact: false, symbol: "" })} days of earnings`;
+  if (n.gt(365)) {
+    const years = n.div(365).toDecimalPlaces(1, Decimal.ROUND_HALF_UP);
+    return `≈ ${years.toString()} ${years.eq(1) ? "year" : "years"} of earnings`;
+  }
+  const shown = n.toDecimalPlaces(1, Decimal.ROUND_UP);
+  return `≈ ${shown.toString()} ${shown.eq(1) ? "day" : "days"} of earnings`;
 }
