@@ -4,6 +4,8 @@ import type { BindingTestLayer, BindingTestLayerResult, BindingTestReport } from
 
 import { isEmptyResult, testGate, testPipeline } from "./pipeline";
 
+const MAPPING = "the mapping (yours; Advanced mapping)";
+
 const LAYERS: BindingTestLayer[] = ["REQUEST_MAPPING", "UPSTREAM", "CLASSIFICATION", "RESPONSE_MAPPING", "VERIFICATION"];
 
 function report(overrides: Partial<Record<BindingTestLayer, Partial<BindingTestLayerResult>>> = {}, extra: Partial<BindingTestReport> = {}): BindingTestReport {
@@ -12,6 +14,7 @@ function report(overrides: Partial<Record<BindingTestLayer, Partial<BindingTestL
     outcome: "PASSED",
     failedLayer: null,
     mappingVersion: 1,
+    warnings: [],
     layers: LAYERS.map((layer) => ({ layer, status: "PASSED", code: null, detail: null, fault: null, ...overrides[layer] })),
     request: { method: "GET", url: "https://api.example.com/v1/quote?q=1", headerNames: [], body: null },
     upstream: { status: 200, latencyMs: 120, rawBody: "{}", rawBodyTruncated: false, contentType: "application/json", transportError: null },
@@ -54,12 +57,174 @@ describe("testPipeline", () => {
 
   it("blames the mapping when the output cannot be read", () => {
     const pipeline = testPipeline(report({ RESPONSE_MAPPING: { status: "FAILED" } }, { outcome: "FAILED" }));
-    expect(pipeline.failed?.fault).toBe("the mapping");
+    expect(pipeline.failed?.fault).toBe(MAPPING);
   });
 
-  it("lets the layer's own fault win", () => {
-    const pipeline = testPipeline(report({ UPSTREAM: { status: "FAILED", fault: "PLATFORM" } }, { outcome: "FAILED" }));
-    expect(pipeline.failed?.fault).toBe("Assay, not you");
+  describe("fault table: whose fix it is (D wizard P1)", () => {
+    const UUID = "ed44c0de-0000-4000-8000-000000000001";
+
+    it("PLATFORM at Request built is the provider's own mapping, not Assay", () => {
+      const pipeline = testPipeline(
+        report(
+          {
+            REQUEST_MAPPING: {
+              status: "FAILED",
+              fault: "PLATFORM",
+              code: "TOOL_MAPPING_PATH_NOT_FOUND",
+              detail: `Mapping selector resolved to nothing: $.vsCurrency (at /query/vsCurrency) for binding: ${UUID}`,
+            },
+            UPSTREAM: { status: "NOT_REACHED" },
+          },
+          { outcome: "FAILED", request: null },
+        ),
+      );
+      expect(pipeline.failed?.id).toBe("request");
+      // The chip agrees with the sentence: the input is missing a value.
+      expect(pipeline.failed?.fault).toBe("your test input");
+      expect(pipeline.failed?.fault).not.toMatch(/Assay/);
+      expect(pipeline.failed?.sentence).toBe(
+        "Your test input has no “vsCurrency”, and the request needs it. Fill it in, or tick “may be missing” for it under Advanced mapping.",
+      );
+      // Internals stay behind "Details", and never carry the listing's id.
+      expect(pipeline.failed?.details).toBe("Mapping selector resolved to nothing: $.vsCurrency (at /query/vsCurrency)");
+      expect(JSON.stringify(pipeline)).not.toContain(UUID);
+    });
+
+    it("PLATFORM at Output mapped names the missing field in the provider's answer", () => {
+      const pipeline = testPipeline(
+        report(
+          {
+            RESPONSE_MAPPING: {
+              status: "FAILED",
+              fault: "PLATFORM",
+              code: "TOOL_MAPPING_PATH_NOT_FOUND",
+              detail: `Mapping selector resolved to nothing: $.markets (at /markets) for binding: ${UUID}`,
+            },
+            VERIFICATION: { status: "NOT_REACHED" },
+          },
+          { outcome: "FAILED" },
+        ),
+      );
+      expect(pipeline.failed?.id).toBe("mapped");
+      expect(pipeline.failed?.fault).toBe(MAPPING);
+      expect(pipeline.failed?.sentence).toBe(
+        "Your answer has no “markets” field. Change your API, or map another field under Advanced mapping.",
+      );
+      expect(pipeline.failed?.fault).not.toMatch(/Assay/);
+    });
+
+    it("a type mismatch reads plainly, with the raw detail kept", () => {
+      const pipeline = testPipeline(
+        report(
+          {
+            RESPONSE_MAPPING: {
+              status: "FAILED",
+              fault: "PROVIDER",
+              code: "TOOL_MAPPING_TYPE_MISMATCH",
+              detail: "Type mismatch at /markets: expected array, got object",
+            },
+          },
+          { outcome: "FAILED" },
+        ),
+      );
+      expect(pipeline.failed?.sentence).toBe("“markets” has the wrong type: the tool expects array, your answer gave object.");
+      expect(pipeline.failed?.details).toBe("Type mismatch at /markets: expected array, got object");
+      expect(pipeline.failed?.fault).toBe(MAPPING);
+    });
+
+    it("a 404 is a wrong address or path, not bad test input", () => {
+      const pipeline = testPipeline(
+        report(
+          { CLASSIFICATION: { status: "FAILED", code: "REQUEST_REJECTED" } },
+          {
+            outcome: "FAILED",
+            classification: { responseClass: "REQUEST_ERROR", reason: "REQUEST_REJECTED" },
+            upstream: { status: 404, latencyMs: 9, rawBody: "", rawBodyTruncated: false, contentType: null, transportError: null },
+          },
+        ),
+      );
+      expect(pipeline.failed?.fault).toBe("the address or path");
+      expect(pipeline.failed?.sentence).toBe(
+        "Your API answered HTTP 404: nothing at this address. Check the address, and the path under Advanced mapping.",
+      );
+    });
+
+    it("a 401 or 403 is the Authentication setting", () => {
+      const pipeline = testPipeline(
+        report(
+          { CLASSIFICATION: { status: "FAILED" } },
+          {
+            outcome: "FAILED",
+            classification: { responseClass: "REQUEST_ERROR", reason: "REQUEST_REJECTED" },
+            upstream: { status: 401, latencyMs: 9, rawBody: "", rawBodyTruncated: false, contentType: null, transportError: null },
+          },
+        ),
+      );
+      expect(pipeline.failed?.fault).toBe("Authentication");
+    });
+
+    it("a call Assay could not prepare is Assay's, and says the API was not called", () => {
+      const pipeline = testPipeline(
+        report(
+          { UPSTREAM: { status: "FAILED", code: "PLATFORM_UNAVAILABLE", detail: "request signing failed" } },
+          {
+            outcome: "FAILED",
+            upstream: {
+              status: 0,
+              latencyMs: 1,
+              rawBody: null,
+              rawBodyTruncated: false,
+              contentType: null,
+              transportError: { kind: "PLATFORM_UNAVAILABLE", detail: "request signing failed" },
+            },
+          },
+        ),
+      );
+      expect(pipeline.failed?.fault).toBe("Assay, not you");
+      expect(pipeline.failed?.sentence).toMatch(/Your API wasn't called/);
+    });
+
+    it("headers over the 8 KiB cap are the provider's own headers, not Assay", () => {
+      const pipeline = testPipeline(
+        report(
+          { UPSTREAM: { status: "FAILED", code: "PLATFORM_UNAVAILABLE", detail: "outbound request headers exceed 8 KiB" } },
+          {
+            outcome: "FAILED",
+            upstream: {
+              status: 0,
+              latencyMs: 1,
+              rawBody: null,
+              rawBodyTruncated: false,
+              contentType: null,
+              transportError: { kind: "PLATFORM_UNAVAILABLE", detail: "outbound request headers exceed 8 KiB" },
+            },
+          },
+        ),
+      );
+      expect(pipeline.failed?.fault).toBe("your headers");
+      expect(pipeline.failed?.sentence).toMatch(/^Your headers are too large \(over 8 KiB together\)/);
+      expect(pipeline.failed?.sentence).not.toMatch(/Try again/);
+    });
+
+    it("missing API key headers point at Authentication", () => {
+      const pipeline = testPipeline(
+        report(
+          { UPSTREAM: { status: "FAILED", code: "PLATFORM_UNAVAILABLE", detail: "credentials missing for this address" } },
+          {
+            outcome: "FAILED",
+            upstream: {
+              status: 0,
+              latencyMs: 1,
+              rawBody: null,
+              rawBodyTruncated: false,
+              contentType: null,
+              transportError: { kind: "PLATFORM_UNAVAILABLE", detail: "credentials missing for this address" },
+            },
+          },
+        ),
+      );
+      expect(pipeline.failed?.fault).toBe("Authentication");
+    });
   });
 
   it("names failing checks in plain words", () => {

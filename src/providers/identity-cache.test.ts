@@ -116,4 +116,39 @@ describe("settleCacheForIdentity", () => {
     expect(observer.getCurrentResult().data).toBe("tenant-b");
     unsubscribe();
   });
+
+  it("served: what answered is not fetched again; what failed is retried", async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 0 } } });
+    let okCalls = 0;
+    let failCalls = 0;
+    const ok = new QueryObserver(queryClient, {
+      queryKey: ["escrow", null],
+      queryFn: async () => {
+        okCalls += 1;
+        return "escrow";
+      },
+    });
+    const failing = new QueryObserver(queryClient, {
+      queryKey: ["balances"],
+      queryFn: async () => {
+        failCalls += 1;
+        if (failCalls === 1) throw new Error("offline");
+        return "balances";
+      },
+    });
+    const stopOk = ok.subscribe(() => undefined);
+    const stopFailing = failing.subscribe(() => undefined);
+    await flush();
+    expect(failing.getCurrentResult().isError).toBe(true);
+
+    settleCacheForIdentity(queryClient, "served");
+    await flush();
+
+    expect(okCalls).toBe(1);
+    expect(ok.getCurrentResult().data).toBe("escrow");
+    expect(failCalls).toBe(2);
+    expect(failing.getCurrentResult().data).toBe("balances");
+    stopOk();
+    stopFailing();
+  });
 });

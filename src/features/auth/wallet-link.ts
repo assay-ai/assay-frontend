@@ -2,7 +2,7 @@
 
 import { useSyncExternalStore } from "react";
 
-import { ApiError } from "@/libs/ApiClient";
+import { ApiError, onWalletNotLinked } from "@/libs/ApiClient";
 import { linkWallet } from "@/services/auth.service";
 
 /**
@@ -72,6 +72,83 @@ let inFlight = false;
 
 const listeners = new Set<() => void>();
 
+/**
+ * ## When the link landing refetches the screens
+ *
+ * Only when a screen was actually refused for want of a wallet. A screen that
+ * mounted before the wallet linked is holding a failed request, so the link
+ * landing has to refetch it (`PrivySessionBridge`). But every session-guarded
+ * route refuses an unlinked account with `AUTH_WALLET_NOT_LINKED`; none
+ * answers successfully with "no wallet yet" data. So when no request got that
+ * refusal, nothing on screen depends on the link, and refetching the whole
+ * cache once it lands is the same data fetched again. That is every reload of
+ * an account linked long ago: the link answers `linked` at once, and used to
+ * refetch every query a second time for it.
+ *
+ * - `refusedBeforeLink`: a refusal arrived while the link had not landed. Kept
+ *   across `resetWalletLink`, which also runs when Privy first resolves the
+ *   identity, after the burst that may have been refused. A refusal kept from
+ *   an earlier identity costs one extra refetch, nothing more.
+ * - `lateRefusalArmed`: a request sent before the link landed may still come
+ *   back refused after it (the API decided it before the link was written).
+ *   That holds whether or not something was refused before: a refetch at the
+ *   moment the link lands does not restart a query still fetching with no
+ *   data, it waits on the same request, and so ends with the same late 424.
+ *   The first late refusal refetches once; later ones change nothing, so a
+ *   424 can never start a loop.
+ *
+ * A late refusal is reported from inside `ApiClient`'s response handler,
+ * while its query is still fetching: a refetch started there would join that
+ * request and settle with the 424 too. So it is started on the next task,
+ * once the refused request has settled.
+ */
+let refusedBeforeLink = false;
+let lateRefusalArmed = false;
+const refetchListeners = new Set<() => void>();
+
+function refetchScreens(): void {
+  for (const listener of refetchListeners) listener();
+}
+
+function landed(): void {
+  lateRefusalArmed = true;
+  if (refusedBeforeLink) {
+    refusedBeforeLink = false;
+    refetchScreens();
+  }
+}
+
+/** `ApiClient` saw an `AUTH_WALLET_NOT_LINKED`. */
+export function noteWalletNotLinked(): void {
+  if (status !== "linked") {
+    refusedBeforeLink = true;
+    return;
+  }
+  if (!lateRefusalArmed) return;
+  lateRefusalArmed = false;
+  setTimeout(refetchScreens, 0);
+}
+
+onWalletNotLinked(noteWalletNotLinked);
+
+/** Forgets every refusal seen so far. For tests. */
+export function forgetWalletRefusals(): void {
+  refusedBeforeLink = false;
+  lateRefusalArmed = false;
+}
+
+/**
+ * Called when the screens must be refetched because the link landed after
+ * something was refused for want of it. See "When the link landing refetches
+ * the screens" above.
+ */
+export function subscribeLinkedRefetch(listener: () => void): () => void {
+  refetchListeners.add(listener);
+  return () => {
+    refetchListeners.delete(listener);
+  };
+}
+
 function emit(next: WalletLinkStatus): void {
   if (status === next) return;
   status = next;
@@ -90,35 +167,42 @@ async function attempt(): Promise<void> {
   // ask for a retry while one is already out. One request at a time.
   if (inFlight) return;
   inFlight = true;
+  let delay = POLL_INTERVAL_MS;
 
   try {
     const result = await linkWallet();
     if (result.linked) {
       clearTimer();
       emit("linked");
+      landed();
       return;
     }
     emit("provisioning");
   } catch (error) {
-    // 401 is a dead session: `ApiClient`'s own handler is already signing this
-    // browser out, and another attempt would only add a second redirect.
-    // Anything else with a status is the API refusing on purpose (403 for a
-    // suspended tenant) — terminal, because polling cannot change it.
-    if (error instanceof ApiError && error.status !== 0 && error.status !== 424) {
+    // A rate limit is "not now", not "never": ask again once the API's wait is
+    // over (never sooner than the usual interval), inside the same deadline.
+    if (error instanceof ApiError && error.status === 429) {
+      delay = Math.max(POLL_INTERVAL_MS, (error.retryAfterSeconds ?? 0) * 1000);
+    } else if (error instanceof ApiError && error.status !== 0 && error.status !== 424) {
+      // 401 is a dead session: `ApiClient`'s own handler is already signing
+      // this browser out, and another attempt would only add a second
+      // redirect. Anything else with a status is the API refusing on purpose
+      // (403 for a suspended tenant) — terminal, because polling cannot
+      // change it.
       clearTimer();
       emit(error.status === 401 ? "idle" : "unavailable");
       return;
     }
-    // A transport failure: keep the schedule below and try again.
+    // A transport failure or a rate limit: keep the schedule below and try again.
     emit("provisioning");
   } finally {
     inFlight = false;
   }
 
-  schedule();
+  schedule(delay);
 }
 
-function schedule(): void {
+function schedule(delay: number = POLL_INTERVAL_MS): void {
   clearTimer();
   if (status === "linked") return;
 
@@ -129,7 +213,7 @@ function schedule(): void {
 
   timer = setTimeout(() => {
     void attempt();
-  }, POLL_INTERVAL_MS);
+  }, delay);
 }
 
 /**
@@ -154,6 +238,7 @@ export function startWalletLink(): void {
 export function resetWalletLink(): void {
   clearTimer();
   deadlineAt = 0;
+  lateRefusalArmed = false;
   emit("idle");
 }
 

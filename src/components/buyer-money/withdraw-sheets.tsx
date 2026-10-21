@@ -17,8 +17,10 @@ import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { withdrawGasGrantNote } from "@/features/escrow/withdraw-gas-grant-note";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { useCountdown } from "@/hooks/useCountdown";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
+import type { Money } from "@/interfaces/api";
 import { waitForSuccess } from "@/libs/chains/evm/deposit-transaction";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { isEvmChain } from "@/libs/chains/registry";
@@ -31,9 +33,53 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  * Getting unspent money out: Request (free) → Wait ~1 h → Claim (you pay gas).
  *
  * The two things buyers got wrong before are said inside the drawer: a new
- * request REPLACES the standing one (it does not add), and agents stop paying
- * while a request stands — the latter as a checkbox, not a paragraph.
+ * request REPLACES the standing one (it does not add), and paid calls stop
+ * while a request stands. The latter is a warning right above the button,
+ * naming the chain, because it holds for a partial amount too: the backend
+ * refuses every voucher on that chain while a request is open (the escrow's
+ * `withdraw()` reads no voucher state). An explicit tick confirms it as well
+ * (wave-1 audit M6).
+ *
+ * The sheet never promises the full amount (wave-1 audit I2): the claim pays
+ * `min(requested, balance)`, the request is not checked against spendable on
+ * the server, and a paid call admitted before the request lands is redeemed
+ * out of the balance first.
  */
+
+/** The pause a withdrawal request causes, in one sentence. Per chain, never account-wide. */
+export function withdrawPauseWarning(chainName: string | null): string {
+  return `While this request is open (about 1 h), every agent's paid calls on ${chainName ?? "this chain"} stop, even for a partial amount. Free calls keep working.`;
+}
+
+/** The tick that confirms the pause and the payout, beside the warning. */
+export function withdrawAcknowledgement(chainName: string | null): string {
+  return `I understand paid calls on ${chainName ?? "this chain"} stop until I claim or cancel this, and I may receive less than I ask for.`;
+}
+
+/**
+ * What a request pays out: up to the amount, never more. `withdraw()` pays
+ * `min(requested, balance)`, and paid calls that land before the request is on
+ * chain are paid out of the balance first.
+ */
+export function withdrawReceiveNote(requested: Money | null): string {
+  const upTo = requested ? formatLimit(requested) : "the amount you ask for";
+  return `You receive up to ${upTo}. It can be less if paid calls land before the request is on chain; never more.`;
+}
+
+/**
+ * The held money and what a request for `requested` pays out while calls hold
+ * money. Null when no amount is chosen yet or nothing is held.
+ *
+ * With unpaid calls, the held amount and its Settle button are already said
+ * above (`withdrawHeldText`), so it is not named again.
+ */
+export function withdrawHeldNote(requested: Money | null, held: Money | null, owedCalls: number): string | null {
+  if (!requested || !held || BigInt(held.amount) <= 0n) return null;
+  const receive = withdrawReceiveNote(requested);
+  if (owedCalls > 0) return `That money is not part of this request. ${receive}`;
+  return `${formatLimit(held)} is held by calls being checked and is not part of this request. ${receive}`;
+}
+
 function positive(amount: string | undefined): boolean {
   return Boolean(amount && BigInt(amount) > 0n);
 }
@@ -52,8 +98,13 @@ export function WithdrawSheet({
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
   const [amount, setAmount] = React.useState("");
+  // "Use all" is preselected once per opening (B7); the buyer can still change it.
+  const [seeded, setSeeded] = React.useState(false);
   React.useEffect(() => {
-    if (!open) setAmount("");
+    if (!open) {
+      setAmount("");
+      setSeeded(false);
+    }
   }, [open]);
 
   const escrow = money.escrow;
@@ -64,6 +115,10 @@ export function WithdrawSheet({
   const available = escrow?.spendable ?? null;
   const held = escrow?.openHolds && positive(escrow.openHolds.amount) ? escrow.openHolds : null;
   const all = available && toDecimal(available).gt(0) ? toDecimal(available).toString() : null;
+  if (open && mode !== "cancel" && !seeded && all !== null) {
+    setSeeded(true);
+    setAmount(all);
+  }
   const raw = parseAmountInput(amount, { decimals: money.decimals });
   const overMax = Boolean(raw.value && available && raw.value.gt(toDecimal(available)));
   const parsed = overMax
@@ -76,6 +131,8 @@ export function WithdrawSheet({
   const owedIntentIds = useOwedIntentIds();
   const { openSettle } = useSettleDebt();
   const heldText = held ? withdrawHeldText(formatLimit(held), openHoldIds, owedIntentIds) : null;
+  const requestedMoney: Money | null = parsed.atomic && held ? { ...held, amount: parsed.atomic } : null;
+  const heldNote = cancelling ? null : withdrawHeldNote(requestedMoney, held, heldText?.owed ?? 0);
   const settleFirst = () => {
     onOpenChange(false);
     openSettle();
@@ -124,6 +181,8 @@ export function WithdrawSheet({
         const hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
         if (result.kind === "relayed") queryClient.setQueryData(["escrow", null], result.relayed.escrow);
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+        void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, hash) : undefined };
       },
@@ -131,6 +190,7 @@ export function WithdrawSheet({
   ];
 
   const availableAt = money.escrow?.withdrawAvailableAt;
+  const chainName = money.chainName;
 
   return (
     <WalletActionSheet
@@ -149,17 +209,18 @@ export function WithdrawSheet({
       disabled={Boolean(disabledReason)}
       disabledReason={disabledReason}
       describeError={describeMoneyError}
-      acknowledge={cancelling ? undefined : "My agents stop paying for calls until I claim this or cancel it."}
+      acknowledge={cancelling ? undefined : withdrawAcknowledgement(chainName)}
       successTitle={cancelling ? "Request cancelled" : "Withdrawal requested"}
       successDescription={
         cancelling ? (
           "Your agents can pay again."
         ) : availableAt ? (
           <>
-            Next: claim it on the Funding page from <UtcTime value={availableAt} />. Your agents are paused until then.
+            Next: claim it on the Funding page from <UtcTime value={availableAt} />. Paid calls on {chainName ?? "this chain"} are
+            paused until then; free calls keep working.
           </>
         ) : (
-          "Next: claim it on the Funding page in about an hour. Your agents are paused until then."
+          `Next: claim it on the Funding page in about an hour. Paid calls on ${chainName ?? "this chain"} are paused until then; free calls keep working.`
         )
       }
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
@@ -186,7 +247,8 @@ export function WithdrawSheet({
               hint={available ? `Available to withdraw now: ${formatLimit(available)}` : undefined}
             />
           </div>
-          {heldText ? (
+          {/* Once an amount is chosen, the note below names the held amount; an unpaid call keeps this line and its settle button. */}
+          {heldText && (!heldNote || heldText.owed > 0) ? (
             <div className="flex flex-col gap-2">
               <p className="text-body-13 text-02" data-testid="withdraw-held-note">
                 {heldText.text}
@@ -200,8 +262,22 @@ export function WithdrawSheet({
               hour again.
             </p>
           ) : null}
-          <p className="text-body-xs text-03">
-            Calls your agents already made are paid first, so you may receive less than you ask for, never more.
+          {heldNote ? (
+            <p className="text-body-13 text-02" data-testid="withdraw-held-receive">
+              {heldNote}
+            </p>
+          ) : (
+            <p className="text-body-xs text-03" data-testid="withdraw-receive">
+              {withdrawReceiveNote(parsed.atomic ? { asset: "", decimals: money.decimals, amount: parsed.atomic } : null)}
+            </p>
+          )}
+          {/* Last, so it sits right above the button: the consequence of pressing it. */}
+          <p
+            role="note"
+            data-testid="withdraw-pause-warning"
+            className="rounded-lg border border-warning-20 bg-warning-10 px-3 py-2.5 text-body-13 text-warning-700"
+          >
+            {withdrawPauseWarning(chainName)}
           </p>
         </>
       )}
@@ -266,6 +342,8 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
         }
         pending.resolve(`claim:${hash}`);
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+        void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, hash) : undefined };
       },

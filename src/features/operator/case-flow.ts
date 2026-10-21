@@ -1,5 +1,5 @@
 import type { StatusTimelineStep } from "@/components/patterns/status-timeline";
-import { caseChainStageOf, disputesOnChain } from "@/features/provider-slash-case/chain-stage";
+import { caseChainStageOf } from "@/features/provider-slash-case/chain-stage";
 import type { Money } from "@/interfaces/api";
 import type { OperatorCaseBrief, OperatorIdentity, SlashProposalStatus } from "@/interfaces/operator";
 import { formatMoney } from "@/utils/money";
@@ -7,7 +7,7 @@ import { DISPUTE_TIMEOUT_SECONDS } from "@/libs/chains/evm/stake-slashes/abi";
 
 import { DISPUTE_RED_FROM_DAY, disputeUrgency } from "./inbox";
 import { capabilitiesFor, checkAction, rolesPhrase, type ConsoleAction } from "./roles";
-import { asProposalStatus, isLegalInStatus, may, suspendIsTwoPerson } from "./state";
+import { asProposalStatus, isLegalInStatus, may } from "./state";
 import { askLabel } from "./why-not";
 
 /**
@@ -16,9 +16,7 @@ import { askLabel } from "./why-not";
  *   Proposed → dispute window (72 h) → [Disputed → Arbiter rules, 30 days] → Executed | Cancelled
  *
  * and the single next step THIS operator can take on it. Pure, so the rules
- * are tested without the screen. The off-chain objection process (claim,
- * decide, second signature, extend) is gone from the product; a case still in
- * one of its statuses is read by where its on-chain record stands.
+ * are tested without the screen.
  */
 
 export type CaseStage =
@@ -42,8 +40,6 @@ export interface CaseFacts {
   disputedAt: string | null;
   /** disputedAt + 30 days: unruled by then, it can be expired and the stake is released. */
   disputeExpiresAt: string | null;
-  /** True when the case still carries a status of the retired off-chain objection process. */
-  legacyStatus: boolean;
   /** Cancelled because the dispute went unruled for 30 days and lapsed (`AUTO_CHAIN_VOIDED` after a dispute). */
   expired: boolean;
   /**
@@ -55,6 +51,42 @@ export interface CaseFacts {
    * record becomes executable by anyone at `executableAt`. `null` otherwise.
    */
   cancel: { deadline: string | null; ifUnsigned: "expires" | "executes" } | null;
+  /**
+   * The backend read that nothing of the case is Pending or Disputed on chain
+   * (`chainRecord: GONE`): nobody can execute it and a cancel has nothing
+   * to act on.
+   */
+  nothingOnChain: boolean;
+  /**
+   * The backend could not confirm what stands on chain (`chainRecord:
+   * UNKNOWN`: the live read failed, or found no record where one was
+   * written). Nothing may then say "anyone can execute": that is said only
+   * when the record STANDS (V1-15).
+   */
+  chainUnconfirmed: boolean;
+  /**
+   * The record (or a part) was executed on chain while this platform's cancel
+   * waited (`chainRecord: EXECUTED` under a `CANCEL_REQUESTED` mirror): the
+   * stake was taken. Never read as "nothing was taken".
+   */
+  executedWhileCancelWaited: boolean;
+  /**
+   * The chain side still reads "cancel requested" though nothing stands.
+   * There is nothing to sign; when the brief's read allows it, the B18
+   * actions below close it or propose it again. False otherwise.
+   */
+  closeOutstanding: boolean;
+  /**
+   * B18: which stuck-cancel action the brief's live chain read allows
+   * (`manualActions`). The backend reads the chain again before it acts and
+   * refuses if the guard no longer holds. All false when the brief offers none.
+   */
+  manual: { close: boolean; record: boolean; repropose: boolean; appliedMinor: string | null };
+  /**
+   * Not on chain yet, and its computed dates have passed: "Not on chain after
+   * 5 days", counted from the proposal. Null otherwise.
+   */
+  notOnChainForDays: number | null;
 }
 
 function plusSeconds(iso: string | null, seconds: number): string | null {
@@ -68,20 +100,26 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
   const status = asProposalStatus(proposal.status);
   const clocks = {
     ...proposal.clocks,
-    chainStatus: brief.chainStatus ?? proposal.clocks.chainStatus,
-    chainExecutableAt: brief.chainExecutableAt ?? proposal.clocks.chainExecutableAt ?? null,
-    chainDisputedParts: brief.chainDisputedParts ?? proposal.clocks.chainDisputedParts,
+    chainStatus: brief.chainStatus,
+    chainExecutableAt: brief.chainExecutableAt,
+    chainDisputedParts: brief.chainDisputedParts,
   };
   const chain = clocks.chainStatus;
   const chainStage = caseChainStageOf(clocks);
-  const disputedAt = clocks.chainDisputedAt ?? (chainStage.kind === "disputed" ? chainStage.disputedAt : null) ?? null;
-  const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt ?? null;
-  const legacyStatus = status === "DISPUTED" || status === "UNDER_REVIEW" || status === "AWAITING_SECOND";
+  const disputedAt = clocks.chainDisputedAt;
+  const executableAt = clocks.chainExecutableAt ?? clocks.earliestExecutionAt;
+
+  // Only GONE means nothing stands and nothing was taken. EXECUTED is money moved; UNKNOWN reads as standing.
+  const record = brief.chainRecord;
+  const nothingOnChain = record === "GONE";
+  const executedWhileCancelWaited = record === "EXECUTED" && chain === "CANCEL_REQUESTED";
 
   let stage: CaseStage;
   // Executed on chain, then paid back by the treasury: the chain still reads EXECUTED.
   if (status === "REVERSED") stage = "compensated";
   else if (chain === "EXECUTED" || status === "EXECUTED" || status === "EXECUTING") stage = "executed";
+  // A closed case whose cancel has nothing on chain to act on is simply cancelled: no signature step.
+  else if (chain === "CANCEL_REQUESTED" && nothingOnChain && status !== null && CLOSED_CANCELLED.includes(status)) stage = "cancelled";
   else if (chain === "CANCEL_REQUESTED") stage = "cancel-requested";
   else if (chain === "CANCELLED" || (status !== null && CLOSED_CANCELLED.includes(status))) stage = "cancelled";
   else if (chainStage.kind === "disputed" || (chainStage.kind === "open" && chainStage.disputedParts > 0)) stage = "disputed";
@@ -93,7 +131,7 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
 
   const disputeExpiresAt = plusSeconds(disputedAt, DISPUTE_TIMEOUT_SECONDS);
   // The record under the cancel is still disputed when the chain still counts disputed parts.
-  const recordDisputed = disputedAt !== null && (clocks.chainDisputedParts ?? 0) > 0;
+  const recordDisputed = disputedAt !== null && clocks.chainDisputedParts > 0;
   const cancel =
     stage !== "cancel-requested"
       ? null
@@ -103,15 +141,32 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
 
   const expired = stage === "cancelled" && disputedAt !== null && proposal.resolutionKind === "AUTO_CHAIN_VOIDED";
 
+  const computedAt = executableAt ? Date.parse(executableAt) : Number.NaN;
+  const proposedAt = proposal.clocks.proposedAt ? Date.parse(proposal.clocks.proposedAt) : Number.NaN;
+  const notOnChainForDays =
+    stage === "not-on-chain" && !Number.isNaN(computedAt) && computedAt <= now && !Number.isNaN(proposedAt)
+      ? Math.max(1, Math.floor((now - proposedAt) / 86_400_000))
+      : null;
+
   return {
     stage,
     status,
     executableAt,
     disputedAt,
     disputeExpiresAt,
-    legacyStatus,
     expired,
     cancel,
+    nothingOnChain,
+    chainUnconfirmed: record === "UNKNOWN",
+    executedWhileCancelWaited,
+    closeOutstanding: nothingOnChain && chain === "CANCEL_REQUESTED",
+    manual: {
+      close: brief.manualActions?.closeNothingStanding.allowed === true,
+      record: brief.manualActions?.recordExecution.allowed === true,
+      repropose: brief.manualActions?.repropose.allowed === true,
+      appliedMinor: brief.manualActions?.recordExecution.appliedMinor ?? null,
+    },
+    notOnChainForDays,
   };
 }
 
@@ -162,10 +217,13 @@ export function caseTimelineSteps(
           id: "window",
           label: windowLabel,
           state: stage === "window-open" ? "current" : stage === "not-on-chain" ? "upcoming" : "done",
-          date: wasDisputed ? facts.disputedAt : cutShort ? proposal.resolvedAt : facts.executableAt,
+          // Not on chain past its computed dates: no date that is already gone (operator review E).
+          date: facts.notOnChainForDays !== null ? null : wasDisputed ? facts.disputedAt : cutShort ? proposal.resolvedAt : facts.executableAt,
           dateLabel:
             stage === "not-on-chain"
-              ? "starts once it is on chain"
+              ? facts.notOnChainForDays !== null
+                ? `not on chain after ${daysText(facts.notOnChainForDays)}`
+                : "starts once it is on chain"
               : wasDisputed
                 ? "provider disputed"
                 : cutShort
@@ -212,6 +270,21 @@ export function caseTimelineSteps(
     steps.push({ id: "end", label: "Executed, then compensated", state: "done", date: proposal.resolvedAt });
   } else if (stage === "cancelled") {
     steps.push({ id: "end", label: facts.expired ? "Expired" : "Cancelled", state: "done", date: proposal.resolvedAt });
+  } else if (stage === "cancel-requested" && facts.executedWhileCancelWaited) {
+    steps.push({
+      id: "end",
+      label: "Executed on chain while the cancel waited",
+      state: "current",
+      urgent: true,
+      description: "The stake was taken. Nothing can be cancelled any more.",
+    });
+  } else if (stage === "cancel-requested" && facts.nothingOnChain) {
+    steps.push({
+      id: "end",
+      label: "Nothing on chain to cancel",
+      state: "done",
+      description: "Nothing is on chain: nothing can be executed, and there is nothing to sign.",
+    });
   } else if (stage === "cancel-requested") {
     const disputedRecord = facts.cancel?.ifUnsigned === "expires";
     steps.push({
@@ -235,8 +308,9 @@ export function caseTimelineSteps(
       label: "Executed or cancelled",
       state: stage === "executable" ? "current" : "upcoming",
       // While disputed, the old executable time no longer applies: it moves with the ruling.
-      date: stage === "disputed" ? null : facts.executableAt,
-      dateLabel: stage === "disputed" ? "after the ruling" : "executable from",
+      // Not on chain past its computed date: that date is gone and means nothing yet.
+      date: stage === "disputed" || facts.notOnChainForDays !== null ? null : facts.executableAt,
+      dateLabel: stage === "disputed" ? "after the ruling" : facts.notOnChainForDays !== null ? "once it is on chain" : "executable from",
       // Upheld but not yet executable: say what the wait is (the contract runs it from max(frozen executableAt, uphold)).
       description:
         stage === "upheld" && !Number.isNaN(executableMs) && executableMs > now
@@ -249,7 +323,17 @@ export function caseTimelineSteps(
 
 // ── The next step ───────────────────────────────────────────────────────────
 
-export type CaseActionId = "suspend" | "rule" | "cancel" | "compensate" | "sweep" | "block" | "approve" | "open-request";
+export type CaseActionId =
+  | "rule"
+  | "cancel"
+  | "compensate"
+  | "block"
+  | "approve"
+  | "open-request"
+  // B18: the stuck-cancel actions, each shown only when its guard holds on the brief's read.
+  | "close-cancel"
+  | "record-execution"
+  | "repropose";
 
 export interface CaseNextStep {
   kind: "action" | "waiting" | "done";
@@ -257,8 +341,10 @@ export interface CaseNextStep {
   description: string;
   /** The primary action, when `kind` is "action". */
   action: CaseActionId | null;
-  /** A quiet action next to a waiting card (e.g. Suspend while the window is open). */
+  /** A quiet action next to a waiting card. */
   secondary: CaseActionId | null;
+  /** Money moved that should not have: drawn as an alert, never a calm card. */
+  alert?: boolean;
   /** The instant the description points at, for a countdown. */
   until: string | null;
   /** A short line under the description, e.g. who must approve. Never the deadline again. */
@@ -266,16 +352,16 @@ export interface CaseNextStep {
 }
 
 export interface CaseAuthority {
-  /**
-   * May suspend: role, status and authority limit all allow it. `open` is the
-   * status half alone — the penalty can still be suspended by someone — which
-   * is when a "who can" line is worth drawing.
-   */
-  suspend: { allowed: boolean; open: boolean; twoPerson: boolean; reason: string | null };
   rule: boolean;
   cancel: boolean;
   compensate: boolean;
   block: boolean;
+  /** B18: may close a cancel with nothing standing (`S-15`): role, and the brief's read allows it. */
+  closeCancel: boolean;
+  /** B18: may ask to record an execution while the cancel waited (`S-16`, two-person). */
+  recordExecution: boolean;
+  /** B18: may ask to propose an upheld penalty again (`S-17`, two-person). */
+  repropose: boolean;
 }
 
 export function caseAuthority(
@@ -284,34 +370,22 @@ export function caseAuthority(
   facts: CaseFacts,
 ): CaseAuthority {
   const caps = capabilitiesFor(identity.roles);
-  const penalty: Money = brief.case.proposal.penaltyAmount;
   const status = facts.status;
-  // Role and authority limit: the same check the Home banner reads.
-  const check = checkAction(identity, "suspend", penalty);
-  /*
-    EVM: the backend refuses an S-1 suspension (SLASH_ARBITER_RULES_ON_CHAIN,
-    review N-2). Only the arbiter's cancelSlash stops an on-chain penalty, so
-    suspend is never offered there.
-  */
-  const ruledOnChain = disputesOnChain(brief.case.proposal.clocks);
-  const legal =
-    !ruledOnChain &&
-    Boolean(status && isLegalInStatus("suspend", status)) &&
-    facts.stage !== "executed" &&
-    facts.stage !== "cancelled";
-  const suspendReason = ruledOnChain
-    ? "This penalty is on chain: only the arbiter's cancel stops it, so it cannot be suspended."
-    : !legal
-      ? "This penalty can no longer be suspended."
-      : check.why;
 
   return {
-    suspend: { allowed: legal && check.allowed, open: legal, twoPerson: status ? suspendIsTwoPerson(status) : false, reason: suspendReason },
     rule: caps.rule,
-    cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested",
+    cancel: may(identity.roles, "cancel") && facts.stage === "cancel-requested" && !facts.nothingOnChain && !facts.executedWhileCancelWaited,
     compensate: may(identity.roles, "compensate") && status !== null && isLegalInStatus("compensate", status),
     block: caps.block,
+    closeCancel: may(identity.roles, "closeCancel") && facts.manual.close,
+    recordExecution: may(identity.roles, "recordExecution") && facts.manual.record,
+    repropose: may(identity.roles, "repropose") && facts.manual.repropose,
   };
+}
+
+/** "1 day", "5 days". */
+function daysText(days: number): string {
+  return `${days} ${days === 1 ? "day" : "days"}`;
 }
 
 function when(iso: string | null, format: (iso: string) => string): string {
@@ -327,7 +401,96 @@ export function caseNextStep(
   authority: CaseAuthority,
   format: (iso: string) => string,
 ): CaseNextStep {
-  const suspendSecondary = authority.suspend.allowed ? ("suspend" as const) : null;
+  if (facts.executedWhileCancelWaited && authority.recordExecution) {
+    return {
+      kind: "action",
+      title: "Executed on chain while the cancel waited",
+      description:
+        "The stake was taken: the penalty was executed on chain before the cancel landed. Record the execution on the case; a second Lead adjudicator or Treasury approves it.",
+      action: "record-execution",
+      secondary: null,
+      until: null,
+      alert: true,
+    };
+  }
+  if (facts.executedWhileCancelWaited && facts.manual.record) {
+    return {
+      kind: "waiting",
+      title: "Executed on chain while the cancel waited",
+      description:
+        "The stake was taken: the penalty was executed on chain before the cancel landed. A Lead adjudicator or Treasury records it on the case, with a second approver.",
+      action: null,
+      secondary: null,
+      until: null,
+      alert: true,
+    };
+  }
+  if (facts.executedWhileCancelWaited) {
+    return {
+      kind: "waiting",
+      title: "Executed on chain while the cancel waited",
+      description:
+        "The stake was taken: the penalty was executed on chain before the cancel landed. Nothing can be cancelled any more. Operations has been alerted to record it and decide on paying it back.",
+      action: null,
+      secondary: null,
+      until: null,
+      alert: true,
+    };
+  }
+  if (facts.closeOutstanding && facts.manual.repropose) {
+    return authority.repropose
+      ? {
+          kind: "action",
+          title: "Propose the upheld penalty again",
+          description:
+            "Its earlier record was cancelled on chain, so nothing stands and the decided penalty is not on chain. Propose it again; a second adjudicator approves it.",
+          action: "repropose",
+          secondary: null,
+          until: null,
+        }
+      : {
+          kind: "waiting",
+          title: "The upheld penalty is not on chain",
+          description:
+            "Its earlier record was cancelled on chain, so nothing stands. A Lead adjudicator or Treasury proposes it again, with a second approver.",
+          action: null,
+          secondary: null,
+          until: null,
+        };
+  }
+  if (facts.closeOutstanding && authority.closeCancel) {
+    return {
+      kind: "action",
+      title: "Close the cancel: nothing stands on chain",
+      description:
+        "Its record reads cancelled on chain: nothing can be executed, and there is nothing to sign. Nothing was taken from the provider's stake. Close the cancel so it leaves Waiting for signature.",
+      action: "close-cancel",
+      secondary: null,
+      until: null,
+    };
+  }
+  if (facts.closeOutstanding) {
+    return {
+      kind: "done",
+      title: "Nothing is on chain",
+      description:
+        "Nothing is on chain: nothing can be executed, and there is nothing to sign. Nothing was taken from the provider's stake. It still shows under Waiting for signature until its on-chain side is closed.",
+      action: null,
+      secondary: null,
+      until: null,
+    };
+  }
+  // "Anyone can execute" only while something stands on chain (B11).
+  if (facts.nothingOnChain && ["cancel-requested", "executable", "upheld", "window-open", "disputed"].includes(facts.stage)) {
+    return {
+      kind: "done",
+      title: "Nothing is on chain",
+      description: "Nothing is on chain: nothing can be executed, and there is nothing to sign.",
+      action: null,
+      secondary: null,
+      until: null,
+    };
+  }
   switch (facts.stage) {
     case "cancel-requested":
       return cancelNextStep(facts, authority, format);
@@ -355,7 +518,7 @@ export function caseNextStep(
         title: "Dispute window open",
         description: `The provider can dispute until ${when(facts.executableAt, format)}; undisputed, it becomes executable then.`,
         action: null,
-        secondary: suspendSecondary,
+        secondary: null,
         until: facts.executableAt,
       };
     case "upheld":
@@ -364,7 +527,7 @@ export function caseNextStep(
         title: "Upheld by the arbiter",
         description: `Anyone can execute it from ${when(facts.executableAt, format)}.`,
         action: null,
-        secondary: suspendSecondary,
+        secondary: null,
         until: facts.executableAt,
       };
     case "executable":
@@ -377,12 +540,22 @@ export function caseNextStep(
         until: null,
       };
     case "not-on-chain":
+      if (facts.notOnChainForDays !== null) {
+        return {
+          kind: "waiting",
+          title: `Not on chain after ${daysText(facts.notOnChainForDays)}`,
+          description: "Its dates were computed for when it lands, and they have passed: nothing can be executed until it is on chain.",
+          action: null,
+          secondary: null,
+          until: null,
+        };
+      }
       return {
         kind: "waiting",
         title: "Going on chain",
         description: "The provider's dispute window starts once it lands.",
         action: null,
-        secondary: suspendSecondary,
+        secondary: null,
         until: null,
       };
     case "executed":
@@ -419,7 +592,9 @@ export function caseNextStep(
       return {
         kind: "done",
         title: "Penalty cancelled",
-        description: "Nothing was taken from the provider's stake. Nothing is left to do.",
+        description: facts.nothingOnChain
+          ? "Nothing is on chain: nothing can be executed. Nothing was taken from the provider's stake, and there is nothing to sign."
+          : "Nothing was taken from the provider's stake. Nothing is left to do.",
         action: null,
         secondary: null,
         until: null,
@@ -432,8 +607,8 @@ export function caseNextStep(
 /** What each two-person request on a penalty is called, and what it does. */
 const REQUEST_WORDS: Record<string, { noun: string; does: string }> = {
   "slash.compensated": { noun: "pay-back", does: "pay the penalty back into the provider's stake" },
-  "slash.suspend": { noun: "suspension", does: "suspend this penalty" },
-  "slash.sweep": { noun: "fleet sweep", does: "decide every case with the same defect the way this one was decided" },
+  "slash.record_execution": { noun: "execution record", does: "record the execution the chain made while the cancel waited" },
+  "slash.repropose": { noun: "re-proposal", does: "propose this upheld penalty on chain again" },
 };
 
 export interface PendingRequest {
@@ -531,6 +706,9 @@ export function cancelDeadlineSentence(facts: CaseFacts, format: (iso: string) =
   if (facts.cancel?.ifUnsigned === "expires") {
     return `Have it signed before ${when(deadline, format)}. The provider's dispute keeps the penalty frozen meanwhile: it cannot be executed, and unsigned by then anyone can expire it and the stake is released.`;
   }
+  if (facts.chainUnconfirmed) {
+    return `Have it signed before ${when(deadline, format)}. We could not confirm what stands on chain: signing reads the chain first and says whether there is anything to cancel.`;
+  }
   return `Have it signed before ${when(deadline, format)}; after that anyone can execute the penalty.`;
 }
 
@@ -539,6 +717,20 @@ function cancelNextStep(facts: CaseFacts, authority: CaseAuthority, format: (iso
   const executes = facts.cancel?.ifUnsigned !== "expires";
   const passed = deadline !== null && Date.parse(deadline) <= Date.now();
 
+  if (passed && executes && facts.chainUnconfirmed) {
+    // Past the deadline, but the chain read did not confirm a standing record:
+    // never "anyone can execute" (V1-15). The action reads the chain first.
+    return {
+      kind: authority.cancel ? "action" : "waiting",
+      title: authority.cancel ? "Check the chain and get the cancel signed now" : "Waiting for the cancel signature",
+      description: authority.cancel
+        ? "If the penalty still stands on chain, its deadline has passed. We could not confirm what stands there: Get the cancel signed reads the chain first, says whether there is anything to sign, and changes nothing if there is not."
+        : "If the penalty still stands on chain, the deadline for the cancel has passed. We could not confirm what stands there: a Lead adjudicator or Treasury has to check it and get the cancel signed now.",
+      action: authority.cancel ? "cancel" : null,
+      secondary: null,
+      until: null,
+    };
+  }
   if (passed && executes) {
     // Truly the on-chain state: a Pending record past its executable time.
     return {
@@ -566,7 +758,7 @@ function cancelNextStep(facts: CaseFacts, authority: CaseAuthority, format: (iso
     ? {
         kind: "action",
         title: "Get the cancel signed",
-        description: `Suspended here; on chain it stands until the arbiter key signs the cancel. ${cancelDeadlineSentence(facts, format)}`,
+        description: `Cancelled here; on chain it stands until the arbiter key signs the cancel. ${cancelDeadlineSentence(facts, format)}`,
         action: "cancel",
         secondary: null,
         until: deadline,
@@ -599,3 +791,99 @@ export function shortWhyNot(
   return names === null ? why : `${why} · ${askLabel(names, rolesPhrase(check.roles))}`;
 }
 
+
+// ── B18: the stuck-cancel actions ───────────────────────────────────────────
+
+export type ManualActionKind = "close" | "record" | "repropose";
+
+/** One line of a manual action's "What happens": money, chain, approver, undo. */
+export interface ManualActionLine {
+  kind: "money" | "chain" | "approver" | "undo";
+  text: string;
+}
+
+export interface ManualActionCopy {
+  /** Register code: `S-15`, `S-16`, `S-17`. */
+  code: "S-15" | "S-16" | "S-17";
+  /** The approval action it is queued as; null for the one-person close. */
+  approvalAction: string | null;
+  twoPerson: boolean;
+  title: string;
+  lines: ManualActionLine[];
+  /** The confirmation the operator ticks before the button enables. */
+  confirm: string;
+  submit: string;
+}
+
+/**
+ * What each B18 action does, said before it is sent: whether money moves,
+ * whether anything is written on chain, whether it can be undone, and who
+ * approves it. Pure. Each line states what the backend guarantees, never an
+ * outcome it does not (the chain is read again first, and refused if it
+ * changed).
+ */
+export function manualActionCopy(
+  kind: ManualActionKind,
+  amounts: { penalty: string; applied: string | null },
+  /** Closed here with no penalty (overturned, cancelled, waived): the stake was owed nothing. */
+  closed = true,
+): ManualActionCopy {
+  switch (kind) {
+    case "close":
+      return {
+        code: "S-15",
+        approvalAction: null,
+        twoPerson: false,
+        title: "Close the cancel: nothing stands on chain",
+        lines: [
+          { kind: "money", text: `No money moves. The ${amounts.penalty} penalty was never taken, and it stays that way.` },
+          { kind: "chain", text: "Nothing is sent on chain. The record is read again first; unless it still reads cancelled, nothing changes." },
+          { kind: "approver", text: "One person: no second approver. Recorded in Activity under your name." },
+          { kind: "undo", text: "It can't be undone: the penalty leaves Waiting for signature for good." },
+        ],
+        confirm: "I checked that this penalty's record reads cancelled on chain and that nothing of it stands.",
+        submit: "Close the cancel",
+      };
+    case "record":
+      return {
+        code: "S-16",
+        approvalAction: "slash.record_execution",
+        twoPerson: true,
+        title: "Record the execution on the penalty",
+        lines: [
+          {
+            kind: "money",
+            text: closed
+              ? `${amounts.applied ? `${amounts.applied} was` : "The penalty was"} already taken from the provider's stake on chain. Recording it moves no money now; paying it back is a separate request.`
+              : `${amounts.applied ? `${amounts.applied} was` : "The penalty was"} already taken from the provider's stake on chain. Recording it moves no money; the penalty closes as executed.`,
+          },
+          { kind: "chain", text: "Nothing is sent on chain. The record is read again when it is approved; unless it still reads executed, nothing is written." },
+          { kind: "approver", text: "Needs a second approver: a Lead adjudicator or Treasury other than you." },
+          { kind: "undo", text: "It can't be undone." },
+        ],
+        confirm: "I checked that this penalty's record reads executed on chain, and who it paid.",
+        submit: "Send for approval",
+      };
+    case "repropose":
+      return {
+        code: "S-17",
+        approvalAction: "slash.repropose",
+        twoPerson: true,
+        title: "Propose the upheld penalty again",
+        lines: [
+          {
+            kind: "money",
+            text: `Once it is on chain, up to ${amounts.penalty} of the provider's stake is reserved again. Nothing is taken until it becomes executable.`,
+          },
+          {
+            kind: "chain",
+            text: "Written on chain as a new record by the next proposal pass, with every usual check (stake, caps, the provider's dispute window). The old record is read again first; unless it still reads cancelled, nothing changes.",
+          },
+          { kind: "approver", text: "Needs a second approver: an Adjudicator or Lead adjudicator other than you." },
+          { kind: "undo", text: "It can't be undone here. The provider can dispute the new record on chain." },
+        ],
+        confirm: "I checked that the earlier record reads cancelled on chain and was never disputed.",
+        submit: "Send for approval",
+      };
+  }
+}

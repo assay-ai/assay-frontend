@@ -49,7 +49,7 @@ describe("public top bar links", () => {
   it("has the agreed items, providers' pages grouped", () => {
     expect(DEFAULT_PUBLIC_NAV_ITEMS.map((i) => i.label).slice(0, 4)).toEqual([
       "How it works",
-      "Explore",
+      "Tools",
       "Demo",
       "For providers",
     ]);
@@ -67,17 +67,24 @@ describe("public top bar links", () => {
 describe("public footer links", () => {
   const routes = collectRoutes(APP_DIR);
 
-  it.each(publicFooterLinks({ signedIn: false }).filter((l) => !l.external).map((l) => l.href))(
+  it.each(publicFooterLinks({ signedIn: false, reserves: true }).filter((l) => !l.external).map((l) => l.href))(
     "%s resolves to an existing app route",
     (href) => {
       expect(routes.some((route) => matches(route, href))).toBe(true);
     },
   );
 
-  it("links Proof of reserves, and Sign in only when signed out", () => {
-    expect(publicFooterLinks({ signedIn: false }).map((l) => l.label)).toEqual(
-      expect.arrayContaining(["How it works", "Explorer", "Why list here", "Proof of reserves", "Sign in"]),
+  it("names /catalogue Tools, and links Sign in only when signed out", () => {
+    expect(publicFooterLinks({ signedIn: false, reserves: true }).map((l) => l.label)).toEqual(
+      expect.arrayContaining(["How it works", "Tools", "Why list here", "Proof of reserves", "Sign in"]),
     );
-    expect(publicFooterLinks({ signedIn: true }).map((l) => l.label)).not.toContain("Sign in");
+    expect(publicFooterLinks({ signedIn: false, reserves: true }).find((l) => l.href === "/catalogue")?.label).toBe("Tools");
+    expect(publicFooterLinks({ signedIn: true, reserves: false }).map((l) => l.label)).not.toContain("Sign in");
+  });
+
+  // A (2026-10-18): a trust link that opens "Reserve figures are not published" hurts more than no link.
+  it("links Proof of reserves only where reserves are published", () => {
+    expect(publicFooterLinks({ signedIn: false, reserves: false }).map((l) => l.href)).not.toContain("/reserves");
+    expect(publicFooterLinks({ signedIn: false, reserves: true }).map((l) => l.href)).toContain("/reserves");
   });
 });

@@ -69,7 +69,7 @@ function Row({
       aria-label={accessibleLabel}
       title={label}
       className={cn(
-        "relative flex min-h-[36px] w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-left transition-colors",
+        "relative flex min-h-10 w-full items-center gap-2.5 rounded-md border border-transparent px-2.5 py-2 text-left transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
         "tablet:justify-center tablet:px-0 desktop:justify-start desktop:px-2.5",
         nested && "desktop:pl-7",

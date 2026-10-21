@@ -9,6 +9,8 @@ import type { OperatorIdentity } from "@/interfaces/operator";
 import { formatMoney } from "@/utils/money";
 
 import { ACTION_WHAT, MONEY_ACTIONS, capabilitiesFor, checkAction, listPhrase, roleTitle, rolesPhrase, type ConsoleAction } from "./roles";
+import { mayAnswerToolRequests, TOOL_REQUEST_ROLES } from "./contract-editor";
+import { mayDecideCallDisputes, mayPromote, mayReviewTools, mayTakeDownTools } from "./provider-tool-review";
 
 /**
  * Who the console thinks you are, and what that lets you do.
@@ -101,7 +103,7 @@ export function rolePillText(identity: Pick<OperatorIdentity, "roles" | "authori
 }
 
 // "block" and "blockOnChain" are one line, written by `blockLine`.
-const LIST_ACTIONS: readonly ConsoleAction[] = ["rule", "suspend", "compensate", "block", "manageTeam"];
+const LIST_ACTIONS: readonly ConsoleAction[] = ["rule", "compensate", "block", "manageTeam"];
 
 /**
  * Blocking is one line, not two: a block stops an account in Assay; for a
@@ -124,7 +126,7 @@ function blockLine(identity: Pick<OperatorIdentity, "roles" | "authorityLimit">)
 
 /**
  * The two short lists of the popover. Pure.
- *   can:    ["rule on disputed penalties", "suspend a penalty up to $1,000", "approve block lifts and suspensions"]
+ *   can:    ["rule on disputed penalties", "compensate a provider up to $1,000", "approve block lifts and compensations"]
  *   others: ["add and change operators (Admin)"]
  */
 export function roleCapabilityLists(identity: Pick<OperatorIdentity, "roles" | "authorityLimit">): { can: string[]; others: string[] } {
@@ -148,6 +150,15 @@ export function roleCapabilityLists(identity: Pick<OperatorIdentity, "roles" | "
     }
   }
   if (caps.approves.length > 0) can.push(`approve ${listPhrase(caps.approves)}`);
+  // T4: provider tools and buyers' call disputes.
+  const t4: [boolean, string, string][] = [
+    [mayReviewTools(identity.roles), "review provider tools for the catalogue", "Adjudicator, Lead adjudicator or Policy author"],
+    [mayTakeDownTools(identity.roles), "take a provider tool down (a second operator confirms)", "Adjudicator, Lead adjudicator or SRE"],
+    [mayPromote(identity.roles), "draft standard tools from provider tools (publishing needs a second Policy person)", "Policy author or Policy approver"],
+    [mayDecideCallDisputes(identity.roles), "decide buyers' call disputes (large refunds need a second operator)", "Adjudicator or Lead adjudicator"],
+    [mayAnswerToolRequests(identity.roles), "answer or decline tool requests, or accept one as a draft tool (its versions need Policy author)", rolesPhrase(TOOL_REQUEST_ROLES)],
+  ];
+  for (const [allowed, what, who] of t4) (allowed ? can : others).push(allowed ? what : `${what.replace(/ \(.*\)$/, "")} (${who})`);
   return { can, others };
 }
 

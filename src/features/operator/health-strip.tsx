@@ -9,27 +9,23 @@ import type { PlatformHealth } from "@/interfaces/operator";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { healthIssues } from "./inbox";
+import { healthIssues, lagText } from "./inbox";
 
-function age(seconds: number | null): string {
-  if (seconds === null) return DASH;
-  const minutes = Math.max(0, Math.floor(seconds / 60));
-  if (minutes >= 1440) return `${Math.floor(minutes / 1440)} d`;
-  return minutes >= 60 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${minutes} min`;
+function age(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined) return DASH;
+  return seconds < 60 ? "1 min" : lagText(seconds);
 }
 
 /**
  * Platform health as one line — "All systems normal" in plain text, or what
- * is red in a danger box — that opens into the six figures. It starts open
- * only when something is red: the figures are context, not tasks.
+ * is red in a danger box — that opens into the six figures on demand. It
+ * stays closed even when red, so the inbox above it is never pushed below the
+ * fold (operator review E): the figures are context, not tasks.
  */
 export function HealthStrip({ health, error }: { health: PlatformHealth | undefined; error?: boolean }) {
   const issues = health ? healthIssues(health) : [];
   const red = issues.length > 0;
   const [open, setOpen] = React.useState(false);
-  React.useEffect(() => {
-    if (red) setOpen(true);
-  }, [red]);
 
   if (error) {
     return (
@@ -95,15 +91,9 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
           />
           <MetricTile label="Rules in trial" value={`${health.policiesInShadow} of ${health.policiesTotal}`} sub="checked but not enforced" />
           <MetricTile
-            label="Stake locked"
+            label="Stake bonded"
             value={formatMoney(health.stakeLocked)}
-            sub={`${count(health.providersWithStake)} ${health.providersWithStake === 1 ? "provider" : "providers"}`}
-          />
-          <MetricTile
-            label="Open disputes"
-            value={count(health.openDisputes)}
-            sub="on chain"
-            meta={health.oldestOpenDisputeAgeSeconds === null ? DASH : `oldest ${age(health.oldestOpenDisputeAgeSeconds)}`}
+            sub={`bonded by ${count(health.providersWithStake)} ${health.providersWithStake === 1 ? "provider" : "providers"}`}
           />
         </div>
       ) : null}

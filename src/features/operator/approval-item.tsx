@@ -118,8 +118,7 @@ const NEXT: Readonly<Record<string, string>> = {
   "account.unblock": "The account can use Assay again within seconds.",
   "operator.add": "They can sign in with their wallet now.",
   "operator.change": "Their new access applies from their next request.",
-  "slash.suspend": "If the record stands on chain, its cancel still needs the arbiter's signature: see the penalty.",
-  "slash.sweep": "Matching cases are decided in the background.",
+  "slash.repropose": "The proposal pass puts it on chain; the provider's dispute window opens then.",
   // No "arbiter.block": its result sentence already says nothing is blocked on
   // chain until the arbiter signs, and where; a second line said it again.
 };
@@ -191,6 +190,10 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
   const requesterRoles = approval.requestedById ? context.operators.get(approval.requestedById)?.roles : undefined;
   const needs = `Needs ${approvalNeeds(approval.code, requesterRoles)}${names ? `: ${names}` : ""}`;
 
+  // The whole console, deliberately: approving runs whatever action was
+  // queued (a block, a contract change, an operator change, a slash record…),
+  // and a rejection clears the "waiting for approval" line on that action's
+  // own screen. See `refresh-after.ts`.
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["operator"] });
   };
@@ -231,12 +234,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
   const meta =
     mode === "history" ? (
       <>
-        {decisionText({
-          ...approval,
-          approvedBy: approval.approvedBy ? nameOf(approval.approvedBy) : null,
-          rejectedBy: approval.rejectedBy ? nameOf(approval.rejectedBy) : null,
-          requestedBy: approval.rejectedBy && isWithdrawn(approval) ? nameOf(approval.rejectedBy) : approval.requestedBy,
-        })}{" "}
+        {decisionText(approval, nameOf)}{" "}
         · <UtcTime value={approval.decidedAt ?? approval.expiresAt} /> ·{" "}
         <Link href={approvalActivityHref(approval)} className="hit-area text-primary-700 hover:underline">
           {/* Not "History": that is the tab this row sits under. */}

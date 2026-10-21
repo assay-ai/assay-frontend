@@ -40,11 +40,6 @@ export type AssayCaseIndex =
     }
   | { readonly status: "unavailable"; readonly reason: string };
 
-export type AssayMatch =
-  | { readonly kind: "known"; readonly proposalId: string }
-  | { readonly kind: "not-known" }
-  | { readonly kind: "unchecked" };
-
 export const LOOKUP_UNAVAILABLE_REASON =
   "Assay could not be asked which of these penalties are its cases, so these rows could not be matched to a case.";
 
@@ -88,17 +83,6 @@ export async function lookupAssayCases(
     return { status: "unavailable", reason: LOOKUP_UNAVAILABLE_REASON };
   }
   return { status: "checked", known };
-}
-
-/**
- * One row's match. Only rows that still need attention can be "not-known": a
- * closed record is history, and the flag is a call to act, not an audit.
- */
-export function assayMatchFor(row: ChainSlashRow, index: AssayCaseIndex | null): AssayMatch {
-  if (!index || index.status !== "checked") return { kind: "unchecked" };
-  const hit = index.known.get(row.requestId.toLowerCase());
-  if (hit) return { kind: "known", proposalId: hit.proposalId };
-  return row.status.needsAttention ? { kind: "not-known" } : { kind: "unchecked" };
 }
 
 /**

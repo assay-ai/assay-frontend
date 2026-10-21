@@ -8,6 +8,8 @@
  * build links with it, never by hand.
  */
 
+import type { CallsFilter } from "@/features/buyer/call-outcome";
+
 function withQuery(path: string, params: Record<string, string>): string {
   return `${path}?${new URLSearchParams(params).toString()}`;
 }
@@ -18,24 +20,37 @@ function under(base: string, sub?: string): string {
 
 export const routes = {
   receipt: (intentId: string) => withQuery("/receipts/view", { id: intentId }),
-  approval: (approvalId: string) => withQuery("/approvals/view", { id: approvalId }),
+  /** A paid call opened from a link (a notification): its outcome and receipt. Takes the call id. */
+  payment: (callId: string) => withQuery("/payments/view", { id: callId }),
+  /** Agents & keys, opened at one agent. */
+  agent: (agentId: string) => withQuery("/agents", { agent: agentId }),
   exploreProvider: (providerId: string) => withQuery("/explore/providers/view", { id: providerId }),
   /** The signed-in tool list, opened at one tool. */
   exploreTool: (toolId: string) => withQuery("/explore", { tool: toolId }),
-  /** The public (signed-out) tool page. Takes a tool id, or a tool name for old links. */
+  /** Connect with "Only these tools" chosen ("Use this tool"). Takes MCP tool names. */
+  connectTools: (toolNames: readonly string[]) => `/connect?tools=${toolNames.map(encodeURIComponent).join(",")}`,
+  /** The public (signed-out) tool page. Takes a tool id. */
   publicTool: (toolIdOrName: string) => withQuery("/catalogue/view", { tool: toolIdOrName }),
   /** The public (signed-out) provider page. */
   publicProvider: (providerId: string) => withQuery("/catalogue/provider", { id: providerId }),
-  /** The Calls list, optionally filtered: status is all | charged | not-charged | free. */
-  calls: (filters: { status?: string; tool?: string; agent?: string; reason?: string } = {}) => {
+  /**
+   * The Calls list, optionally filtered. `status` is typed to the values the
+   * page reads (`parseCallsFilter`, plus `refused`), so every link spells it
+   * the one way the page understands; `call` opens one refused call.
+   */
+  calls: (filters: { status?: CallsFilter | "refused"; tool?: string; call?: string } = {}) => {
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => Boolean(v))) as Record<string, string>;
     return Object.keys(params).length > 0 ? withQuery("/spend/calls", params) : "/spend/calls";
   },
+  /** Reports: every call this organization reported as a bad result (route keeps "disputes"). */
+  disputes: () => "/spend/disputes",
   operatorCase: (proposalId: string) => withQuery("/operator/cases/view", { id: proposalId }),
+  operatorTool: (toolId: string, fromRequest?: string) =>
+    withQuery("/operator/tools/view", fromRequest ? { id: toolId, from: fromRequest } : { id: toolId }),
   /** A provider's penalty case: the Penalties page with its "Why?" drawer open. */
   providerCase: (proposalId: string) => withQuery("/provider/penalties", { case: proposalId }),
   toolRequest: (requestId: string) => withQuery("/provider/tool-requests/view", { id: requestId }),
-  /** A binding screen: `sub` is the path below the binding, e.g. "configuration/pricing". */
+  /** A binding screen: `sub` is the path below the binding, e.g. "settings". */
   binding: (bindingId: string, sub?: string) =>
     withQuery(under("/provider/bindings/view", sub), { binding: bindingId }),
   /**
@@ -55,6 +70,17 @@ export const routes = {
   penalty: (id: string) => withQuery("/provider/penalties", { case: id }),
   /** The Stake page; `sheet` opens the stake or withdraw sheet on arrival. */
   stake: (sheet?: "stake" | "withdraw") => (sheet ? withQuery("/provider/capital", { sheet }) : "/provider/capital"),
+  /** "Publish your own API": one provider tool, optionally opened on a step of its flow. */
+  providerApi: (toolId: string, step?: "name" | "contract" | "connect" | "share") =>
+    withQuery("/provider/apis/view", step ? { id: toolId, step } : { id: toolId }),
+  /** A buyer's dispute over a call it reported: its status timeline. */
+  callDispute: (disputeId: string) => withQuery("/spend/disputes/view", { id: disputeId }),
+  /** A dispute over a call this provider served: reply within the window. */
+  providerCallDispute: (disputeId: string) => withQuery("/provider/call-disputes/view", { id: disputeId }),
+  /** The operator's review of a provider tool. */
+  operatorReview: (toolId: string) => withQuery("/operator/tools/reviews/view", { id: toolId }),
+  /** The operator's view of a buyer's dispute over a call. */
+  operatorCallDispute: (disputeId: string) => withQuery("/operator/disputes/view", { id: disputeId }),
   /** A verdict screen of a binding: `sub` is e.g. "evidence". */
   verdict: (bindingId: string, verdictId: string, sub?: string) =>
     withQuery(under("/provider/bindings/view/verdicts/view", sub), {

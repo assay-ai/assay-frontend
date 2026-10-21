@@ -1,15 +1,19 @@
 "use client";
 
-import { ChevronRight, Store } from "lucide-react";
+import { ChevronRight, ShieldAlert, Store } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ToolVersionBadges } from "@/components/contracts/version-badges";
 import { FailsOftenChip, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { NotChargedProof, NotChargedSummary } from "@/components/explorer/not-charged-proof";
 import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
+import { ConnectPanel } from "@/components/toolsets/connect-panel";
+import { ToolsetCatalogue } from "@/components/toolsets/public-toolsets";
+import { usePublicToolsets } from "@/components/toolsets/use-toolsets";
 import { Button } from "@/components/ui/button";
 import { Search } from "@/components/ui/search";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
@@ -30,10 +34,13 @@ import {
 import {
   publicErrorText,
   usePublicFeatures,
+  usePublicNotCharged,
   usePublicProviderDetails,
   usePublicProviders,
   usePublicTools,
 } from "@/features/explorer/use-public-explorer";
+import { mcpHost } from "@/features/connect/mcp-endpoint";
+import { buildMcpUrl } from "@/features/connect/mcp-url";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
@@ -48,6 +55,10 @@ import type { PublicProvider, PublicTool } from "@/services/public-explorer.serv
  * refused to charge, across every buyer). The tools come before the long
  * proof so a phone visitor sees them without scrolling past it. Data is the
  * platform's aggregate only (`GET /public/*`).
+ *
+ * Nothing here shows an empty promise: the Tool sets tab appears once a tool
+ * set is listed, and the proof folds into one line until a paid call has been
+ * checked in its window.
  */
 
 function errorCode(error: unknown): string | null {
@@ -59,8 +70,8 @@ function matches(needle: string, ...fields: (string | null | undefined)[]): bool
 }
 
 function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: number | null }) {
-  // "from" only over paid listings: gated on `paidBindings` when the API sends it; `priceRange` ignores free ones.
-  const range = priceRange(tool.price, (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice] : []);
+  // "from" only over paid listings (`paidBindings`); `priceRange` ignores free ones.
+  const range = priceRange(tool.price, tool.paidBindings > 1 ? [tool.fromPrice] : []);
   const offer = offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance });
   const sub = offerSubLine(tool.pricingMode, range);
   return (
@@ -72,9 +83,12 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="break-all font-mono text-mono-13 font-semibold text-01">{tool.name}</span>
+            {tool.kind === "PROVIDER" ? <MakerChip handle={tool.handle ?? null} /> : null}
+            {tool.notReviewed ? <NotReviewedTag /> : null}
             {tool.routable ? null : <UnavailableTag />}
+            <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
           </div>
-          {tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.description}</p> : null}
+          {tool.summary || tool.description ? <p className="line-clamp-2 text-body-13 text-02">{tool.summary || tool.description}</p> : null}
           {/* Phones: the price line sits under the name, full width. */}
           <OfferPrice offer={offer} className="tablet:hidden" />
           {/* Phones too: when providers charge different prices, the most a call is held for is money, not decoration. */}
@@ -92,6 +106,31 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
     </li>
   );
 }
+
+/** "One maker's API · @acme": a provider tool, served by its maker only (no backup provider). */
+function MakerChip({ handle }: { handle: string | null }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-03 px-2 py-0.5 text-label-xs text-02" title="Only its maker serves it, so it has no backup provider.">
+      One maker&apos;s API{handle ? ` · @${handle}` : ""}
+    </span>
+  );
+}
+
+function NotReviewedTag() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">
+      <ShieldAlert aria-hidden="true" className="size-3" />
+      Not reviewed
+    </span>
+  );
+}
+
+type KindFilter = "all" | "STANDARD" | "PROVIDER";
+const KIND_FILTERS: { id: KindFilter; label: string }[] = [
+  { id: "all", label: "All tools" },
+  { id: "STANDARD", label: "Backed by several providers" },
+  { id: "PROVIDER", label: "One maker's API" },
+];
 
 function ProviderRow({ provider, chainName }: { provider: PublicProvider; chainName: (id: string) => string }) {
   return (
@@ -124,6 +163,29 @@ function ProviderRow({ provider, chainName }: { provider: PublicProvider; chainN
   );
 }
 
+/**
+ * The proof of the promise, which names its own window. Before any paid call
+ * was checked in the window it is one line that opens on demand: a panel of
+ * zeros next to a provider with thousands of calls reads as a broken promise.
+ */
+function Proof() {
+  const query = usePublicNotCharged();
+  const days = query.data?.windowDays ?? 30;
+  if (query.isSuccess && query.data.totals.callsChecked === 0) {
+    return (
+      <details className="rounded-xl border border-01 bg-01 px-4 tablet:px-6" data-testid="proof-collapsed">
+        <summary className="min-h-12 cursor-pointer py-3 text-body-13 text-02 hover:text-01">
+          <span className="text-label-13 text-01">What our checks refused to charge, last {days} days:</span> no paid
+          calls to show yet
+        </summary>
+        <NotChargedProof className="mb-4 border-0 p-0 tablet:p-0" />
+      </details>
+    );
+  }
+  // The panel names its own window ("across every buyer, in the last 30 days").
+  return <NotChargedProof />;
+}
+
 export default function CataloguePage() {
   // View, search and the free filter live in the URL, so Back from a tool
   // page lands on the same list. Local state keeps typing instant; the URL
@@ -131,9 +193,18 @@ export default function CataloguePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initial = React.useMemo(() => readExplorerState(searchParams), [searchParams]);
-  const [view, setView] = React.useState<"tools" | "providers">(initial.view);
+  // The MCP URL this page stands for: a browser opening `/` (or `/c/{category}`) on the MCP host lands here.
+  // `/c/{category}` lands here as `?category=`: the list shows that topic, and the panel offers that topic's server.
+  const [topic, setTopic] = React.useState<string | null>(() => {
+    const category = searchParams.get("category");
+    return category && /^[a-z][a-z0-9-]{1,63}$/.test(category) ? category : null;
+  });
+  const free = searchParams.get("free") === "1";
+  const serverUrl = topic ? buildMcpUrl({ kind: "topic", category: topic }, { free }, mcpHost()) : `${mcpHost()}/${free ? "?free=1" : ""}`;
+  const [view, setView] = React.useState<"tools" | "providers" | "toolsets">(initial.view);
   const [query, setQuery] = React.useState(initial.q);
   const [freeOnly, setFreeOnly] = React.useState(initial.free);
+  const [kind, setKind] = React.useState<KindFilter>("all");
   React.useEffect(() => {
     const next = explorerHref({ view, q: query, free: freeOnly });
     const current = `${window.location.pathname}${window.location.search}`;
@@ -142,16 +213,30 @@ export default function CataloguePage() {
   const tools = usePublicTools();
   const providers = usePublicProviders();
   const features = usePublicFeatures();
+  // The same first page the Tool sets tab asks for, so opening it is instant.
+  const toolsets = usePublicToolsets({ sort: "popular", limit: 60 });
+  // An empty tab is a dead end: shown once a tool set is listed, or when a link opened it.
+  const toolsetsListed = (toolsets.data?.total ?? 0) > 0;
+  const showToolsets = toolsetsListed || view === "toolsets";
   const chainName = useChainName();
   const needle = query.trim().toLowerCase();
 
-  const toolRows = React.useMemo(() => {
+  // The topic and the kind of tool, before the free filter and search: what the Free chip counts over.
+  const scopedRows = React.useMemo(() => {
     const rows = [...(tools.data?.tools ?? [])].sort(
       (a, b) => Number(b.routable) - Number(a.routable) || b.providerCount - a.providerCount || a.name.localeCompare(b.name),
     );
-    const free = freeOnly ? rows.filter((t) => hasFreeCalls(t.pricingMode)) : rows;
-    return needle ? free.filter((t) => matches(needle, t.name, t.description, t.id)) : free;
-  }, [tools.data, needle, freeOnly]);
+    const inTopic = topic && rows.some((t) => t.category) ? rows.filter((t) => t.category === topic) : rows;
+    return kind === "all" ? inTopic : inTopic.filter((t) => (t.kind ?? "STANDARD") === kind);
+  }, [tools.data, topic, kind]);
+  const toolRows = React.useMemo(() => {
+    const free = freeOnly ? scopedRows.filter((t) => hasFreeCalls(t.pricingMode)) : scopedRows;
+    return needle ? free.filter((t) => matches(needle, t.name, t.description, t.id, t.handle)) : free;
+  }, [scopedRows, needle, freeOnly]);
+  // How many tools the Free chip would show here (search aside): the count beside it reads as exactly that.
+  const freeCount = tools.data ? scopedRows.filter((t) => hasFreeCalls(t.pricingMode)).length : null;
+  const hasProviderTools = Boolean(tools.data?.tools.some((t) => t.kind === "PROVIDER"));
+  const topicKnown = Boolean(tools.data?.tools.some((t) => t.category));
 
   const providerRows = React.useMemo(() => {
     const rows = [...(providers.data?.providers ?? [])].sort((a, b) => b.toolIds.length - a.toolIds.length);
@@ -165,13 +250,38 @@ export default function CataloguePage() {
       details.map((d) => d.data?.tools.find((t) => t.toolId === toolId)?.freeCallsPerAgentPerDay),
     );
 
-  const active = view === "tools" ? tools : providers;
+  const active = view === "providers" ? providers : tools;
   const total = view === "tools" ? (tools.data?.tools.length ?? 0) : (providers.data?.providers.length ?? 0);
   const visible = view === "tools" ? toolRows.length : providerRows.length;
 
   return (
     <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">
-      <header className="flex flex-col gap-3">
+      <ConnectPanel
+        publicPage
+        url={serverUrl}
+        connectLabel={topic ? "Use this topic" : "Connect"}
+        title={
+          `One MCP URL for ${topic ? `every ${topic} tool` : "everything below"}: connect your agent to it${
+            toolsetsListed ? ", or open Tool sets for a smaller group's URL" : ""
+          }.`
+        }
+      />
+      {topic ? (
+        <p className="flex flex-wrap items-center gap-2 text-body-13 text-02" data-testid="catalogue-topic">
+          <span className="rounded-full bg-primary-10 px-2.5 py-1 text-label-13 text-primary-700">Topic: {topic}</span>
+          {topicKnown ? null : <span>Topics are not listed yet, so every tool is shown.</span>}
+          <button type="button" className="min-h-10 text-label-13 text-primary-600 hover:underline" onClick={() => setTopic(null)}>
+            Show all tools
+          </button>
+        </p>
+      ) : null}
+      {view === "toolsets" ? (
+        <header className="flex flex-col gap-1">
+          <h1 className="text-heading-md text-01">Tool sets</h1>
+          <p className="text-body-13 text-02">Ready-made groups of tools, each with its own server URL. Connect one in three clicks, or make your own version.</p>
+        </header>
+      ) : (
+        <header className="flex flex-col gap-3">
         <h1 className="text-heading-lg text-01 tablet:text-display-md">Tools your agent can pay for — only when they work</h1>
         <p className="max-w-[720px] text-body-md text-02">
           Every tool here is served by providers who put up a <Term k="stake">stake</Term>. Each result is checked
@@ -186,21 +296,30 @@ export default function CataloguePage() {
           ) : null}
         </div>
         <NotChargedSummary />
-      </header>
+        </header>
+      )}
 
       <section aria-labelledby="list-title" className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 tablet:flex-row tablet:items-center tablet:justify-between">
           <div className="flex items-center gap-3">
             <h2 id="list-title" className="sr-only">
-              {view === "tools" ? "Tools" : "Providers"}
+              {view === "tools" ? "Tools" : view === "toolsets" ? "Tool sets" : "Providers"}
             </h2>
             <Segmented
               value={view}
-              onValueChange={(value) => setView(value as "tools" | "providers")}
+              onValueChange={(value) => setView(value as "tools" | "providers" | "toolsets")}
               aria-label="Show"
               className="inline-flex rounded-md bg-03 p-0.5"
             >
               <SegmentedItem value="tools">Tools</SegmentedItem>
+              {showToolsets ? (
+                <SegmentedItem value="toolsets">Tool sets</SegmentedItem>
+              ) : toolsets.isPending ? (
+                // Holds the tab's place while the list loads, so the control does not shift when it appears.
+                <SegmentedItem value="toolsets" disabled aria-hidden="true" className="invisible">
+                  Tool sets
+                </SegmentedItem>
+              ) : null}
               <SegmentedItem value="providers">Providers</SegmentedItem>
             </Segmented>
             {view === "tools" ? (
@@ -213,27 +332,50 @@ export default function CataloguePage() {
                     ? "rounded-full border border-primary-500 bg-primary-10 px-2.5 py-1 text-label-xs text-primary-700"
                     : "rounded-full border border-02 bg-01 px-2.5 py-1 text-label-xs text-02 hover:text-01"
                 }
+                aria-label={freeCount === null ? "Free calls" : `Free calls: ${plural(freeCount, "tool")}`}
               >
-                Free calls
+                Free calls{freeCount === null ? null : <span className="ml-1 font-mono">{freeCount}</span>}
               </button>
             ) : null}
-            {active.isSuccess ? (
+            {active.isSuccess && view !== "toolsets" ? (
               <span className="text-body-xs text-03">
-                {needle || (freeOnly && view === "tools") ? `${visible} of ${total}` : total}
+                {needle || (view === "tools" && (freeOnly || kind !== "all" || (topic && topicKnown))) ? `${visible} of ${total}` : total}
               </span>
             ) : null}
           </div>
           <Search
             wrapperClassName="w-full tablet:w-[300px]"
             shortcut={null}
-            placeholder={view === "tools" ? "Search tools by name or what they do" : "Search providers"}
-            aria-label={view === "tools" ? "Search tools" : "Search providers"}
+            placeholder={view === "tools" ? "Search tools by name or what they do" : view === "toolsets" ? "Search tool sets" : "Search providers"}
+            aria-label={view === "tools" ? "Search tools" : view === "toolsets" ? "Search tool sets" : "Search providers"}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
 
-        {active.isPending ? (
+        {view === "tools" && hasProviderTools ? (
+          <div role="group" aria-label="Kind of tool" className="flex flex-wrap gap-2" data-testid="kind-filter">
+            {KIND_FILTERS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                aria-pressed={kind === f.id}
+                onClick={() => setKind(f.id)}
+                className={
+                  kind === f.id
+                    ? "min-h-10 rounded-full border border-primary-500 bg-primary-10 px-3 text-label-13 text-primary-700"
+                    : "min-h-10 rounded-full border border-02 bg-01 px-3 text-label-13 text-02 hover:text-01"
+                }
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {view === "toolsets" ? (
+          <ToolsetCatalogue query={query} onClearQuery={() => setQuery("")} />
+        ) : active.isPending ? (
           <div className="rounded-xl border border-01 bg-01 px-4">
             <PageState kind="loading" rows={5} label={`Loading ${view}`} />
           </div>
@@ -257,17 +399,18 @@ export default function CataloguePage() {
         ) : visible === 0 ? (
           <PageState
             kind="empty"
-            title={needle ? `Nothing matches “${query.trim()}”` : "No tool has free calls right now"}
+            title={needle ? `Nothing matches “${query.trim()}”` : freeOnly ? "No tool has free calls right now" : "No tool of this kind yet"}
             description={
               view === "tools"
                 ? `Search looks at a tool's name and description${freeOnly ? ", among tools with free calls" : ""}.`
                 : "Search looks at a provider's name."
             }
             action={{
-              label: freeOnly && view === "tools" ? "Show all tools" : "Clear the search",
+              label: (freeOnly || kind !== "all") && view === "tools" ? "Show all tools" : "Clear the search",
               onClick: () => {
                 setQuery("");
                 setFreeOnly(false);
+                setKind("all");
               },
             }}
           />
@@ -282,7 +425,7 @@ export default function CataloguePage() {
         )}
       </section>
 
-      <NotChargedProof />
+      {view === "toolsets" ? null : <Proof />}
 
       <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:p-6">
         <div className="flex flex-col gap-1">

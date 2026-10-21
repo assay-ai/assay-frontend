@@ -5,16 +5,23 @@ import { schemaFields, type SchemaField } from "../mapping-editor";
 /**
  * Starting points for a new listing, so stage 2 opens filled in rather than
  * blank: a request mapping that forwards every tool argument as a query
- * parameter of the same name, a response mapping that reads every output
+ * parameter of the same name (an argument the tool does not require "may be
+ * missing", so a call without it still works; no path, so the address is
+ * called exactly as typed, with no trailing "/"), a response mapping that reads every output
  * field from the same name, and test arguments taken from the schema's own
  * `examples` / `example` / `default` / first `enum` value.
  */
 
 export function seedRequestMapping(tool: CatalogueTool): ToolMapping {
   const fields = schemaFields(tool.inputSchema);
-  const seed: ToolMapping = { method: "GET", path: "/" };
+  const seed: ToolMapping = { method: "GET" };
   if (fields.length > 0) {
-    seed.query = Object.fromEntries(fields.map((field) => [field.name, { $path: `$.${field.name}` }]));
+    seed.query = Object.fromEntries(
+      fields.map((field) => [
+        field.name,
+        field.required ? { $path: `$.${field.name}` } : { $path: `$.${field.name}`, $optional: true },
+      ]),
+    );
   }
   return seed;
 }
@@ -45,8 +52,19 @@ export function exampleOf(schema: Record<string, unknown> | undefined, name: str
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-export function seedArguments(schema: Record<string, unknown> | undefined): Record<string, string> {
-  return Object.fromEntries(schemaFields(schema).map((field) => [field.name, exampleOf(schema, field.name)]));
+export function seedArguments(
+  schema: Record<string, unknown> | undefined,
+  /** The contract's worked examples (T3): the first one's arguments fill the boxes, so a test can run at once. */
+  examples: readonly { arguments?: Record<string, unknown> }[] = [],
+): Record<string, string> {
+  const example = examples.find((e) => e.arguments && typeof e.arguments === "object")?.arguments ?? {};
+  return Object.fromEntries(
+    schemaFields(schema).map((field) => {
+      const value = example[field.name];
+      if (value !== undefined && value !== null) return [field.name, typeof value === "string" ? value : JSON.stringify(value)];
+      return [field.name, exampleOf(schema, field.name)];
+    }),
+  );
 }
 
 /** The text of each argument box → the JSON input a test run sends, typed by the schema. */

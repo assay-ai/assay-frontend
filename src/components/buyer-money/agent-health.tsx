@@ -4,7 +4,7 @@ import Link from "next/link";
 import * as React from "react";
 
 import { relativeTime } from "@/components/g31/format";
-import { PageState } from "@/components/patterns/page-state";
+import { PageState, Skeleton } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
@@ -17,12 +17,21 @@ import { useAgentsAndKeys } from "./use-agents";
  * means for calls, and when it last called.
  */
 export function AgentHealthLine({ readiness, className }: { readiness: AgentReadiness; className?: string }) {
+  // Never a sentence derived from data still loading (it read "no key").
+  if (readiness.loading) {
+    return <Skeleton className={cn("h-4 w-56 max-w-full", className)} data-testid="agent-health-loading" />;
+  }
   return (
     <p className={cn("text-body-13 text-02", className)} data-testid="agent-health">
       {readiness.sentence}
       {readiness.lastCallAt ? <span className="text-03"> · last call {relativeTime(readiness.lastCallAt)}</span> : null}
     </p>
   );
+}
+
+/** The agent's status chip, or a skeleton while its keys load. */
+export function ReadinessChip({ readiness }: { readiness: AgentReadiness }) {
+  return readiness.loading ? <Skeleton className="h-5 w-20 rounded-full" /> : <StatusChip status={readiness.status} />;
 }
 
 /** Overview: one row per agent, linking to its card on Agents & keys. */
@@ -71,7 +80,7 @@ export function AgentHealthList({ className }: { className?: string }) {
                   </Link>
                 </>
               ) : (
-                <StatusChip status={readiness.status} />
+                <ReadinessChip readiness={readiness} />
               )}
             </li>
           );

@@ -28,15 +28,6 @@ export function getProviderStake(): Promise<ProviderStake> {
 }
 
 /**
- * `GET /providers/me/stake`, revalidated past the browser's HTTP cache — for
- * the read right after a write that moves the requirement (a publish), where a
- * plain refetch would be served the pre-write body.
- */
-export function revalidateProviderStake(): Promise<ProviderStake> {
-  return api.getRevalidated<ProviderStake>("/providers/me/stake");
-}
-
-/**
  * `POST /providers/me/stake/open-stake-intent` — open the on-chain stake
  * account. Takes no body: the instruction carries no amount and moves no
  * tokens.

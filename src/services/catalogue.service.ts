@@ -1,3 +1,4 @@
+import type { CatalogueToolVersionFields, ToolVersionList } from "@/interfaces/contracts";
 import { api } from "./api";
 import type { ToolTier } from "./tools.service";
 
@@ -17,9 +18,9 @@ import type { ToolTier } from "./tools.service";
  *
  * Three fields are nullable and each null means *we do not know*, never *none*:
  *
- * - `quality` — null until the provider has a closed SLA window. Around two
- *   thirds of providers on a young deployment have never been measured, and
- *   drawing that as 100% would put the least-proven provider at the top.
+ * - `quality` — null until a call to the provider has been checked in the last
+ *   30 days (open and closed check windows, D5). Drawing that as 100% would
+ *   put the least-proven provider at the top.
  * - `stake` — **a list per chain, and EMPTY when the stake source cannot say**
  *   (an RPC outage, an unproved stake authority, a provider staked in a mode
  *   this deployment does not read). `$0.00` would read as "nothing at risk",
@@ -94,6 +95,12 @@ export interface CatalogueProvider {
    */
   stake: CatalogueChainStake[];
   quality: CatalogueQuality | null;
+  /** CAIP-2 chains a call to this provider can settle on now (the router's answer); [] when it takes no call; null when unknown. */
+  chains?: string[] | null;
+  /** Per caller: one of your agents' chains is in `chains`. null when unknown. */
+  servesYou?: boolean | null;
+  /** Per caller: WITHDRAWING when servesYou is false because every agent has a standing withdrawal. */
+  notServedReason?: "WITHDRAWING" | null;
 }
 
 export interface CatalogueProviderTool {
@@ -101,15 +108,38 @@ export interface CatalogueProviderTool {
   name: string;
   pricingMode: string;
   price: CatalogueMoney;
-  /** Free calls one agent gets per UTC day on this listing; null for a PAID one. Absent on older APIs. */
-  freeCallsPerAgentPerDay?: number | null;
+  /** The failure rate this listing promises, 0..1 — what its penalties are measured against. */
+  promisedFailureRate?: number;
+  /** Free calls one agent gets per UTC day on this listing; null for a PAID one. */
+  freeCallsPerAgentPerDay: number | null;
+  /** CAIP-2 chains a call to this listing can settle on now; [] when it takes no call; null when unknown. */
+  chains?: string[] | null;
+  /** Per caller: one of your agents' chains is in `chains`. null when unknown. */
+  servesYou?: boolean | null;
+  /** Per caller: WITHDRAWING when servesYou is false because every agent has a standing withdrawal. */
+  notServedReason?: "WITHDRAWING" | null;
 }
 
 export interface CatalogueProviderDetail extends CatalogueProvider {
   tools: CatalogueProviderTool[];
 }
 
-export interface CatalogueTool {
+/**
+ * What a call costs on one chain, and whose listing sets that price — the
+ * router's quote for a buyer paying there. A buyer pays on one chain, so a
+ * tool on two chains has two prices, not one.
+ */
+export interface CatalogueChainPrice {
+  /** CAIP-2. */
+  chainId: string;
+  price: CatalogueMoney;
+  /** The one provider at that price, from the router's own priced set; null when several share it. */
+  providerId: string | null;
+  /** Eligible listings on that chain the price was taken over: name the provider only when 1. */
+  listings: number;
+}
+
+export interface CatalogueTool extends CatalogueToolVersionFields {
   id: string;
   name: string;
   description: string;
@@ -130,39 +160,38 @@ export interface CatalogueTool {
   /**
    * Free first, then paid: the free calls a day one agent gets before a call
    * is charged — set for FREE and FREEMIUM tools, `null` for a PAID one. A
-   * FREEMIUM tool reads "N free per day, then up to {price}". Optional for a
-   * backend that predates the field.
+   * FREEMIUM tool reads "N free per day, then up to {price}".
    */
-  freeCallsPerDay?: number | null;
+  freeCallsPerDay: number | null;
   routable: boolean;
   /**
    * Bindings the router could serve this tool from right now — the set `price`
    * is the dearest of. Not `providerCount`: a listed provider the router cannot
    * use (stake on another asset, a ceiling hit) counts there and not here.
-   * Optional for a backend that predates the field.
    */
-  routableBindings?: number;
+  routableBindings: number;
   /**
    * How many of `routableBindings` can be charged (PAID or FREEMIUM). "up to
    * $X" is about these only: a FREE binding beside one paid binding does not
-   * make the paid price a range. Optional for a backend that predates the field.
+   * make the paid price a range.
    */
-  paidBindings?: number;
+  paidBindings: number;
   unroutableReason: string | null;
   /**
-   * CAIP-2, the chains any ACTIVE binding for this tool settles on.
+   * CAIP-2, the chains a call placed now would settle on.
    *
-   * **Optional because nothing serves it yet.** The backend publishes
-   * `X402_SETTLEMENT_CHAINS` on the MCP `tools/list` annotations; the buyer
-   * catalogue DTO has no such field, so every row arrives without one today
-   * and every row renders exactly as it always has. The seam is one field on
-   * the backend's `CatalogueToolDto`.
+   * `null` means NOT KNOWN (nothing is routable right now) and is never an
+   * empty array, which would read as "settles nowhere". Optional because an
+   * older API omits it.
    *
-   * Do not default it to `[]` anywhere between here and the screen. `[]` and
-   * `undefined` mean the same thing to `settlementReach`, but an `[]` written
-   * by this layer would be this file claiming knowledge it does not have.
+   * Do not default it to `[]` anywhere between here and the screen. `[]`,
+   * `null` and `undefined` mean the same thing to `settlementReach`, but an
+   * `[]` written by this layer would be this file claiming knowledge it does
+   * not have.
    */
-  settlementChains?: string[];
+  settlementChains?: string[] | null;
+  /** The price per chain, with the provider setting it; a chain that cannot be quoted now is left out. */
+  prices?: CatalogueChainPrice[];
 }
 
 export function listCatalogueProviders(): Promise<{ providers: CatalogueProvider[] }> {
@@ -175,4 +204,9 @@ export function listCatalogueTools(): Promise<{ tools: CatalogueTool[] }> {
 
 export function getCatalogueProvider(providerId: string): Promise<CatalogueProviderDetail> {
   return api.get<CatalogueProviderDetail>(`/catalogue/providers/${providerId}`);
+}
+
+/** T3: a tool's published contract versions, newest first, with schemas, optional fields, examples and changelog. */
+export function getCatalogueToolVersions(toolId: string): Promise<ToolVersionList> {
+  return api.get<ToolVersionList>(`/catalogue/tools/${encodeURIComponent(toolId)}/versions`);
 }

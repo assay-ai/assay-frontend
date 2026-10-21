@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
@@ -9,11 +10,18 @@ import { Stepper } from "@/components/patterns/stepper";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { applyPublished, isAlreadyLive, isPublishedState } from "@/features/provider-binding/after-publish";
 import { bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
+import { contractMismatchProblems, sameTerms, termsBody, termsOf } from "@/features/provider-binding/contract-terms";
 import { documentsEqual } from "@/features/provider-binding/mapping-editor";
 import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { ConnectStage, type ConnectDraft } from "@/features/provider-binding/wizard/connect-stage";
 import { LiveStage, REQUIREMENT_SENTENCE } from "@/features/provider-binding/wizard/live-stage";
-import { isWizardStage, wizardSteps, type WizardStage } from "@/features/provider-binding/wizard/stages";
+import {
+  accountStepsDone,
+  combinedProgress,
+  isWizardStage,
+  wizardSteps,
+  type WizardStage,
+} from "@/features/provider-binding/wizard/stages";
 import { ToolStage } from "@/features/provider-binding/wizard/tool-stage";
 import type {
   CatalogueTool,
@@ -24,16 +32,15 @@ import type {
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
-import { getProviderRegistration } from "@/services/provider-registration.service";
 import {
   createToolBinding,
   getPublishCheck,
-  listToolBindings,
   publishToolBinding,
   updateToolBinding,
 } from "@/services/provider-tool-bindings.service";
 import { chainIdOfAsset } from "@/utils/chain";
 import { toast } from "@/utils/toast";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * List a tool — one wizard, one URL, three stages:
@@ -85,18 +92,13 @@ function WizardContent() {
   const endpointParam = params.get("endpoint") ?? "";
   const priceParam = params.get("price");
   const toolParam = params.get("tool");
+  // "Publish your own API" sends a provider tool here to connect and test it, and wants it back.
+  const backParam = params.get("back");
+  const back = backParam && /^\/provider\/apis\/view\?id=[^&]+(&step=[a-z]+)?$/.test(backParam) ? backParam : null;
 
   const catalogue = useProviderCatalogue();
-  const existing = useQuery({
-    queryKey: ["provider", "tool-bindings", "sidebar"],
-    queryFn: () => listToolBindings({ limit: 50 }),
-    retry: 0,
-  });
-  const registration = useQuery({
-    queryKey: ["provider", "registration"],
-    queryFn: getProviderRegistration,
-    retry: 0,
-  });
+  const existing = useQuery(providerQueries.bindings());
+  const registration = useQuery(providerQueries.registration());
   const bindingQuery = useBinding(bindingId);
   const binding = bindingQuery.data ?? null;
   const check = useQuery({
@@ -141,6 +143,7 @@ function WizardContent() {
     if (!id && endpointParam) extra.set("endpoint", endpointParam);
     if (priceParam) extra.set("price", priceParam);
     if (!id && pickedToolId && next !== "tool") extra.set("tool", pickedToolId);
+    if (back) extra.set("back", back);
     const query = extra.toString();
     router.replace(query ? `${href}${href.includes("?") ? "&" : "?"}${query}` : href, { scroll: false });
     window.scrollTo({ top: 0 });
@@ -161,6 +164,7 @@ function WizardContent() {
         created = await createToolBinding({
           toolId: tool.id,
           endpoint: draft.endpoint,
+          authMode: draft.authMode,
           requestMapping: draft.requestMapping,
           responseMapping: draft.responseMapping,
           pricingMode: "FREE",
@@ -169,8 +173,11 @@ function WizardContent() {
           settlementChains: [chain],
           slaFailureRate: DEFAULT_FAILURE_RATE,
           timeoutMs: DEFAULT_TIMEOUT_MS,
+          ...(draft.terms ? termsBody(draft.terms) : {}),
         });
       } catch (error) {
+        // The contract problems are shown as a list by the stage itself.
+        if (contractMismatchProblems(error)) throw error;
         throw createErrorMessage(error, boundByTool.get(tool.id));
       }
       store(created);
@@ -180,9 +187,12 @@ function WizardContent() {
     }
     const body: UpdateToolBindingBody = {};
     if (draft.endpoint !== binding.endpoint) body.endpoint = draft.endpoint;
+    if (draft.authMode !== binding.authMode) body.authMode = draft.authMode;
     // Sent only when they moved: a mapping save starts a new version, which needs a new test.
     if (!documentsEqual(draft.requestMapping, binding.requestMapping)) body.requestMapping = draft.requestMapping;
     if (!documentsEqual(draft.responseMapping, binding.responseMapping)) body.responseMapping = draft.responseMapping;
+    // T3: a changed range or field list is a new revision too, so it needs a new test.
+    if (draft.terms && !sameTerms(draft.terms, termsOf(binding))) Object.assign(body, termsBody(draft.terms));
     if (Object.keys(body).length === 0) return binding;
     const saved = await updateToolBinding(binding.id, body);
     store(saved);
@@ -216,7 +226,7 @@ function WizardContent() {
       if (!isAlreadyLive(error)) throw error instanceof ApiError ? new Error(plainError(error.code)) : error;
       void queryClient.invalidateQueries({ queryKey: bindingQueryKey(binding.id) });
     }
-    router.push(`${routes.binding(binding.id)}&welcome=1`);
+    router.push(back ?? `${routes.binding(binding.id)}&welcome=1`);
   };
 
   // ── Render ───────────────────────────────────────────────────────────────
@@ -225,7 +235,15 @@ function WizardContent() {
       <h1 className="text-heading-sm text-01 tablet:text-heading-md">
         {tool ? `List ${tool.name}` : "List a tool"}
       </h1>
-      <p className="text-body-13 text-03">Three steps. Your progress is saved as you go.</p>
+      <p className="text-body-13 text-03">
+        {registration.data ? `${combinedProgress(accountStepsDone(registration.data.steps), stage)} · ` : "Three steps. "}
+        Your progress is saved as you go.
+      </p>
+      {back ? (
+        <Link href={back} className="inline-flex min-h-10 items-center self-start text-body-13 text-primary-600 hover:underline">
+          Back to publishing your API
+        </Link>
+      ) : null}
     </header>
   );
 

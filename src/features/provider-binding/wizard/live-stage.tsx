@@ -7,12 +7,10 @@ import Link from "next/link";
 import Decimal from "decimal.js";
 import * as React from "react";
 
+import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
-import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
-import { estimatePenalty, exampleFailureRate } from "@/features/provider-penalties/estimate";
-import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
@@ -31,13 +29,17 @@ import { formatMoney, toDecimal } from "@/utils/money";
 
 import { BuyerPreview } from "../buyer-preview";
 import { minorUnitsFromMajorInput, majorInputFromMoney } from "../chrome";
+import { majorChoices, majorTestRows, majorTestText, moveNotice, termsOf } from "../contract-terms";
 import { useProviderToolNames } from "../tool-name";
 import {
   choiceOfMode,
   DEFAULT_FAILURE_PERCENT,
   DEFAULT_FREE_CALLS_PER_AGENT,
   failureRateFromPercent,
+  freeBudgetFromInput,
+  freeBudgetHint,
   freeCallsFromInput,
+  penaltyExample as penaltyExampleOf,
   modeOfChoice,
   percentText,
   PRICE_CHOICES,
@@ -56,11 +58,9 @@ export const REQUIREMENT_SENTENCE: Record<PublishRequirement, string> = {
   TESTER_RUN: "Run a test of your current connection.",
   TESTER_PASSED: "Get a passing test.",
   PAYOUT_ACCOUNT: "Add a payout wallet so you can be paid.",
+  API_KEY_CREDENTIALS: "Add your API key headers for this address under Authentication.",
   STAKE_AT_MINIMUM_ON_EVERY_CHAIN: "Add stake to cover paid calls.",
 };
-
-/** The window volume the penalty example assumes; nothing is on the wire before a tool is live. */
-const EXAMPLE_WINDOW_CALLS = 1000;
 
 export interface LiveForm {
   choice: PriceChoice;
@@ -132,6 +132,25 @@ export function parseLiveForm(form: LiveForm, binding: ToolBindingDetail, asset:
   return { body, errors, price, freeCalls, failureRate: failure.value };
 }
 
+/**
+ * The wizard's "Free calls per day, all agents (optional)" on a Free listing
+ * (BUG-P0-01): the same field and DTO key (`freeDailyBudget`, a call count;
+ * empty = `null` = the platform default) as the binding's Settings page. Only
+ * Free offers it here; Free + paid keeps its per-agent box, and Settings has
+ * the cap for every mode. The patch is empty when nothing changed.
+ */
+export function freeBudgetPatch(
+  mode: ReturnType<typeof modeOfChoice>,
+  text: string,
+  binding: Pick<ToolBindingDetail, "freeDailyBudget">,
+): { error: string | null; value: number | null; patch: Pick<UpdateToolBindingBody, "freeDailyBudget"> } {
+  if (mode !== "FREE") return { error: null, value: binding.freeDailyBudget ?? null, patch: {} };
+  const parsed = freeBudgetFromInput(text);
+  if (parsed.error) return { error: parsed.error, value: null, patch: {} };
+  const current = binding.freeDailyBudget ?? null;
+  return { error: null, value: parsed.value, patch: parsed.value === current ? {} : { freeDailyBudget: parsed.value } };
+}
+
 function PercentStepper({
   value,
   onChange,
@@ -174,9 +193,15 @@ function PercentStepper({
       </div>
       <p className={cn("text-body-xs", error ? "text-danger-500" : "text-03")}>
         {error ??
-          (free
-            ? `Out of every 100 checked calls in a window (${WINDOW_WORDS}). A free tool has no stake, so going over it costs you no money; buyers see the promise and how you do against it.`
-            : `Out of every 100 checked calls in a window (${WINDOW_WORDS}). Go over it and part of your stake can be taken as a penalty. A higher number is safer for you but looks weaker to buyers.`)}
+          (free ? (
+            `Out of every 100 checked calls in a window (${WINDOW_WORDS}). A free tool has no stake, so going over it costs you no money; buyers see the promise and how you do against it.`
+          ) : (
+            <>
+              {`Out of every 100 checked calls in a window (${WINDOW_WORDS}). Go over it and part of your stake can be taken as a penalty, by the `}
+              <Term k="stake-rule">stake rule</Term>
+              {". A higher number is safer for you but looks weaker to buyers."}
+            </>
+          ))}
       </p>
       {!error && example ? <p className="text-body-xs text-02">{example}</p> : null}
     </div>
@@ -225,12 +250,17 @@ export function LiveStage({
     retry: 0,
   });
 
+  const [freeBudget, setFreeBudget] = React.useState(() =>
+    binding.freeDailyBudget == null ? "" : String(binding.freeDailyBudget),
+  );
   const parsed = parseLiveForm(form, binding, asset);
   const mode = modeOfChoice(form.choice);
   const set = (patch: Partial<LiveForm>) => setForm((current) => ({ ...current, ...patch }));
+  const budget = freeBudgetPatch(mode, freeBudget, binding);
+  const body = parsed.body && !budget.error ? { ...parsed.body, ...budget.patch } : null;
 
   // Autosave: a valid change is saved a moment after the provider stops typing.
-  const pendingBody = parsed.body && Object.keys(parsed.body).length > 0 ? parsed.body : null;
+  const pendingBody = body && Object.keys(body).length > 0 ? body : null;
   const bodyKey = pendingBody ? JSON.stringify(pendingBody) : "";
   const save = React.useCallback(async () => {
     if (!pendingBody || readOnly) return;
@@ -284,27 +314,21 @@ export function LiveStage({
           largestToolName: largestOther ? (names.tool(largestOther.toolId)?.name ?? null) : null,
         })
       : null;
-  const exampleRate = parsed.failureRate !== null ? exampleFailureRate(parsed.failureRate) : null;
-  const penaltyExample =
-    mode !== "FREE" && parsed.price && exampleRate !== null
-      ? (() => {
-          const estimate = estimatePenalty({
-            price: parsed.price,
-            calls: EXAMPLE_WINDOW_CALLS,
-            observedRate: exampleRate,
-            declaredRate: parsed.failureRate!,
-          });
-          return `Example: at ${percentText(exampleRate)}% failures in a window of ${EXAMPLE_WINDOW_CALLS.toLocaleString("en-US")} paid calls, up to about ${formatMoney(estimate.penalty)} of your stake could be taken. The chain never lets penalties take more than ${DAILY_CAP_PERCENT}% of your stake in any 24 hours. Within your promise, or below ${MIN_CHECKED_CALLS} checked calls in a window, nothing is taken.`;
-        })()
-      : null;
+  const penaltyExample = penaltyExampleOf(parsed.price, mode, parsed.failureRate);
 
   const unmet = (check.data?.requirements ?? []).filter((requirement) => !requirement.met);
   const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");
+  const credentialsMissing = unmet.find((r) => r.requirement === "API_KEY_CREDENTIALS");
   const payoutMissing = unmet.find((r) => r.requirement === "PAYOUT_ACCOUNT");
-  const hasErrors = Object.keys(parsed.errors).length > 0;
+  // T3: one tester row per contract major the listing serves.
+  const versioned = (tool.versions?.length ?? 0) > 0;
+  const testRows = versioned && check.data ? majorTestRows(check.data, termsOf(binding).majors) : [];
+  const untested = testRows.filter((row) => !row.met).map((row) => `v${row.major}`);
+  const move = versioned ? moveNotice(termsOf(binding), majorChoices(tool)) : null;
+  const hasErrors = Object.keys(parsed.errors).length > 0 || budget.error !== null;
   // An empty price is not marked red before anything was typed; the button says what is missing instead.
   const priceEmpty = form.price.trim() === "";
-  const onlyPriceMissing = priceEmpty && Object.keys(parsed.errors).every((key) => key === "price");
+  const onlyPriceMissing = priceEmpty && !budget.error && Object.keys(parsed.errors).every((key) => key === "price");
 
   let blockReason: React.ReactNode = null;
   if (readOnly) blockReason = "Your account is blocked, so publishing is paused.";
@@ -313,7 +337,16 @@ export function LiveStage({
   else if (testMissing)
     blockReason = (
       <>
-        {REQUIREMENT_SENTENCE[testMissing.requirement]}{" "}
+        {untested.length > 0 ? `Get a passing test for ${untested.join(" and ")}.` : REQUIREMENT_SENTENCE[testMissing.requirement]}{" "}
+        <button type="button" className="text-primary-600 underline" onClick={onBackToTest}>
+          Back to Connect &amp; test
+        </button>
+      </>
+    );
+  else if (credentialsMissing)
+    blockReason = (
+      <>
+        {REQUIREMENT_SENTENCE.API_KEY_CREDENTIALS}{" "}
         <button type="button" className="text-primary-600 underline" onClick={onBackToTest}>
           Back to Connect &amp; test
         </button>
@@ -378,7 +411,7 @@ export function LiveStage({
             <Field
               label="Price per call"
               inputMode="decimal"
-              suffix={asset.symbol}
+              suffix="$ a call"
               value={form.price}
               disabled={readOnly}
               onChange={(event) => set({ price: event.target.value })}
@@ -396,6 +429,20 @@ export function LiveStage({
               onChange={(event) => set({ freeCalls: event.target.value })}
               error={parsed.errors.freeCalls}
               hint="Each agent gets this many free calls a day on this tool, then pays the price above."
+            />
+          ) : null}
+
+          {mode === "FREE" ? (
+            <Field
+              label="Free calls per day, all agents (optional)"
+              inputMode="numeric"
+              suffix="calls"
+              value={freeBudget}
+              disabled={readOnly}
+              placeholder="Platform default"
+              onChange={(event) => setFreeBudget(event.target.value)}
+              error={budget.error ?? undefined}
+              hint={freeBudgetHint(mode)}
             />
           ) : null}
 
@@ -440,7 +487,13 @@ export function LiveStage({
           <div className="flex flex-col gap-2 rounded-lg border border-01 bg-01 p-4" aria-live="polite">
             <span className="text-label-13 text-01">Summary</span>
             {mode === "FREE" ? (
-              <p className="text-body-13 text-02">Free for every agent. No revenue, no stake needed, no penalty risk on money.</p>
+              <p className="text-body-13 text-02">
+                Free for every agent
+                {budget.value !== null && !budget.error
+                  ? `, up to ${budget.value.toLocaleString("en-US")} free ${budget.value === 1 ? "call" : "calls"} a day in total`
+                  : ", up to the platform's default daily limit of free calls"}
+                . No revenue, no stake needed, no penalty risk on money.
+              </p>
             ) : priceMoney && youGet ? (
               <p className="text-body-13 text-01">
                 Buyers pay {formatMoney(priceMoney, { decimals: 6 })} → you get {formatMoney(youGet, { decimals: 6 })} a call
@@ -485,6 +538,24 @@ export function LiveStage({
       <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-label-sm text-01">Publish {tool.name}</span>
+          {move ? (
+            <span role="status" className="text-body-xs text-warning-700">
+              {move}{" "}
+              <button type="button" className="text-primary-600 underline" onClick={onBackToTest}>
+                Back to Connect &amp; test
+              </button>
+            </span>
+          ) : null}
+          {testRows.length > 0 ? (
+            <ul aria-label="Tests per version" className="flex flex-col gap-0.5 py-1">
+              {testRows.map((row) => (
+                <li key={row.major} className={row.met ? "text-body-xs text-success-700" : "text-body-xs text-warning-700"}>
+                  {row.met ? "✓ " : "• "}
+                  {majorTestText(row)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
           <span className="text-body-xs text-03">
             {blockReason ??
               (needsStake

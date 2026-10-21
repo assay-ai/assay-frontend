@@ -21,6 +21,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { createToolRequest } from "@/services/provider-tool-requests.service";
 
+import { parseMonthlyCalls } from "./state";
 import { isHttpsUrl } from "./url";
 
 export const TOOL_REQUESTS_LIST_KEY = ["provider", "tool-requests", "list"] as const;
@@ -96,8 +97,8 @@ export function ToolRequestSheet({
     }
     let calls: number | undefined;
     if (volume.trim()) {
-      const parsed = Number(volume.trim().replace(/,/g, ""));
-      if (!Number.isInteger(parsed) || parsed < 0) {
+      const parsed = parseMonthlyCalls(volume);
+      if (parsed === null) {
         setError("Calls a month must be a whole number.");
         return;
       }

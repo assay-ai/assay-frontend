@@ -13,7 +13,7 @@ import { cn } from "@/utils";
  * state is taken verbatim from the design and intentionally not
  * caller-overridable, so no screen can drift from the approved wording.
  */
-export type StageCheckStatus = "passed" | "failed" | "not-sampled" | "not-reached";
+export type StageCheckStatus = "passed" | "failed" | "not-sampled" | "not-reached" | "not-applicable";
 
 export interface StageCheck {
   id?: string;
@@ -43,6 +43,8 @@ const STATUS_LABEL: Record<StageCheckStatus, string> = {
   failed: "failed",
   "not-sampled": "not sampled",
   "not-reached": "not reached",
+  // The tool declares no such check: nothing was skipped, so it is not "not reached".
+  "not-applicable": "does not apply",
 };
 
 const STATUS_ICON: Record<StageCheckStatus, "check" | "x" | "minus"> = {
@@ -50,6 +52,7 @@ const STATUS_ICON: Record<StageCheckStatus, "check" | "x" | "minus"> = {
   failed: "x",
   "not-sampled": "minus",
   "not-reached": "minus",
+  "not-applicable": "minus",
 };
 
 const markVariants = cva("shrink-0", {
@@ -59,6 +62,7 @@ const markVariants = cva("shrink-0", {
       failed: "text-danger-500",
       "not-sampled": "text-03",
       "not-reached": "text-03",
+      "not-applicable": "text-03",
     },
   },
 });
@@ -70,6 +74,7 @@ const statusTextVariants = cva("w-[130px] shrink-0 text-body-sm", {
       failed: "text-danger-500",
       "not-sampled": "text-02",
       "not-reached": "text-02",
+      "not-applicable": "text-02",
     },
   },
 });

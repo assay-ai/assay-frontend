@@ -19,11 +19,13 @@ import {
   checkSlashDelay,
   confirmWordMatches,
   daysToSeconds,
+  dollars,
   delayToForm,
   formToParams,
   moneyToRaw,
   paramChanges,
   paramsToForm,
+  paramText,
   percentToBps,
   splitText,
   verifierStatusText,
@@ -77,7 +79,7 @@ describe("units", () => {
   });
 });
 
-describe("formToParams mirrors X402Config._validate", () => {
+describe("formToParams mirrors AssayConfig._validate", () => {
   const form = paramsToForm(PARAMS, 6);
   const errorsOf = (patch: Partial<typeof form>) => {
     const checked = formToParams({ ...form, ...patch }, context);
@@ -98,11 +100,18 @@ describe("formToParams mirrors X402Config._validate", () => {
 
   it("checks that two penalties fit the minimum stake's cap and the verifier's day", () => {
     // 10% of 100 = 10; two penalties of 6 = 12 do not fit.
-    expect(errorsOf({ penaltyAmount: "6" }).penaltyAmount).toMatch(/10% of 100 USDG is 10 USDG/);
+    expect(errorsOf({ penaltyAmount: "6" }).penaltyAmount).toMatch(/10% of \$100\.00 is \$10\.00/);
     expect(errorsOf({ penaltyAmount: "5" }).penaltyAmount).toBeUndefined();
-    expect(errorsOf({ verifierDailyCap: "1.5" }).verifierDailyCap).toMatch(/2 USDG or more/);
+    expect(errorsOf({ verifierDailyCap: "1.5" }).verifierDailyCap).toMatch(/\$2\.00 or more/);
     // A penalty of 0 (shadow mode) needs no allowance.
     expect(errorsOf({ penaltyAmount: "0" })).toEqual({});
+  });
+
+  it("writes money in dollars, never in the token's symbol (B12)", () => {
+    expect(paramText("penaltyAmount", PARAMS, ASSET)).toMatch(/^\$\d/);
+    expect(paramText("minimumStake", PARAMS, ASSET)).not.toMatch(/USDG/);
+    expect(dollars(BigInt(1_000_000), 6)).toBe("$1.00");
+    expect(dollars(BigInt(500_000_000), 6)).toBe("$500.00");
   });
 
   it("lists only what changed, addresses flagged", () => {
@@ -183,7 +192,7 @@ describe("the admin's calls", () => {
     if (!checked.ok) throw new Error("form");
     const calls = [
       { functionName: "setPaused", args: [true] },
-      { functionName: "updateConfig", args: [checked.params, "0x0000000000000000000000000000000000000000"] },
+      { functionName: "updateConfig", args: [checked.params] },
       { functionName: "registerVerifier", args: ["0x2222222222222222222222222222222222222222", labelBytes32("k"), BigInt(NOW)] },
       { functionName: "revokeVerifier", args: [VERIFIER] },
       { functionName: "setArbiter", args: ["0x1111111111111111111111111111111111111111"] },
@@ -199,11 +208,11 @@ describe("the admin's calls", () => {
   it("refuses a ParamSet that differs in one field", () => {
     const { call } = buildConfigCall(ROBINHOOD_TESTNET_STAKE, ADMIN, {
       functionName: "updateConfig",
-      args: [PARAMS, "0x0000000000000000000000000000000000000000"],
+      args: [PARAMS],
     });
     const other = { ...PARAMS, treasury: VERIFIER };
     expect(() =>
-      assertContractCall(call, { contract: "config", functionName: "updateConfig", args: [other, "0x0000000000000000000000000000000000000000"] }),
+      assertContractCall(call, { contract: "config", functionName: "updateConfig", args: [other] }),
     ).toThrow(/not what you chose/);
     expect(decodePinnedCall(call).functionName).toBe("updateConfig");
   });

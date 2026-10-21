@@ -1,4 +1,5 @@
 import type { CursorPage } from "@/interfaces/api";
+import type { OnChainDisputeState } from "@/interfaces/provider-disputes";
 import type {
   AccountBlock,
   ArbiterDispute,
@@ -18,6 +19,7 @@ import { readOperatorSession } from "@/libs/operator-session";
 
 import { DEMO_NOW_MS } from "./demo-clock";
 import type { DemoFixture } from "./fixtures";
+import { contractApproved, operatorContractFixtures } from "./fixtures-operator-contracts";
 
 /**
  * The operator console's stage set — DEMO ONLY (see `demo-api.ts`).
@@ -28,13 +30,13 @@ import type { DemoFixture } from "./fixtures";
  * can be reviewed as a Lead adjudicator, as on-call support or as an admin —
  * which is the point of a role-aware console.
  *
- * Each preset has its own requests (Lead asked for a suspension, Support for a
- * lift, the admin for a new operator), so "your requests" differs by role.
+ * Each preset has its own requests (Support asked for a lift, the admin for a
+ * new operator), so "your requests" differs by role.
  *
  * A write is remembered for the browser tab's demo session (`memory` below,
  * kept in sessionStorage next to the demo clock): a request sent for approval
- * shows up in the inbox, an approve takes it off the list, a suspension or a
- * pay-back changes the penalty and lands in Activity with the reason that was
+ * shows up in the inbox, an approve takes it off the list, a pay-back changes
+ * the penalty and lands in Activity with the reason that was
  * picked. Without that the demo would contradict its own result cards, and a
  * reload would undo what the viewer just did. It lives exactly as long as the
  * demo clock: a new tab, or a session past six hours, starts the stage set
@@ -125,7 +127,7 @@ const OPERATORS: OperatorDirectoryEntry[] = [
     subject: "jordan@",
     displayName: "Jordan Blake",
     walletAddress: "0x7a3f9c2b4e81ad5f0b9c6d2e8f1a4b7c3d5e9f20",
-    roles: ["ADJL"],
+    roles: ["ADJL", "POL"],
     authorityLimit: usd("1000"),
     status: "ACTIVE",
     email: "jordan@assay.example",
@@ -137,7 +139,7 @@ const OPERATORS: OperatorDirectoryEntry[] = [
     subject: "riley@",
     displayName: "Riley Brooks",
     walletAddress: "0x1c4e0b9a3f7d26e85b0c4a1f9e3d7b2a6c8e5f31",
-    roles: ["ADJL", "TRE"],
+    roles: ["ADJL", "TRE", "POLA"],
     authorityLimit: usd("5000"),
     status: "ACTIVE",
     email: "riley@assay.example",
@@ -210,13 +212,6 @@ function me(): OperatorIdentity {
 
 // ── What this page load did (demo only; see the file comment) ───────────────
 
-interface Suspension {
-  reasonCode: string;
-  note: string;
-  by: string;
-  at: string;
-}
-
 interface Lift {
   by: string;
   approvedBy: string;
@@ -229,9 +224,10 @@ const memory = {
   decided: new Map<string, OperatorApproval>(),
   /** Requests sent for approval here, newest first. */
   added: [] as OperatorApproval[],
-  suspended: new Map<string, Suspension>(),
   /** Executed penalties paid back by an approved pay-back here: case id → who asked and when. */
   compensated: new Map<string, { by: string; at: string }>(),
+  /** B18: executions made while the cancel waited, recorded by an approved request here: case id → who and when. */
+  recorded: new Map<string, { by: string; at: string }>(),
   /** Blocks lifted by an approval here: block id → who and when. */
   lifted: new Map<string, Lift>(),
   /** Blocks created here, newest first. */
@@ -253,8 +249,8 @@ interface StoredMemory {
   base: number;
   decided: [string, OperatorApproval][];
   added: OperatorApproval[];
-  suspended: [string, Suspension][];
   compensated: [string, { by: string; at: string }][];
+  recorded?: [string, { by: string; at: string }][];
   lifted: [string, Lift][];
   blocks: AccountBlock[];
   removed: string[];
@@ -273,8 +269,8 @@ function loadMemory(): void {
     }
     memory.decided = new Map(stored.decided);
     memory.added = stored.added;
-    memory.suspended = new Map(stored.suspended);
     memory.compensated = new Map(stored.compensated);
+    memory.recorded = new Map(stored.recorded ?? []);
     memory.lifted = new Map(stored.lifted);
     memory.blocks = stored.blocks;
     memory.removed = new Set(stored.removed);
@@ -291,8 +287,8 @@ function saveMemory(): void {
     base: NOW,
     decided: [...memory.decided],
     added: memory.added,
-    suspended: [...memory.suspended],
     compensated: [...memory.compensated],
+    recorded: [...memory.recorded],
     lifted: [...memory.lifted],
     blocks: memory.blocks,
     removed: [...memory.removed],
@@ -316,10 +312,9 @@ function nextId(prefix: string): string {
 function caseNow(c: DemoCase): DemoCase {
   // Paid back by an approved pay-back: executed on chain, then compensated (the list's "Closed · paid back").
   if (memory.compensated.has(c.id)) return { ...c, status: "REVERSED" };
-  if (!memory.suspended.has(c.id)) return c;
-  // Suspending closes the case; a record standing on chain gets its cancel requested.
-  const standing = c.chainStatus === "PENDING" || c.chainStatus === "DISPUTED";
-  return { ...c, status: "OVERTURNED", chainStatus: standing ? "CANCEL_REQUESTED" : c.chainStatus, outcome: "OVERTURNED_PLATFORM_DEFECT" };
+  // B18: an execution recorded here — the mirror now says what the chain did.
+  if (memory.recorded.has(c.id)) return { ...c, chainStatus: "EXECUTED", chainRecord: "EXECUTED" };
+  return c;
 }
 
 /** Every request as it reads now: decided here, or lapsed — a pending one past its deadline is EXPIRED, as the API answers. */
@@ -371,7 +366,7 @@ function queue(action: string, code: string, target: string, payload: Record<str
 function remember(entry: Omit<OverrideLogEntry, "createdAt" | "family" | "organizationId" | "before" | "after" | "breakGlass" | "approvalMode"> & { approvalMode?: string }) {
   memory.log.unshift({
     createdAt: nowIso(),
-    family: entry.code.startsWith("S") ? "SLASH" : "ACCESS",
+    family: entry.code.startsWith("S") ? "SLASH" : entry.code.startsWith("P") ? "POLICY" : "ACCESS",
     organizationId: null,
     before: {},
     after: {},
@@ -380,23 +375,6 @@ function remember(entry: Omit<OverrideLogEntry, "createdAt" | "family" | "organi
     ...entry,
   });
   saveMemory();
-}
-
-function suspend(caseId: string, reasonCode: string, note: string, by: string, approver: string | null): void {
-  memory.suspended.set(caseId, { reasonCode, note, by, at: nowIso() });
-  remember({
-    id: nextId("log"),
-    code: "S-1",
-    label: "Suspend slash proposal",
-    action: "slash.suspend",
-    actorSubject: by,
-    approverSubject: approver,
-    targetType: "slash_proposal",
-    targetId: caseId,
-    reasonCode,
-    reason: note,
-    ticketRef: null,
-  });
 }
 
 function approve(id: string) {
@@ -413,16 +391,25 @@ function approve(id: string) {
     memory.lifted.set(blockId, { by: approval.requestedBy, approvedBy: self.subject, at: nowIso(), note });
     result = blocksNow().find((b) => b.id === blockId) ?? {};
     remember({ id: nextId("log"), code: "A-10", label: "Lift account block", action: "account.unblock", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "account_block", targetId: blockId, reasonCode, reason: note, ticketRef: null });
-  } else if (approval.action === "slash.suspend") {
-    suspend(String(approval.payload.proposalId ?? ""), reasonCode, note, approval.requestedBy, self.subject);
   } else if (approval.action === "arbiter.block") {
     // The API answers an approved A-11 with the arbiter's unsigned setBlocked; nothing is blocked yet.
     result = setBlockedCall(String(approval.payload.account ?? ""));
     remember({ id: nextId("log"), code: "A-11", label: "Arbiter on-chain block", action: "arbiter.block", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "chain_blocklist", targetId: String(approval.payload.account ?? ""), reasonCode: bodyText(approval.payload, "reasonCode"), reason: bodyText(approval.payload, "note"), ticketRef: null });
+  } else if (approval.action === "slash.record_execution") {
+    const caseId = String(approval.payload.proposalId ?? "");
+    memory.recorded.set(caseId, { by: approval.requestedBy, at: nowIso() });
+    remember({ id: nextId("log"), code: "S-16", label: "Record an on-chain execution while the cancel waited", action: "slash.execution_recorded", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "slash_proposal", targetId: caseId, reasonCode, reason: note, ticketRef: null });
   } else if (approval.action === "slash.compensated") {
     const caseId = String(approval.payload.proposalId ?? "");
     memory.compensated.set(caseId, { by: approval.requestedBy, at: nowIso() });
     remember({ id: nextId("log"), code: "S-5", label: "Compensate executed slash", action: "slash.compensated", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "slash_proposal", targetId: caseId, reasonCode, reason: note, ticketRef: null });
+  }
+  const contract = contractApproved(approval);
+  if (contract !== undefined) {
+    result = contract;
+    const code = approval.action === "tool_version.publish" ? "P-10" : "P-11";
+    const label = code === "P-10" ? "Publish a standard tool contract version" : "Move the contract version unpinned URLs serve";
+    remember({ id: nextId("log"), code, label, action: approval.action === "tool_version.publish" ? "tool_version.published" : "tool.current_version_moved", actorSubject: approval.requestedBy, approverSubject: self.subject, targetType: "tool", targetId: String(approval.payload.toolId ?? ""), reasonCode, reason: note, ticketRef: null });
   }
   saveMemory();
   return { approval: decided, result };
@@ -451,9 +438,10 @@ interface DemoCase {
   resolvedMinutesAgo?: number;
   /** Disputed on chain and left unruled for 30 days. */
   expired?: boolean;
-  outcome?: string | null;
   /** The window's measurement: calls posted and verified, failed, and the declared failure rate. */
   m: { posted: number; verified: number; failed: number; sla: number };
+  /** What the chain shows (the brief's `chainRecord`), when it is not what the mirror implies. */
+  chainRecord?: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
 }
 
 const CASES: DemoCase[] = [
@@ -515,7 +503,6 @@ const CASES: DemoCase[] = [
     executableIn: 9 * HOUR,
     disputedMinutesAgo: null,
     requestId: `0x${"d4".repeat(32)}`,
-    outcome: "OVERTURNED_PLATFORM_DEFECT",
     m: { posted: 530, verified: 240, failed: 22, sla: 0.03 },
   },
   {
@@ -538,7 +525,6 @@ const CASES: DemoCase[] = [
     disputedMinutesAgo: 40 * HOUR,
     upheldMinutesAgo: 20 * HOUR,
     requestId: `0x${"e5".repeat(32)}`,
-    outcome: "UPHELD",
     m: { posted: 1210, verified: 402, failed: 58, sla: 0.05 },
   },
   {
@@ -555,7 +541,6 @@ const CASES: DemoCase[] = [
     disputedMinutesAgo: null,
     requestId: `0x${"f6".repeat(32)}`,
     executedMinutesAgo: 9 * DAY - 2 * HOUR,
-    outcome: "UPHELD",
     m: { posted: 350, verified: 206, failed: 11, sla: 0.01 },
   },
   {
@@ -606,16 +591,49 @@ const CASES: DemoCase[] = [
     requestId: `0x${"c9".repeat(32)}`,
     executedMinutesAgo: 27 * DAY,
     resolvedMinutesAgo: 20 * DAY,
-    outcome: "UPHELD",
     m: { posted: 300, verified: 208, failed: 14, sla: 0.02 },
+  },
+  // B11: an overturned case whose record a stranger executed while its cancel waited.
+  {
+    id: "6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6",
+    providerId: VERDANT,
+    tool: "geo_tiles",
+    binding: "Verdant tiles",
+    window: "w_42",
+    penalty: "7.25",
+    status: "OVERTURNED",
+    chainStatus: "CANCEL_REQUESTED",
+    proposedMinutesAgo: 5 * DAY,
+    executableIn: 22 * HOUR,
+    disputedMinutesAgo: null,
+    requestId: `0x${"6a".repeat(32)}`,
+    resolvedMinutesAgo: 3 * DAY,
+    chainRecord: "EXECUTED",
+    m: { posted: 320, verified: 210, failed: 16, sla: 0.03 },
   },
 ];
 
 const CASE_BY_ID = new Map(CASES.map((c) => [c.id, c]));
 
+/** The case's on-chain state as the backend derives it from one record (`onChainDisputeState`). */
+function demoChainState(c: DemoCase, disputedAt: string | null): OnChainDisputeState | null {
+  switch (c.chainStatus) {
+    case "EXECUTED":
+      return "EXECUTED";
+    case "CANCELLED":
+      return c.expired ? "EXPIRED" : "CANCELLED";
+    case "DISPUTED":
+      return "DISPUTED";
+    case "PENDING":
+    case "CANCEL_REQUESTED":
+      return disputedAt ? "UPHELD" : "PENDING";
+    default:
+      return null;
+  }
+}
+
 function caseBrief(original: DemoCase): OperatorCaseBrief {
   const c = caseNow(original);
-  const suspended = memory.suspended.get(c.id);
   const paidBack = memory.compensated.get(c.id);
   const proposedAt = minutesAgo(c.proposedMinutesAgo);
   const executableAt = inMinutes(c.executableIn);
@@ -641,30 +659,30 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
           proposedAt,
           notifiedAt: proposedAt,
           acknowledgedAt: null,
-          respondByAt: executableAt,
-          platformDecisionDueAt: null,
           earliestExecutionAt: executableAt,
           chainExecutableAt: executableAt,
           chainStatus: c.chainStatus,
           chainDisputedAt: disputedAt,
           chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
+          chainState: demoChainState(c, disputedAt),
+          chainRecords: 0,
+          cancelledRecords: 0,
+          // The earliest door of a record still Pending and never disputed, as the backend computes it.
+          disputeBy: c.status === "PROPOSED" && c.chainStatus === "PENDING" && disputedAt === null ? executableAt : null,
           secondsRemaining: null,
           runningClock: "NONE",
         },
         disputeId: null,
-        outcome: c.outcome ?? null,
         resolutionKind: c.expired ? "AUTO_CHAIN_VOIDED" : null,
         resolvedAt: paidBack
           ? paidBack.at
           : executed
           ? minutesAgo(c.executedMinutesAgo ?? 0)
-          : suspended
-            ? suspended.at
-            : c.resolvedMinutesAgo !== undefined
-              ? minutesAgo(c.resolvedMinutesAgo)
-              : c.status === "OVERTURNED"
-                ? minutesAgo(5 * HOUR)
-                : null,
+          : c.resolvedMinutesAgo !== undefined
+            ? minutesAgo(c.resolvedMinutesAgo)
+            : c.status === "OVERTURNED"
+              ? minutesAgo(5 * HOUR)
+              : null,
         executedAt: c.executedMinutesAgo !== undefined ? minutesAgo(c.executedMinutesAgo) : null,
       },
       changeOverlay: null,
@@ -694,7 +712,6 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
         { windowId: `win_${c.window}`, label: c.window, observedRate: c.m.failed / c.m.verified, closedAt: proposedAt, isSubject: true },
       ],
     },
-    dispute: null,
     timeline: [
       { id: `${c.id}-1`, occurredAt: proposedAt, kind: "PROPOSED", actorType: "system", actorId: null, summary: `Penalty proposed · $${c.penalty}`, detail: {} },
       ...(disputedAt
@@ -703,11 +720,8 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
       ...(c.status === "UPHELD"
         ? [{ id: `${c.id}-3`, occurredAt: minutesAgo(c.upheldMinutesAgo ?? 2 * DAY), kind: "CHAIN_UPHELD", actorType: "operator" as const, actorId: "riley@", summary: "Upheld by the arbiter", detail: {} }]
         : []),
-      ...(c.status === "OVERTURNED" && !suspended
-        ? [{ id: `${c.id}-3`, occurredAt: minutesAgo(5 * HOUR), kind: "SUSPENDED", actorType: "operator" as const, actorId: "jordan@", summary: "Suspended: proposed during a mapping regression", detail: {} }]
-        : []),
-      ...(suspended
-        ? [{ id: `${c.id}-s`, occurredAt: suspended.at, kind: "SUSPENDED", actorType: "operator" as const, actorId: suspended.by, summary: `Suspended: ${suspended.note}`, detail: {} }]
+      ...(c.status === "OVERTURNED"
+        ? [{ id: `${c.id}-3`, occurredAt: minutesAgo(5 * HOUR), kind: "CHAIN_CANCEL_REQUESTED", actorType: "operator" as const, actorId: "jordan@", summary: "Cancel requested: proposed during a mapping regression", detail: {} }]
         : []),
       ...(c.executedMinutesAgo !== undefined
         ? [{ id: `${c.id}-4`, occurredAt: minutesAgo(c.executedMinutesAgo), kind: "EXECUTED", actorType: "system" as const, actorId: null, summary: "Executed on chain", detail: {} }]
@@ -718,13 +732,33 @@ function caseBrief(original: DemoCase): OperatorCaseBrief {
     ],
     restoration: [
       { label: "Penalty", value: `$${c.penalty}`, status: executed ? "NOT_APPLICABLE" : "ON_DECISION" },
-      { label: "Routing", value: "unaffected throughout", status: "NOT_APPLICABLE" },
     ],
-    requiresSecondSignature: false,
     chainStatus: c.chainStatus,
     chainExecutableAt: executableAt,
     chainDisputedParts: original.chainStatus === "DISPUTED" ? 1 : 0,
+    // Every demo record that may stand does (B11): Pending, Disputed, or under a requested cancel.
+    chainRecord: c.chainRecord ?? (STANDING.includes(c.chainStatus) ? "STANDING" : c.chainStatus === "EXECUTED" ? "EXECUTED" : "GONE"),
+    chainStanding: c.chainRecord ? c.chainRecord === "STANDING" || c.chainRecord === "UNKNOWN" : STANDING.includes(c.chainStatus),
     upheldViolations30d: c.providerId === NORTHWIND ? 2 : 0,
+    manualActions: demoManualActions(c),
+  };
+}
+
+/**
+ * B18, as the backend offers it: an action only where the demo's own chain
+ * read allows it. The one demo record executed while its cancel waited can be
+ * recorded; nothing else is stuck.
+ */
+function demoManualActions(c: DemoCase): NonNullable<OperatorCaseBrief["manualActions"]> {
+  const waiting = c.chainStatus === "CANCEL_REQUESTED";
+  const refusal = waiting ? ("SWEEP_SETTLES" as const) : ("NOT_CANCEL_REQUESTED" as const);
+  const executed = waiting && c.chainRecord === "EXECUTED";
+  return {
+    closeNothingStanding: { allowed: false, refusal: executed ? "EXECUTED" : refusal },
+    recordExecution: executed
+      ? { allowed: true, refusal: null, appliedMinor: usd(c.penalty).amount }
+      : { allowed: false, refusal, appliedMinor: null },
+    repropose: { allowed: false, refusal: executed ? "EXECUTED" : refusal },
   };
 }
 
@@ -838,6 +872,11 @@ const PROVIDER_NAMES: Record<string, string> = {
 
 const CLOSED_WITHOUT_PENALTY = ["OVERTURNED", "WAIVED", "CANCELLED"];
 
+/** Chain mirrors under which a record stands (`chainStanding`). */
+const STANDING: readonly string[] = ["PENDING", "DISPUTED", "CANCEL_REQUESTED"];
+/** Chain mirrors of a penalty never written on chain (`onChain: false`). */
+const NEVER_ON_CHAIN: readonly string[] = ["NONE", "PROPOSING", "REFUSED"];
+
 /** The backend's list status for a demo case, in the same precedence (`findOperatorCasePage`). */
 function listStatus(c: DemoCase): OperatorCaseStatus {
   if (c.status === "REVERSED") return "COMPENSATED";
@@ -876,6 +915,7 @@ function caseListRow(original: DemoCase): OperatorCaseListRow {
     proposedAt: minutesAgo(c.proposedMinutesAgo),
     disputedAt,
     nextDeadline,
+    onChain: !NEVER_ON_CHAIN.includes(original.chainStatus),
   };
 }
 
@@ -934,22 +974,6 @@ const APPROVALS: OperatorApproval[] = [
     createdAt: minutesAgo(6 * HOUR),
     decidedAt: null,
     expiresAt: inMinutes(18 * HOUR),
-  },
-  {
-    id: "apr-suspend-1",
-    action: "slash.suspend",
-    code: "S-1",
-    target: `slash_proposal:${CASES[4].id}`,
-    payload: { proposalId: CASES[4].id, body: { reasonCode: "PROPOSED_IN_ERROR", note: "Upheld on evidence that later proved to be our own timeout." } },
-    status: "PENDING",
-    requestedBy: "jordan@",
-    requestedById: "op-jordan",
-    approvedBy: null,
-    rejectedBy: null,
-    // Asked 16 h ago: 8 h left, so it outlives the demo session (SESSION_SAFE_MINUTES).
-    createdAt: minutesAgo(16 * HOUR),
-    decidedAt: null,
-    expiresAt: inMinutes(8 * HOUR),
   },
   {
     id: "apr-add-1",
@@ -1066,6 +1090,7 @@ const BLOCKS: AccountBlock[] = [
     subjectKind: "ORGANIZATION",
     subject: QUANTA,
     subjectKey: QUANTA,
+    subjectName: "Quanta Signals",
     active: true,
     reasonCode: "FRAUD",
     note: "Self-dealing: agents owned by the provider farmed refunds.",
@@ -1082,6 +1107,7 @@ const BLOCKS: AccountBlock[] = [
     subjectKind: "WALLET",
     subject: "eip155:46630:0x9f3c2b7e1d4a8c05b6e9f2a3d7c1b4e8a0d5f36c",
     subjectKey: "eip155:0x9f3c2b7e1d4a8c05b6e9f2a3d7c1b4e8a0d5f36c",
+    subjectName: null,
     active: true,
     reasonCode: "LEAKED_KEY",
     note: "Key posted in a public repository; customer notified.",
@@ -1098,6 +1124,7 @@ const BLOCKS: AccountBlock[] = [
     subjectKind: "WALLET",
     subject: "eip155:46630:0x2c7a9e4f1b6d3a08e5c2b9f4a7d1e3c6b0a8f592",
     subjectKey: "eip155:0x2c7a9e4f1b6d3a08e5c2b9f4a7d1e3c6b0a8f592",
+    subjectName: null,
     active: false,
     reasonCode: "ABUSE",
     note: "Burst of malformed calls; turned out to be a misconfigured agent.",
@@ -1129,7 +1156,6 @@ function logRow(partial: Partial<OverrideLogEntry> & Pick<OverrideLogEntry, "id"
 }
 
 const LOG: OverrideLogEntry[] = [
-  logRow({ id: "log-1", code: "S-1", label: "Suspend slash proposal", action: "slash.suspend", actorSubject: "jordan@", targetType: "slash_proposal", targetId: CASES[3].id, reasonCode: "PLATFORM_DEFECT", reason: "Proposed during a mapping regression." }, 5 * HOUR),
   logRow({ id: "log-3", code: "S-13", label: "Arbiter ruling", action: "arbiter.ruling", actorSubject: "riley@", targetType: "slash_proposal", targetId: CASES[4].id, reasonCode: "EVIDENCE_HOLDS", reason: "Failures reproduce on the provider's side." }, CASES[4].upheldMinutesAgo ?? 2 * DAY),
   logRow({ id: "log-2", code: "A-9", label: "Block account", action: "account.block", actorSubject: "jordan@", targetType: "account_block", targetId: "blk-2", reasonCode: "LEAKED_KEY", reason: "Key posted in a public repository; customer notified.", ticketRef: "SUP-2231" }, 26 * HOUR),
   logRow({ id: "log-4", code: "A-9", label: "Block account", action: "account.block", actorSubject: "sam@", targetType: "account_block", targetId: "blk-1", reasonCode: "FRAUD", reason: "Self-dealing: agents owned by the provider farmed refunds.", ticketRef: "INC-412" }, 3 * DAY),
@@ -1151,8 +1177,6 @@ function health(): PlatformHealth {
     policiesTotal: 31,
     stakeLocked: usd("48210.00"),
     providersWithStake: 8,
-    openDisputes: DISPUTED.length,
-    oldestOpenDisputeAgeSeconds: 23 * 86_400,
     chainState: [
       {
         chainId: DEMO_CHAIN_ID,
@@ -1254,8 +1278,6 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
   { method: "GET", match: "/operator/me", body: () => me() },
   { method: "POST", match: "/operator/auth/logout", body: () => ({}) },
   { method: "GET", match: "/operator/health", body: () => health() },
-  // The retired off-chain queue: empty, as it is once the objection process is gone.
-  { method: "GET", match: "/operator/queue", body: () => page([]) },
   { method: "GET", match: "/operator/cases", body: (_path, query) => caseList(query) },
   {
     method: "GET",
@@ -1266,37 +1288,34 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
     },
   },
   {
-    method: "POST",
-    match: /^\/operator\/cases\/[^/]+\/suspend$/,
-    body: (path, _query, data) => {
-      const id = lastSegment(path, 1);
-      const found = CASE_BY_ID.get(id);
-      const reasonCode = bodyText(data, "reasonCode");
-      const note = bodyText(data, "note");
-      // From UPHELD a suspension is two-person (S-1): the API answers 202 { approvalId }.
-      if (found && caseNow(found).status === "UPHELD") {
-        return queue("slash.suspend", "S-1", `slash_proposal:${id}`, { proposalId: id, body: { reasonCode, note } });
-      }
-      suspend(id, reasonCode, note, me().subject, null);
-      return { id, status: "CANCELLED" };
-    },
-  },
-  {
-    // Two-person (S-11): queued, as the API answers it.
-    method: "POST",
-    match: /^\/operator\/cases\/[^/]+\/sweep$/,
-    body: (path, _query, data) => {
-      const id = lastSegment(path, 1);
-      return queue("slash.sweep", "S-11", `slash_proposal:${id}`, { proposalId: id, body: { ...data } });
-    },
-  },
-  {
     // Two-person (S-5): queued, as the API answers it.
     method: "POST",
     match: /^\/operator\/cases\/[^/]+\/compensated$/,
     body: (path, _query, data) => {
       const id = lastSegment(path, 1);
       return queue("slash.compensated", "S-5", `slash_proposal:${id}`, { proposalId: id, body: { ...data } });
+    },
+  },
+  {
+    // B18 S-16 / S-17: two-person, queued as the API answers them.
+    method: "POST",
+    match: /^\/operator\/cases\/[^/]+\/(record-execution|repropose)$/,
+    body: (path, _query, data) => {
+      const id = lastSegment(path, 1);
+      const record = path.endsWith("/record-execution");
+      return queue(record ? "slash.record_execution" : "slash.repropose", record ? "S-16" : "S-17", `slash_proposal:${id}`, {
+        proposalId: id,
+        body: { ...data },
+      });
+    },
+  },
+  {
+    // B18 S-15: one person; the demo has no case with nothing standing, so this is never offered.
+    method: "POST",
+    match: /^\/operator\/cases\/[^/]+\/close-nothing-standing$/,
+    body: (path) => {
+      const found = CASE_BY_ID.get(lastSegment(path, 1));
+      return { proposalId: lastSegment(path, 1), status: found?.status ?? "CANCELLED", chainStatus: "CANCELLED", chainEpoch: 0 };
     },
   },
   {
@@ -1368,6 +1387,7 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
         subjectKind,
         subject,
         subjectKey: subjectKind === "WALLET" ? `eip155:${subject.split(":").pop()}` : subject,
+        subjectName: subjectKind === "ORGANIZATION" ? (PROVIDER_NAMES[subject] ?? null) : null,
         reasonCode: bodyText(data, "reasonCode") || "OTHER",
         note: bodyText(data, "note"),
         ticketRef: bodyText(data, "ticketRef") || null,
@@ -1481,4 +1501,11 @@ export const OPERATOR_FIXTURES: readonly DemoFixture[] = [
       return page(status ? rows.filter((op) => op.status === status) : rows);
     },
   },
+  // T3: the standard contract editor and the tool request queue.
+  ...operatorContractFixtures({
+    queue,
+    nextId,
+    log: (code, label, action, targetId, data) =>
+      remember({ id: nextId("log"), code, label, action, actorSubject: me().subject, approverSubject: null, targetType: "tool", targetId, reasonCode: bodyText(data, "reasonCode"), reason: bodyText(data, "note"), ticketRef: null }),
+  }),
 ];

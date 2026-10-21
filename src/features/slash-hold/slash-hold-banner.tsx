@@ -4,9 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 
 import { Banner } from "@/components/ui/banner";
-import { getProviderMe } from "@/services/provider-profile.service";
+import { routes } from "@/libs/routes";
 
-import { HOLD_RESUMES, HOLD_WHAT_TO_DO, PENALTIES_ON_CHAIN_HREF, slashHoldBanner } from "./model";
+import { HOLD_RESUMES, HOLD_WHAT_TO_DO, slashHoldBanner } from "./model";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * The slash-hold banner, mounted once in the provider console shell.
@@ -17,9 +18,7 @@ import { HOLD_RESUMES, HOLD_WHAT_TO_DO, PENALTIES_ON_CHAIN_HREF, slashHoldBanner
  */
 export function SlashHoldBanner({ wrapperClassName }: { wrapperClassName?: string }) {
   const me = useQuery({
-    queryKey: ["provider", "me"],
-    queryFn: getProviderMe,
-    retry: 0,
+    ...providerQueries.me(),
     // A hold starts and lifts on the chain's schedule, so re-read it; not after a refusal (an unregistered org).
     refetchInterval: (query) => (query.state.error ? false : 60_000),
   });
@@ -39,7 +38,7 @@ export function SlashHoldBanner({ wrapperClassName }: { wrapperClassName?: strin
             ))}
             <span>
               {HOLD_WHAT_TO_DO}{" "}
-              <Link href={PENALTIES_ON_CHAIN_HREF} className="font-semibold underline">
+              <Link href={routes.penalties()} className="font-semibold underline">
                 Penalties on chain
               </Link>
               . {HOLD_RESUMES}

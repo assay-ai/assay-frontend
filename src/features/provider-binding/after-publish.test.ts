@@ -13,10 +13,10 @@ import { ApiError } from "@/libs/ApiClient";
 const revalidated = vi.hoisted(() => ({ stake: { stake: [], marker: "fresh" } as unknown }));
 
 vi.mock("@/services/provider-stake.service", () => ({
-  revalidateProviderStake: vi.fn(async () => revalidated.stake),
+  getProviderStake: vi.fn(async () => revalidated.stake),
 }));
 
-import { revalidateProviderStake } from "@/services/provider-stake.service";
+import { getProviderStake } from "@/services/provider-stake.service";
 
 import { applyPublished, demoPublished, isAlreadyLive, isPublishedState, JUST_PUBLISHED_MS, withJustPublished } from "./after-publish";
 
@@ -26,6 +26,8 @@ const detail = (overrides: Partial<ToolBindingDetail> = {}): ToolBindingDetail =
   id: ID,
   toolId: "t-1",
   endpoint: "https://api.example.com/search",
+  authMode: "SIGNATURE",
+  publishedEndpoint: null,
   pricingMode: "PAID",
   price: { amount: "250000", asset: "eip155:46630/erc20:0xa0b8", decimals: 6 },
   status: "DRAFT",
@@ -53,7 +55,7 @@ describe("applyPublished — BUG-J-PROV-02", () => {
 
   beforeEach(() => {
     queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    vi.mocked(revalidateProviderStake).mockClear();
+    vi.mocked(getProviderStake).mockClear();
   });
 
   it("seeds the binding detail with the publish response", async () => {
@@ -84,7 +86,7 @@ describe("applyPublished — BUG-J-PROV-02", () => {
       stake: [],
     } as unknown as ProviderStake);
     await applyPublished(queryClient, published);
-    expect(revalidateProviderStake).toHaveBeenCalledTimes(1);
+    expect(getProviderStake).toHaveBeenCalledTimes(1);
     expect(queryClient.getQueryData(["provider", "stake"])).toEqual(revalidated.stake);
   });
 

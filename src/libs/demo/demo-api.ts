@@ -25,10 +25,13 @@ import { DEMO_FIXTURES, type DemoFixture } from "./fixtures";
  *
  * ## What it must not become
  *
- * This is a stage set, not a mock backend. It has no state, nothing writes to
- * it, and two identical calls return the same rows. Do not teach it to
- * remember a deposit or to decrement a balance — that is a mock server, and a
- * mock server is a thing people start trusting. It can be deleted whole once every
+ * This is a stage set, not a mock backend. Most of it has no state, and two
+ * identical calls return the same rows. A few files keep a small per-tab
+ * memory in sessionStorage so that an action shows on the next read — the
+ * operator contract editor (`demo-operator-contracts`), the T4 provider
+ * tools, reviews and disputes (`demo-t4`, cleared by `?fresh`) — and nothing
+ * else. Do not teach it to remember money — a deposit, a balance — that is a
+ * mock server, and a mock server is a thing people start trusting. It can be deleted whole once every
  * environment runs a seeded multichain backend.
  */
 

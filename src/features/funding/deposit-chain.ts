@@ -26,6 +26,15 @@ export type DepositChoice =
   | { readonly kind: "fixed"; readonly chain: Chain }
   | { readonly kind: "choose"; readonly options: readonly Chain[] };
 
+/**
+ * The choice when a screen allows only one chain (`onlyChainId`, the
+ * enable-paid page): that chain if it is offered, else nothing to pick.
+ * `null` offers every chain, as `depositChoice` does.
+ */
+export function depositChoiceFor(chains: readonly Chain[], onlyChainId: string | null): DepositChoice {
+  return depositChoice(onlyChainId === null ? chains : chains.filter((chain) => chain.chainId === onlyChainId));
+}
+
 export function depositChoice(chains: readonly Chain[]): DepositChoice {
   if (chains.length === 0) return { kind: "none-offered" };
   if (chains.length === 1) return { kind: "fixed", chain: chains[0] };
@@ -36,25 +45,18 @@ export function depositChoice(chains: readonly Chain[]): DepositChoice {
  * The chain the screen asked for is the chain the intent was minted on.
  *
  * The backend may **infer** the chain when the buyer has one linked
- * account, and older backend versions go further: they have no `chainId` on
- * `CreateDepositBodyDto` at all, so they accept the field and ignore it. That
- * is fine while one chain is enabled and it is a money-losing hole the moment
- * two are: the buyer reads "Robinhood Chain testnet", the intent is minted on
- * Solana, and the deposit lands somewhere the screen never named.
- *
- * So when the response says which chain it is for, it is checked; when it does
- * not (the older shape), there is nothing to check and the screen proceeds on
- * what it sent. Deliberately not "accept both shapes forever" — the seam is
- * this function, and it becomes total the day `chainId` is always served.
+ * account. That is fine while one chain is enabled and it is a money-losing
+ * hole the moment two are: the buyer reads "Robinhood Chain testnet", the
+ * intent is minted on Solana, and the deposit lands somewhere the screen never
+ * named. So the chain the response names is checked against the one asked for.
  *
  * Throws rather than returning a result: the only correct response is to stop
  * before a wallet is asked to sign, and a boolean invites a caller to ignore it.
  */
 export function assertRequirementsChain(
   requested: string,
-  requirementsChainId: string | undefined,
+  requirementsChainId: string,
 ): void {
-  if (requirementsChainId === undefined) return;
   if (requirementsChainId === requested) return;
   throw new Error(
     `The deposit was created on ${requirementsChainId}, not the ${requested} you chose. ` +

@@ -133,9 +133,9 @@ export async function readDepositReadiness(input: {
   return { nativeWei, tokenAtomic, allowanceAtomic };
 }
 
-/** Native balance alone — the check that can run before a deposit intent exists. */
-export async function readNativeBalance(chainId: string, owner: string): Promise<bigint> {
-  return clientFor(chainId).getBalance({ address: getAddress(owner) });
+/** The node's current gas price, wei: for a fee estimate shown before anything is built. */
+export async function readGasPrice(chainId: string): Promise<bigint> {
+  return clientFor(chainId).getGasPrice();
 }
 
 /**

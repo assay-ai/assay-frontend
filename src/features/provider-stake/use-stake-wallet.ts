@@ -9,11 +9,11 @@ import type { Chain } from "@/interfaces/chain";
 import { ROBINHOOD_TESTNET_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { isEvmChain } from "@/libs/chains/registry";
 import { demoEnabled } from "@/libs/demo/demo-api";
-import { getProviderRegistration } from "@/services/provider-registration.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 
 import type { StakeStatus } from "./use-stake-status";
 import { WALLET_READING, WALLET_READ_STALLED, useStalled } from "./wallet-readiness";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Which wallet stakes, on which chain — with no typing.
@@ -31,11 +31,7 @@ export function candidateAddresses(addresses: readonly string[], chainId: string
 }
 
 export function useStakeWallet(status: StakeStatus) {
-  const registration = useQuery({
-    queryKey: ["provider", "registration"],
-    queryFn: getProviderRegistration,
-    retry: false,
-  });
+  const registration = useQuery(providerQueries.registration());
   const payout = registration.data?.registration.payoutAccounts ?? [];
   const payoutChain = chainIdOfAccount((payout.find((a) => a.status === "ACTIVE") ?? payout[0])?.accountId);
   const chainId = status.chainId ?? payoutChain ?? ROBINHOOD_TESTNET_STAKE.chainId;

@@ -46,8 +46,13 @@ export function readDemoClock(real: number): number {
   return base;
 }
 
-/** The demo's "now", in ms, fixed for the session. */
-export const DEMO_NOW_MS = readDemoClock(Date.now());
+/**
+ * The demo's "now", in ms, fixed for the session. Outside a demo build it is
+ * this load's own ten-minute mark, and storage is never touched (the flag is the
+ * one `demoEnabled()` reads, inlined at build time; read here directly to
+ * keep this file free of imports).
+ */
+export const DEMO_NOW_MS = process.env.NEXT_PUBLIC_DEMO_CHAINS === "robinhood" ? readDemoClock(Date.now()) : Math.floor(Date.now() / GRID_MS) * GRID_MS;
 
 /** ISO time `minutes` before the demo's "now" (negative: after it). */
 export function demoMinutesAgo(minutes: number): string {

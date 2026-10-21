@@ -1,4 +1,6 @@
 import type { Money } from "@/interfaces";
+import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
+import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import { toDecimal, formatDecimal } from "@/utils/money";
 
 /**
@@ -24,12 +26,6 @@ export function formatCallPrice(money: Money | null | undefined): string {
 export function normalisedMode(mode: string | null | undefined): "FREE" | "FREEMIUM" | "PAID" | null {
   const upper = (mode ?? "").toUpperCase();
   return upper === "FREE" || upper === "FREEMIUM" || upper === "PAID" ? upper : null;
-}
-
-/** Whether calls to this tool can cost nothing for a while. */
-export function hasFreeTier(mode: string | null | undefined): boolean {
-  const m = normalisedMode(mode);
-  return m === "FREE" || m === "FREEMIUM";
 }
 
 /**
@@ -84,32 +80,201 @@ export function priceSentence(input: {
   return `${price} per call. You pay only if the result passes the check.`;
 }
 
+/** How far back the public failure rate looks: the backend's `PUBLIC_QUALITY_WINDOW_DAYS` (D5). */
+export const FAILURE_RATE_WINDOW_DAYS = 30;
+
+/** A 0..1 rate as a person reads it: "5%", "2.5%", "0.1%". */
+export function percentText(rate: number): string {
+  const pct = rate * 100;
+  return `${Number(pct.toFixed(pct < 1 ? 2 : 1))}%`;
+}
+
 /**
- * Observed failures, from the platform's own measurement, with its window:
- * the public quality figure sums every CLOSED check window of every tool the
- * provider serves (`SlaWindowRepository.qualityByProvider`, no date filter),
- * so it is an all-time figure — not the open window a provider sees on Home.
+ * The failure rate, from the platform's own measurement, with its scope and
+ * window: every call checked for any of the provider's tools in the check
+ * windows active in the last 30 days, open ones included
+ * (`SlaWindowRepository.qualityByProvider`; a window counts whole, so the
+ * period is approximate by up to one 7-day window).
+ * With `promised` (the listing's `promisedFailureRate`), the promise the
+ * penalties are measured against sits beside it: "10.5% failed · promised at
+ * most 5% · 95 checked calls to all their tools, last 30 days".
  */
-export function failRateLabel(quality: { measuredCalls: number; failedCalls: number } | null | undefined): string {
+export function failRateLabel(
+  quality: { measuredCalls: number; failedCalls: number } | null | undefined,
+  promised?: number | null,
+  /** What the promise covers, when it is narrower than the rate: "this tool" on a tool page's provider row. */
+  promiseScope?: string,
+): string {
+  const promise =
+    typeof promised === "number"
+      ? ` · promised at most ${percentText(promised)}${promiseScope ? ` for ${promiseScope}` : ""}`
+      : "";
+  if (!quality || quality.measuredCalls <= 0) return `Not measured yet${promise}`;
+  const calls = quality.measuredCalls === 1 ? "checked call" : "checked calls";
+  return `${failRateShort(quality)}${promise} · ${quality.measuredCalls.toLocaleString("en-US")} ${calls} to all their tools, last ${FAILURE_RATE_WINDOW_DAYS} days`;
+}
+
+/**
+ * The failure rate alone, for a compact stat: "10.5% failed" / "Not measured
+ * yet". The promise's own rule (`percentText`) at every size: one decimal
+ * from 1%, two below, a trailing zero dropped ("5%", "10.5%", "0.25%"), so a
+ * rate reads like the promise beside it. It used to switch to whole numbers
+ * at 10%, so "5.0%" and "11%" sat side by side (V1-7).
+ */
+export function failRateShort(quality: { measuredCalls: number; failedCalls: number } | null | undefined): string {
   if (!quality || quality.measuredCalls <= 0) return "Not measured yet";
   const pct = (quality.failedCalls / quality.measuredCalls) * 100;
-  const shown = pct === 0 ? "0%" : pct < 0.1 ? "<0.1%" : `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
-  return `${shown} failed · ${quality.measuredCalls.toLocaleString("en-US")} ${quality.measuredCalls === 1 ? "call" : "calls"} checked, all time`;
+  const shown = pct === 0 ? "0%" : pct < 0.1 ? "<0.1%" : percentText(quality.failedCalls / quality.measuredCalls);
+  return `${shown} failed`;
+}
+
+/**
+ * The one promised rate to show for a provider: set only when every listing
+ * that states one states the same, so a provider-wide figure is never paired
+ * with one tool's promise.
+ */
+export function uniformPromise(values: readonly (number | null | undefined)[]): number | null {
+  const stated = [...new Set(values.filter((v): v is number => typeof v === "number"))];
+  return stated.length === 1 ? stated[0] : null;
 }
 
 /** A failure rate at or above this, over enough calls, earns a warning chip. */
 export const HIGH_FAILURE_RATE = 0.2;
-/** Fewer measured calls than this is too few to call a provider unreliable. */
-export const HIGH_FAILURE_MIN_CALLS = 5;
+/** Fewer checked calls than this is too few to call a provider unreliable (D5). */
+export const HIGH_FAILURE_MIN_CALLS = 20;
 
 /**
  * Whether a provider fails often enough that a buyer should know before
- * routing to it: at least 20% of at least 5 measured calls. Shown, never
+ * routing to it: at least 20% of at least 20 checked calls. Shown, never
  * hidden — a failed call is not charged, but it still costs the agent time.
  */
 export function failsOften(quality: { measuredCalls: number; failedCalls: number } | null | undefined): boolean {
   if (!quality || quality.measuredCalls < HIGH_FAILURE_MIN_CALLS) return false;
   return quality.failedCalls / quality.measuredCalls >= HIGH_FAILURE_RATE;
+}
+
+/**
+ * The penalty rule in one sentence, as `/why-list-here` states it: a provider
+ * loses stake only for failing more often than it promised, judged over a
+ * full window, and never more than the daily cap.
+ */
+export function stakeRuleSentence(): string {
+  return (
+    `A provider that fails more often than it promised, over at least ${MIN_CHECKED_CALLS} checked calls in a window, ` +
+    `loses part of its stake (never more than ${DAILY_CAP_PERCENT}% of it in any 24 hours), and part of that goes to the buyers it served badly.`
+  );
+}
+
+/** One chain's price for a tool (`prices[]` on the catalogue): the quote there, and whose listing sets it. */
+export interface ChainPrice {
+  /** CAIP-2. */
+  chainId: string;
+  price: Money;
+  /** The one provider at that price, from the router's own priced set; null when several share it. */
+  providerId: string | null;
+  /** Eligible listings on that chain the price was taken over. */
+  listings: number;
+}
+
+/**
+ * The chain prices, the one to lead with first: the reader's own chains in
+ * their order of preference (signed in), else the chain of the headline quote
+ * (`held`), else the server's order.
+ */
+export function orderChainPrices(
+  prices: readonly ChainPrice[] | null | undefined,
+  preferredChains: readonly string[] | null | undefined,
+  held: Money | null | undefined,
+): ChainPrice[] {
+  const list = [...(prices ?? [])];
+  const preferred = (preferredChains ?? [])
+    .map((chainId) => list.find((entry) => entry.chainId === chainId))
+    .find((entry) => entry !== undefined);
+  const lead = preferred ?? list.find((entry) => held && entry.price.asset === held.asset) ?? list[0];
+  return lead ? [lead, ...list.filter((entry) => entry !== lead)] : [];
+}
+
+/**
+ * The chains a buyer can pay on now, best funded first: balance rows with a
+ * spendable amount above zero. A $0 row (left by any past activity) is not a
+ * chain to lead a price with.
+ */
+export function fundedChains(rows: readonly { chainId: string; available: Money }[] | null | undefined): string[] {
+  return [...(rows ?? [])]
+    .filter((row) => toDecimal(row.available).gt(0))
+    .sort((a, b) => toDecimal(b.available).cmp(toDecimal(a.available)))
+    .map((row) => row.chainId);
+}
+
+/**
+ * The provider to name beside a chain's price: only when exactly one eligible
+ * listing serves that chain. With two or more, the price is the dearest of
+ * them, and naming one would say the wrong provider serves the call.
+ */
+export function chainProviderName(
+  entry: ChainPrice,
+  nameOf: (providerId: string) => string | null | undefined,
+): string | null {
+  if (entry.listings !== 1 || !entry.providerId) return null;
+  return nameOf(entry.providerId) ?? null;
+}
+
+/**
+ * The per-chain price lines of a tool page: the lead chain's "where" (under
+ * the big price; no name when the lead's own price is a range), and one full
+ * line per other chain.
+ */
+export function chainPriceLines(
+  ordered: readonly ChainPrice[],
+  options: {
+    chainName: (chainId: string) => string;
+    nameOf: (providerId: string) => string | null | undefined;
+    /** The lead chain's price is a range ("from …"), so no one provider sets it. */
+    leadIsRange?: boolean;
+  },
+): { lead: string | null; others: { chainId: string; text: string }[] } {
+  const [first, ...rest] = ordered;
+  return {
+    lead: first
+      ? chainPriceWhere(first.chainId, options.chainName, options.leadIsRange ? null : chainProviderName(first, options.nameOf))
+      : null,
+    others: rest.map((entry) => ({
+      chainId: entry.chainId,
+      text: chainPriceText(entry, options.chainName, chainProviderName(entry, options.nameOf)),
+    })),
+  };
+}
+
+/**
+ * "Paid on Robinhood Chain testnet, Solana devnet": the settlement chains,
+ * each marked when it has no price right now (a per-chain quote can fail while
+ * the chain stays in the tool's settlement list).
+ */
+export function paidOnText(
+  settles: readonly string[],
+  prices: readonly ChainPrice[] | null | undefined,
+  chainName: (chainId: string) => string,
+): string {
+  const priced = new Set((prices ?? []).map((entry) => entry.chainId));
+  const checkPrices = (prices ?? []).length > 0;
+  return `Paid on ${settles
+    .map((chainId) => `${chainName(chainId)}${checkPrices && !priced.has(chainId) ? " (price unavailable right now)" : ""}`)
+    .join(", ")}.`;
+}
+
+/** "on Robinhood Chain testnet (E2E Weather Ltd)", or without the name when it is not known or not one provider. */
+export function chainPriceWhere(chainId: string, chainName: (chainId: string) => string, providerName?: string | null): string {
+  return `on ${chainName(chainId)}${providerName ? ` (${providerName})` : ""}`;
+}
+
+/** "$0.10 per call on Robinhood Chain testnet (E2E Weather Ltd)" / "Free on Solana devnet". */
+export function chainPriceText(
+  entry: ChainPrice,
+  chainName: (chainId: string) => string,
+  providerName?: string | null,
+): string {
+  const price = formatCallPrice(entry.price);
+  return `${price}${price === "Free" ? "" : " per call"} ${chainPriceWhere(entry.chainId, chainName, providerName)}`;
 }
 
 /**
@@ -333,11 +498,13 @@ export function routingNotes(
   providers: readonly RoutingProvider[],
   /** Names a chain from its CAIP-2 id; when given, a provider paid on another chain is said as such. */
   chainName?: (chainId: string) => string,
+  /** `chainsListed`: the page already lists the price per chain, so the other-chain note is not repeated. */
+  options: { chainsListed?: boolean } = {},
 ): string[] {
   const notes: string[] = [];
   // A listing in another asset is priced on another chain: compare it to nothing, name its chain.
   const elsewhere = held && chainName ? providers.filter((p) => p.price && p.price.asset !== held.asset) : [];
-  if (held && chainName && elsewhere.length > 0) {
+  if (held && chainName && elsewhere.length > 0 && !options.chainsListed) {
     const chainOf = (asset: string) => chainName(asset.split("/")[0]);
     notes.push(
       `The price above is for ${chainOf(held.asset)}. ${elsewhere
@@ -358,7 +525,7 @@ export function routingNotes(
   if (failing.length > 0) {
     notes.push(
       taking.length === 1
-        ? "Calls go to the provider that is taking calls; this one has failed often recently. Failed results are never charged."
+        ? `Calls go to ${failing[0].name}, the only provider taking calls; it has failed often recently. Failed results are never charged.`
         : `${failing.map((p) => p.name).join(", ")} ${failing.length === 1 ? "has failed often recently and still takes" : "have failed often recently and still take"} calls. Failed results are never charged.`,
     );
   }
@@ -367,7 +534,7 @@ export function routingNotes(
 
 /** The Explorer's list state, as it rides in the URL so Back from a tool restores it. */
 export interface ExplorerListState {
-  view: "tools" | "providers";
+  view: "tools" | "providers" | "toolsets";
   q: string;
   /** Tools with free calls only. */
   free: boolean;
@@ -375,7 +542,7 @@ export interface ExplorerListState {
 
 export function readExplorerState(params: { get(name: string): string | null }): ExplorerListState {
   return {
-    view: params.get("view") === "providers" ? "providers" : "tools",
+    view: params.get("view") === "providers" ? "providers" : params.get("view") === "toolsets" ? "toolsets" : "tools",
     q: params.get("q") ?? "",
     free: params.get("free") === "1",
   };
@@ -384,7 +551,7 @@ export function readExplorerState(params: { get(name: string): string | null }):
 /** `/catalogue` with only the non-default parts of the state in its query. */
 export function explorerHref(state: ExplorerListState): string {
   const params = new URLSearchParams();
-  if (state.view === "providers") params.set("view", "providers");
+  if (state.view !== "tools") params.set("view", state.view);
   if (state.q.trim()) params.set("q", state.q);
   if (state.free && state.view === "tools") params.set("free", "1");
   const query = params.toString();
@@ -472,16 +639,16 @@ export interface NotChargedSplitLine {
 /**
  * The lines of the "not charged" split on the public proof: the guarantee
  * firing first, then each reason the server named (only when every reason
- * clears the k rule, rounded down to tens), then one line for the rest. A
- * backend without the split (or one that named nothing) gets a single merged
- * line, worded so it does not read as one reason. Lines with no calls are left
- * out, except the failed-check line, which is the claim itself.
+ * clears the k rule, rounded down to tens), then one line for the rest. When
+ * the server named nothing, the rest is a single merged line, worded so it
+ * does not read as one reason. Lines with no calls are left out, except the
+ * failed-check line, which is the claim itself.
  */
 export function notChargedSplit(totals: {
   callsNotCharged: number;
   callsFailedCheck: number;
-  notChargedByReason?: { reason: string; calls: number }[];
-  callsNotChargedOther?: number;
+  notChargedByReason: { reason: string; calls: number }[];
+  callsNotChargedOther: number;
 }): NotChargedSplitLine[] {
   const failed: NotChargedSplitLine = {
     key: "FAILED_CHECK",
@@ -490,8 +657,8 @@ export function notChargedSplit(totals: {
     tone: reasonTone("FAILED_CHECK"),
   };
   const rest = Math.max(0, totals.callsNotCharged - totals.callsFailedCheck);
-  const named = (totals.notChargedByReason ?? []).filter((r) => r.calls > 0);
-  if (totals.notChargedByReason === undefined || named.length === 0) {
+  const named = totals.notChargedByReason.filter((r) => r.calls > 0);
+  if (named.length === 0) {
     if (rest === 0) return [failed];
     return [
       failed,
@@ -513,7 +680,7 @@ export function notChargedSplit(totals: {
       tone: reasonTone(r.reason),
     })),
   ];
-  const other = totals.callsNotChargedOther ?? Math.max(0, rest - named.reduce((sum, r) => sum + r.calls, 0));
+  const other = totals.callsNotChargedOther;
   if (other > 0) {
     lines.push({ key: "OTHER", label: "The rest, incl. rounding remainders, grouped for privacy", calls: other, tone: "neutral" });
   }

@@ -122,7 +122,7 @@ export interface Signer {
    * that takes `transactionBase64`, and the encoding was being done at three
    * call sites.
    */
-  readonly signTransaction: (tx: UnsignedChainTransaction) => Promise<SignedChainTransaction>;
+  readonly signTransaction: (tx: UnsignedChainTransaction, options?: WalletPromptOptions) => Promise<SignedChainTransaction>;
   /**
    * The EIP-712 surface. `eip155` only — the Solana branch throws
    * `CHAIN_OPERATION_UNSUPPORTED`, because there is no Solana analogue and a
@@ -135,6 +135,7 @@ export interface Signer {
   */
   readonly signTypedData: (
     request: Omit<Eip155TypedDataRequest, "relayed">,
+    options?: SignTypedDataOptions,
   ) => Promise<`0x${string}`>;
   /**
    * Signs **and broadcasts**. The platform has no submit endpoint and must not
@@ -148,7 +149,29 @@ export interface Signer {
    * byte list that looks enough like a signature to be pasted into a report and
    * never resolve. Converting once, here, is what stops that.
    */
-  readonly signAndSend: (tx: UnsignedChainTransaction) => Promise<string>;
+  readonly signAndSend: (tx: UnsignedChainTransaction, options?: WalletPromptOptions) => Promise<string>;
+}
+
+/**
+ * Options of {@link Signer.signTypedData}, `signTransaction` and `signAndSend`.
+ *
+ * `showWalletUIs` forces Privy's own confirmation screen for an embedded
+ * wallet (spec R-WEB-5), whatever the dashboard's default. It is typed as the
+ * literal `true`: no call site can hide the confirmation through this door,
+ * and `scripts/check-wallet-ui.js` refuses `showWalletUIs: false` anywhere.
+ * The `AuthorizeDelegate` and `SetLimits` call sites pass it explicitly. An
+ * injected wallet (MetaMask, …) always shows its own prompt.
+ */
+export interface WalletPromptOptions {
+  showWalletUIs: true;
+}
+
+/** {@link WalletPromptOptions} for `signTypedData`. */
+export type SignTypedDataOptions = WalletPromptOptions;
+
+/** Privy's `uiOptions` for a call: forced on when asked, else left to Privy's default. */
+function privyUi(options: WalletPromptOptions | undefined): { uiOptions?: { showWalletUIs: true } } {
+  return options?.showWalletUIs === true ? { uiOptions: { showWalletUIs: true } } : {};
 }
 
 export const CHAIN_OPERATION_UNSUPPORTED = "CHAIN_OPERATION_UNSUPPORTED";
@@ -536,7 +559,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
             };
 
             /** The one Privy signing call both eip155 transaction doors share. */
-            const signFilled = async (tx: Eip155UnsignedTransaction) => {
+            const signFilled = async (tx: Eip155UnsignedTransaction, options?: WalletPromptOptions) => {
               const { signature } = await evmSignTransaction(
                 {
                   from: tx.from,
@@ -553,7 +576,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
                   type: 2,
                 },
                 // `{ address }` for the reason `signTypedData` gives below.
-                { address: wallet.address },
+                { address: wallet.address, ...privyUi(options) },
               );
               return signature as `0x${string}`;
             };
@@ -575,7 +598,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
               return hexToBytes(signature);
             },
 
-            signTransaction: async (tx) => {
+            signTransaction: async (tx, options) => {
               assertChainMatches(boundChainId, tx);
               /*
                 Signed and handed back UNSENT — for the deposit's `depositFor`,
@@ -601,11 +624,11 @@ export function useSigner(options: { chainId: string | null; address?: string })
               return {
                 namespace: "eip155",
                 chainId: boundChainId,
-                rawTransaction: await signFilled(tx),
+                rawTransaction: await signFilled(tx, options),
               };
             },
 
-            signTypedData: async (request) => {
+            signTypedData: async (request, options) => {
               assertChainMatches(boundChainId, request);
               /*
                 The wrapper's `chainId` is not what is signed; the domain's is.
@@ -643,16 +666,20 @@ export function useSigner(options: { chainId: string | null; address?: string })
                   `{ address }` is not optional in spirit. Privy defaults to the
                   first wallet, which is the embedded one, and every EIP-712
                   request this platform makes is verified on chain against a
-                  specific address (`X402Escrow`'s `authNonce` is per buyer).
+                  specific address (`AssayEscrow`'s `authNonce` is per buyer).
                   Signing as the wrong wallet produces a signature that reverts
                   BadSignature after the user approved it.
+
+                  `uiOptions.showWalletUIs: true` when the caller asks for it
+                  (R-WEB-5): Privy then always shows its confirmation, with the
+                  typed data, before the embedded wallet signs.
                 */
-                { address: wallet.address },
+                { address: wallet.address, ...privyUi(options) },
               );
               return signature as `0x${string}`;
             },
 
-            signAndSend: async (tx) => {
+            signAndSend: async (tx, options) => {
               assertChainMatches(boundChainId, tx);
               if (tx.namespace !== "eip155" || tx.kind !== "transaction") {
                 throw new Error(`${CHAIN_OPERATION_UNSUPPORTED}: ${tx.kind} on ${boundChainId}`);
@@ -714,7 +741,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
                 to: tx.to,
                 data: tx.data as `0x${string}`,
               });
-              return broadcast(boundChainId, await signFilled(filled));
+              return broadcast(boundChainId, await signFilled(filled, options));
             },
           };
           },
@@ -736,7 +763,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
             return signature;
           },
 
-          signTransaction: async (tx) => {
+          signTransaction: async (tx, options) => {
             assertChainMatches(boundChainId, tx);
             if (!isSolanaTransaction(tx)) {
               /*
@@ -751,6 +778,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
               transaction: base64ToBytes(tx.transactionBase64),
               wallet,
               chain: toSolanaChain(boundChainId),
+              ...(options ? { options: privyUi(options) } : {}),
             });
             /*
               Base64 out, not raw bytes. Every caller hands the result straight
@@ -781,7 +809,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
             );
           },
 
-          signAndSend: async (tx) => {
+          signAndSend: async (tx, options) => {
             assertChainMatches(boundChainId, tx);
             if (!isSolanaTransaction(tx)) {
               throw new Error(`${CHAIN_OPERATION_UNSUPPORTED}: ${tx.kind} on ${boundChainId}`);
@@ -795,6 +823,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
               transaction: base64ToBytes(tx.transactionBase64),
               wallet,
               chain: toSolanaChain(boundChainId),
+              ...(options ? { options: privyUi(options) } : {}),
             });
             return base58Encode(signature);
           },

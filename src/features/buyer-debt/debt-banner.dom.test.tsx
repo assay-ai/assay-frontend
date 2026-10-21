@@ -25,7 +25,9 @@ vi.mock("@privy-io/react-auth", () => ({
   useSignTransaction: () => ({ signTransaction: async () => ({ signature: "0x" }) }),
 }));
 
-import { BUYER_DEBTS_KEY, BuyerDebtBanner } from "./debt-banner";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
+
+import { BuyerDebtBanner } from "./debt-banner";
 
 const ACCOUNT = "eip155:46630:0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1";
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
@@ -42,12 +44,13 @@ const debt = (overrides: Partial<BuyerDebt> = {}): BuyerDebt => ({
   writeOffAt: "2026-11-15T00:00:00.000Z",
   replacedAt: null,
   createdAt: "2026-10-15T23:59:00.000Z",
+  replaceableAt: "2026-10-16T00:00:00.000Z",
   ...overrides,
 });
 
 function render(data: BuyerDebts): string {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } });
-  client.setQueryData(BUYER_DEBTS_KEY, data);
+  client.setQueryData(ME_STATUS_KEY, { blockStatus: null, unreadCount: null, debts: data });
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <BuyerDebtBanner />
@@ -161,8 +164,8 @@ describe("BuyerDebtBanner", () => {
       expect(html).toContain(`id="${describedBy}" data-testid="buyer-debt-not-yet"`);
     });
 
-    it("offers it once replaceableAt has passed, or when the backend sends none", () => {
-      for (const replaceableAt of [new Date(Date.now() - 60_000).toISOString(), null, undefined]) {
+    it("offers it once replaceableAt has passed", () => {
+      for (const replaceableAt of [new Date(Date.now() - 60_000).toISOString()]) {
         const html = render({ account: ACCOUNT, debts: [debt({ replaceableAt })] });
         expect(signButton(html)).not.toBe("");
         expect(signButton(html)).not.toMatch(/disabled=""/);

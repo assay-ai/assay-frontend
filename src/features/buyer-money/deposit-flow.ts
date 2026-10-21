@@ -166,7 +166,7 @@ export async function runDepositStep(
     signers: [signer.address],
     blockhash: requirements.blockhash,
     lastValidBlockHeight: requirements.lastValidBlockHeight,
-  });
+  }, { showWalletUIs: true });
   if (signed.namespace !== "solana") throw new Error(`Expected a Solana signature, got ${signed.namespace}.`);
   return settleDeposit(created.depositId, run.chainId, signed.transactionBase64);
 }

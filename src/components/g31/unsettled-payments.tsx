@@ -29,7 +29,6 @@ import type { UnsettledVouchers } from "@/interfaces";
  */
 export function UnsettledPayments({
   unsettled,
-  unit,
   atRisk,
   reasons,
   waiting,
@@ -41,7 +40,6 @@ export function UnsettledPayments({
   busy = false,
 }: {
   unsettled: UnsettledVouchers | null | undefined;
-  unit: string;
   /** The change would strand them: by the screen's own reckoning, or the backend said so. */
   atRisk: boolean;
   /** Why, when the screen could tell. */
@@ -56,7 +54,7 @@ export function UnsettledPayments({
   proceedLabel: string;
   busy?: boolean;
 }) {
-  const line = unsettledLine(unsettled, unit);
+  const line = unsettledLine(unsettled);
   if (!line && !settled) return null;
   return (
     <div className="flex flex-col gap-2" data-testid="unsettled-payments">

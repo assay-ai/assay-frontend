@@ -1,7 +1,6 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import Link from "next/link";
@@ -12,19 +11,19 @@ import { Button } from "@/components/ui/button";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { StepMark } from "@/components/patterns/setup-checklist";
 import { WalletActionSheet, type WalletStep, type WalletStepResult } from "@/components/patterns/sign-action";
-import { hasBlockStatusSession } from "@/features/account-block/state";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import { OVERVIEW_KEY } from "@/features/buyer/use-overview";
+import { ME_STATUS_KEY, useMeStatusPart } from "@/features/me-status/use-me-status";
 import { debtCauseText } from "@/features/call-classes/labels";
 import { useChains } from "@/hooks/useChains";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { useSigner } from "@/hooks/useSigner";
-import type { BuyerDebt, BuyerDebts, SettleDebtResult } from "@/interfaces/buyer-debt";
-import { ApiError, getSessionToken } from "@/libs/ApiClient";
+import type { BuyerDebt, SettleDebtResult } from "@/interfaces/buyer-debt";
 import { shortAddress } from "@/libs/chains/format";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { markDemoDebtsSigned } from "@/libs/demo/demo-debts";
 import { findChain } from "@/services/chains.service";
-import { createDebtVoucherIntent, getBuyerDebts, submitDebtVoucher } from "@/services/escrow.service";
+import { createDebtVoucherIntent, submitDebtVoucher } from "@/services/escrow.service";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
 import { formatClock } from "@/libs/utc-time";
 import { formatMoney } from "@/utils/money";
@@ -52,27 +51,15 @@ import { settleDebt } from "./settle-debt";
 import { notYetRefusal, refreshesDebts, settleDebtFailure, type NotYetRefusal } from "./settle-debt-errors";
 import { useReplaceableNow } from "./use-replaceable-now";
 
-export const BUYER_DEBTS_KEY = ["escrow", "debts"] as const;
-
 /**
- * `GET /escrow/debts`, shared by the banner, the settle sheet, call rows and
- * the receipt (one query key, so one request). Nothing is owed while the read
- * fails: an older backend has no such route.
+ * The buyer debts (`GET /me/status`'s `debts`, the same answer `GET
+ * /escrow/debts` gives), shared by the banner, the settle sheet, call rows and
+ * the receipt (one query key, so one request). A failed read — the part came
+ * back `null`, or the request failed — shows nothing owed rather than a wrong
+ * figure. A write that changes the debts invalidates `ME_STATUS_KEY`.
  */
 export function useBuyerDebtsQuery() {
-  const { ready, authenticated } = usePrivy();
-  const [hasStoredToken, setHasStoredToken] = React.useState(false);
-  React.useEffect(() => setHasStoredToken(getSessionToken() !== null), []);
-  return useQuery<BuyerDebts, ApiError>({
-    queryKey: BUYER_DEBTS_KEY,
-    queryFn: getBuyerDebts,
-    // The demo answers from fixtures with no session, like its other data.
-    enabled: demoEnabled() || hasBlockStatusSession({ ready, authenticated, hasStoredToken }),
-    staleTime: 30_000,
-    refetchInterval: 60_000,
-    refetchOnWindowFocus: true,
-    retry: 0,
-  });
+  return useMeStatusPart("debts");
 }
 
 /* ------------------------------------------------------------------ */
@@ -233,7 +220,7 @@ function SettleDebtSheet({
         signedIds.current.add(debt.intentId);
         return { data: result };
       } catch (error) {
-        if (refreshesDebts(error)) void queryClient.invalidateQueries({ queryKey: BUYER_DEBTS_KEY });
+        if (refreshesDebts(error)) void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         const notYet = notYetRefusal(error, Date.now());
         if (notYet) {
           setRefusal(notYet);
@@ -314,9 +301,11 @@ function SettleDebtSheet({
       }
       onSuccess={() => {
         if (demoEnabled()) markDemoDebtsSigned(settling.map((debt) => debt.intentId));
-        void queryClient.invalidateQueries({ queryKey: BUYER_DEBTS_KEY });
+        void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
         void queryClient.invalidateQueries({ queryKey: ["tool-calls"] });
+        // Overview's held figure and owed calls move with the debt.
+        void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY });
       }}
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
     >

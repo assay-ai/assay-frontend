@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { KeyRound, Plus, TriangleAlert } from "lucide-react";
+import { KeyRound, Pencil, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -28,11 +28,16 @@ import {
 import { PageState } from "@/components/patterns/page-state";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { dateOnly, relativeTime } from "@/components/g31/format";
+import { PROVIDER_EXPLAINER } from "@/components/layout/provider-nav-config";
+import { useOrgHandle } from "@/components/toolsets/use-toolsets";
+import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
+import { credentialLabel, type CredentialLike } from "@/features/buyer-money/mcp-config";
 import { termsVersionLabel } from "@/features/m41/terms";
-import { createCredential, listAgents, listCredentials } from "@/services/account.service";
-import { getProviderRegistration } from "@/services/provider-registration.service";
+import { useAgentList } from "@/features/agents/agent-list";
+import { createCredential, listCredentials } from "@/services/account.service";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Account, seats and credentials.
@@ -93,21 +98,27 @@ import { getProviderRegistration } from "@/services/provider-registration.servic
  * because a row for a document nobody versions could never disagree with
  * itself, which is the entire point of the "In force" column.
  *
+ * The API carries no link to the documents themselves, so the rows are not
+ * links; the panel links what a provider can read: the key terms on Setup and
+ * the business explainer.
+ *
+ * ## Who you are and where you are paid
+ *
+ * The public name (`GET /org/handle`) and the payout wallet per chain
+ * (`registration.payoutAccounts`), each with where to change it.
+ *
  * ## Nothing here writes the registration
  *
- * The frame draws no editable field: no legal name, no timezone, no contact
- * form, and its three panel actions are all disabled. So
- * `PATCH /providers/me/registration` has **no caller on this screen**, and the
- * stale-read trap that follows a provider write does not arise. A form is
- * deliberately not invented here.
+ * Contacts and the payout wallet are edited on Setup (`/provider/setup`),
+ * which already owns `PATCH /providers/me/registration` and the wallet proof;
+ * this screen links there ("Edit") rather than growing a second form.
  */
 
 
-interface Credential {
+interface Credential extends CredentialLike {
   id: string;
   agentId: string;
   name: string;
-  prefix: string;
   scopes: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;
@@ -138,9 +149,12 @@ interface TokenRow {
   lastUsed: string;
 }
 
-/** "••••8f3a": enough to tell two keys apart, never the key's raw prefix. */
-function maskedKey(prefix: string): string {
-  return `••••${prefix.slice(-4)}`;
+/**
+ * "••••8f3a": enough to tell two keys apart, never the key's raw prefix. An
+ * OAuth grant has no key: it is named as the app sign-in it is.
+ */
+function maskedKey(credential: CredentialLike): string {
+  return credential.prefix ? `••••${credential.prefix.slice(-4)}` : credentialLabel(credential);
 }
 
 /** Terms versions are dated ("2026-06-15"); said exactly as Setup says them ("Apr 1, 2026 version"). */
@@ -256,17 +270,9 @@ export default function ProviderAccountPage() {
   const [cacheEpoch] = React.useState(() => Date.now() % 86_400_000);
   const [writeCount, setWriteCount] = React.useState(0);
 
-  const registration = useQuery({
-    queryKey: ["provider", "registration"],
-    queryFn: getProviderRegistration,
-    retry: false,
-  });
+  const registration = useQuery(providerQueries.registration());
 
-  const agents = useQuery({
-    queryKey: ["agents"],
-    retry: false,
-    queryFn: () => listAgents({ limit: 50 }),
-  });
+  const agents = useAgentList();
 
   const agentIds = React.useMemo(
     () => (agents.data?.items ?? []).map((agent) => agent.agentId),
@@ -302,6 +308,8 @@ export default function ProviderAccountPage() {
 
   const record = registration.data?.registration;
   const published = registration.data?.terms;
+  const handle = useOrgHandle();
+  const chainName = useChainName();
 
   const seatRows: SeatRow[] = record
     ? [
@@ -321,7 +329,7 @@ export default function ProviderAccountPage() {
   const tokenRows: TokenRow[] = (credentials.data ?? []).map((credential) => ({
     id: credential.id,
     name: credential.name,
-    token: maskedKey(credential.prefix),
+    token: maskedKey(credential),
     // A revoked credential is kept, not deleted, so its row stays readable —
     // and the cell says which it is rather than showing a stale "last used".
     lastUsed: credential.revokedAt
@@ -420,6 +428,14 @@ export default function ProviderAccountPage() {
               <PanelTitle>Contacts</PanelTitle>
               <PanelDescription>who we reach about incidents and penalties</PanelDescription>
             </PanelTitles>
+            {record ? (
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/provider/setup?step=you">
+                  <Pencil aria-hidden="true" />
+                  Edit
+                </Link>
+              </Button>
+            ) : null}
           </PanelHeader>
           {/* Body — padding [6, 10, 10, 10]. */}
           <PanelBody className="px-2.5 pb-2.5 pt-1.5">
@@ -434,15 +450,6 @@ export default function ProviderAccountPage() {
                 description="Registration types an owner and a technical contact. Until it completes, there is nobody for an enforcement notice to reach."
               />
             )}
-            {seatRows.length > 0 ? (
-              <p className="px-3 pt-3 text-body-xs text-03">
-                To change a contact,{" "}
-                <Link href="/provider/setup?step=you" className="text-primary-600 underline-offset-2 hover:underline">
-                  edit your account details
-                </Link>
-                .
-              </p>
-            ) : null}
           </PanelBody>
         </Panel>
 
@@ -474,6 +481,71 @@ export default function ProviderAccountPage() {
         </Panel>
       </div>
 
+      {/* Who buyers see, and where the money goes. */}
+      {record ? (
+        <Panel>
+          <PanelHeader>
+            <PanelTitles>
+              <PanelTitle>Public name and payout wallet</PanelTitle>
+              <PanelDescription>what buyers see you as, and where your earnings land</PanelDescription>
+            </PanelTitles>
+          </PanelHeader>
+          <PanelBody className="p-4 tablet:p-5">
+            <dl className="grid w-full grid-cols-1 gap-x-6 gap-y-4 tablet:grid-cols-2">
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-body-xs text-03">Public name</dt>
+                <dd className="flex flex-col gap-0.5 text-body-13 text-01">
+                  {handle.isPending ? (
+                    <span className="text-03">…</span>
+                  ) : handle.data?.handle ? (
+                    <>
+                      <span className="font-mono">@{handle.data.handle}</span>
+                      <span className="text-body-xs text-03">
+                        {handle.data.canChange
+                          ? "Not locked yet: it locks once something you share is named after it."
+                          : "Locked: your shared tools and tool sets are named after it."}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Not claimed yet</span>
+                      <span className="text-body-xs text-03">
+                        You claim it when you{" "}
+                        <Link href="/provider/apis/new" className="text-primary-600 underline-offset-2 hover:underline">
+                          publish your API
+                        </Link>
+                        . Listings of catalogue tools do not need one.
+                      </span>
+                    </>
+                  )}
+                </dd>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <dt className="text-body-xs text-03">Payout wallet</dt>
+                <dd className="flex flex-col gap-1 text-body-13 text-01">
+                  {record.payoutAccounts.length === 0 ? (
+                    <span>None yet</span>
+                  ) : (
+                    record.payoutAccounts.map((account) => (
+                      <span key={account.chainId} className="flex flex-col">
+                        <span className="font-mono text-mono-12 [overflow-wrap:anywhere]">{account.accountId.split(":").pop()}</span>
+                        <span className="text-body-xs text-03">
+                          {chainName(account.chainId)}
+                          {account.status === "ACTIVE" ? "" : account.status === "UNBONDING" ? " · stopped: you are leaving this network" : " · stopped by Assay"}
+                        </span>
+                      </span>
+                    ))
+                  )}
+                  <Link href="/provider/setup?step=wallet" className="self-start text-body-xs text-primary-600 underline-offset-2 hover:underline">
+                    {record.payoutAccounts.length === 0 ? "Add a payout wallet" : "Change it (sign a message, free)"}
+                  </Link>
+                </dd>
+              </div>
+            </dl>
+          </PanelBody>
+        </Panel>
+      ) : null}
+
       {/* Terms. */}
       <Panel>
         <PanelHeader>
@@ -485,7 +557,20 @@ export default function ProviderAccountPage() {
         {/* Body — padding [6, 10, 10, 10]. */}
         <PanelBody className="px-2.5 pb-2.5 pt-1.5">
           {termRows.length > 0 ? (
-            <Table columns={TERM_COLUMNS} rows={termRows} caption="Terms" />
+            <>
+              <Table columns={TERM_COLUMNS} rows={termRows} caption="Terms" />
+              <p className="px-3 pt-3 text-body-xs text-03">
+                Read{" "}
+                <Link href="/provider/setup?step=you" className="text-primary-600 underline-offset-2 hover:underline">
+                  the key terms you accepted
+                </Link>{" "}
+                (price, fee, stake and penalties, under Key terms), or{" "}
+                <Link href={PROVIDER_EXPLAINER.href} className="text-primary-600 underline-offset-2 hover:underline">
+                  {PROVIDER_EXPLAINER.label.toLowerCase()}
+                </Link>
+                .
+              </p>
+            </>
           ) : (
             /* OUR copy. */
             <EmptyState
@@ -547,7 +632,7 @@ export default function ProviderAccountPage() {
           <SheetHeader>
             <SheetTitle>Your new API key</SheetTitle>
             <SheetDescription>
-              {created ? `${created.name} · ${maskedKey(created.prefix)}` : null}
+              {created ? `${created.name} · ${maskedKey(created)}` : null}
             </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-5 px-[18px] pb-8 pt-5">

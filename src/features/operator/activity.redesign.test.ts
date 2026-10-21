@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OverrideLogEntry } from "@/interfaces/operator";
 
-import { activityIcon, activitySentence, activityText, byActor, groupByDay, rulingOf } from "./activity";
+import { ACTIVITY_KINDS, activityHref, activityIcon, activitySentence, activityText, byActor, groupByDay, isOfKind, rulingOf } from "./activity";
 
 const entry = (overrides: Partial<OverrideLogEntry>): OverrideLogEntry => ({
   id: "l1",
@@ -77,15 +77,51 @@ describe("Activity layout helpers", () => {
   });
 
   it("gives every kind an icon", () => {
-    expect(["A-9", "A-10", "A-11", "S-1", "S-13", "S-5", "A-12", "X"].map((code) => activityIcon({ code }))).toEqual([
+    expect(["A-9", "A-10", "A-11", "S-13", "S-5", "A-12", "X"].map((code) => activityIcon({ code }))).toEqual([
       "block",
       "unblock",
       "chain",
-      "suspend",
       "ruling",
       "money",
       "team",
       "other",
     ]);
+  });
+});
+
+describe("every Activity row is a past-tense sentence (B12)", () => {
+  // Every implemented register code (backend override-register.ts).
+  const CODES = ["S-2", "S-5", "S-13", "S-14", "S-15", "S-16", "S-17", "V-3", "V-5", "V-7", "P-10", "P-11", "P-12", "A-2", "A-9", "A-10", "A-11", "A-12", "A-13", "A-14", "A-15", "A-16", "A-17", "A-18", "A-19", "A-20", "A-21", "A-22", "A-23", "A-24", "A-25"];
+
+  it("never prints a register label or an imperative", () => {
+    for (const code of CODES) {
+      const verb = activitySentence(entry({ code, label: "Countersign or object to another adjudicator’s decision", reasonCode: "OTHER" }), names).verb;
+      expect(verb, code).not.toMatch(/countersign or object|^decide |^take |^lift |^add |^remove /i);
+      expect(verb.split(" ")[0], code).toMatch(/ed$|^took$|^made$|^acted$|^turned$/);
+    }
+  });
+
+  it("words a catalogue review by its decision", () => {
+    const review = (decision: string) => activitySentence(entry({ code: "A-24", targetType: "tool", after: { decision } }), names).verb;
+    expect(review("APPROVED")).toBe("approved for the catalogue");
+    expect(review("REJECTED")).toBe("turned down for the catalogue");
+  });
+
+  it("has Tools and Contracts chips; Tools holds takedowns, reviews and tool versions", () => {
+    expect(ACTIVITY_KINDS.map((k) => k.label)).toEqual(expect.arrayContaining(["Tools", "Contracts"]));
+    expect(isOfKind(entry({ code: "A-25", targetType: "tool" }), "tools")).toBe(true);
+    expect(isOfKind(entry({ code: "A-18", targetType: "moderation_cutoff" }), "tools")).toBe(true);
+    expect(isOfKind(entry({ code: "P-10", targetType: "tool" }), "tools")).toBe(true);
+    expect(isOfKind(entry({ code: "A-9", targetType: "account_block" }), "tools")).toBe(false);
+    // Contract settings change on chain, by the admin key: never in the register.
+    expect(isOfKind(entry({ code: "P-10", targetType: "tool" }), "contracts")).toBe(false);
+  });
+
+  it("links each row to its record", () => {
+    expect(activityHref({ targetType: "account_block", targetId: "blk-1" }, { active: false })).toBe("/operator/blocks?q=blk-1&show=lifted");
+    expect(activityHref({ targetType: "account_block", targetId: "blk-1" }, { active: true })).toBe("/operator/blocks?q=blk-1");
+    expect(activityHref({ targetType: "operator", targetId: "op-1" })).toBe("/operator/operators#operator-op-1");
+    expect(activityHref({ targetType: "tool", targetId: "t1" })).toBe("/operator/tools/view?id=t1");
+    expect(activityHref({ targetType: "call_dispute", targetId: "d1" })).toBe("/operator/disputes/view?id=d1");
   });
 });

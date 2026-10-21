@@ -34,7 +34,7 @@ import {
 import { eligibleApprovers, operatorLabel } from "@/features/operator/inbox";
 import { OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS } from "@/features/operator/reasons";
 import { ResultCard } from "@/features/operator/result-card";
-import { ROLE_PRESETS, actsOnMoney, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
+import { ROLE_PRESETS, actsOnMoney, limitHint, presetOf, removalWarnings, roleTitle } from "@/features/operator/roles";
 import { firstNames, inviteLimit, invitesOf, limitCell, limitMoney, teamTabs } from "@/features/operator/team";
 import { useOperatorSession } from "@/features/operator/session-context";
 import { approvalHref, approverPhrase, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
@@ -45,9 +45,10 @@ import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operat
 import type { OperatorApproval, OperatorDirectoryEntry, OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
-import { addOperator, changeOperator, listApprovals, listOperators, removeOperator } from "@/services/operator.service";
+import { addOperator, changeOperator, listOperators, removeOperator } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatMoney, parseAmountInput } from "@/utils/money";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Team, route `/operator/operators`.
@@ -118,8 +119,7 @@ function TeamScreen() {
   });
   // Additions and raises waiting for a second admin — the same query as the badge.
   const pending = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });
@@ -159,7 +159,7 @@ function TeamScreen() {
           onDismiss={() => setResult(null)}
         />
       ) : (
-        <ResultCard title={`${what}: done`} next="It applies from their next request." activityHref="/operator/override-log?kind=operators" onDismiss={() => setResult(null)} />
+        <ResultCard title={`${what}: done`} next="It applies from their next request." activityHref="/operator/activity?kind=operators" onDismiss={() => setResult(null)} />
       ),
     );
   };
@@ -225,7 +225,7 @@ function TeamScreen() {
             {rows.map((row) => {
               const change = changes.get(row.id);
               return (
-                <li key={row.id} className={cn(TEAM_GRID, "relative flex min-w-0 flex-col gap-1 px-4 py-2.5 pr-14 tablet:pr-4")}>
+                <li key={row.id} id={`operator-${row.id}`} className={cn(TEAM_GRID, "relative flex min-w-0 flex-col gap-1 px-4 py-2.5 pr-14 tablet:pr-4 target:bg-primary-10")}>
                   <div className="flex min-w-0 flex-col">
                     <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 text-label-13 text-01">
                       <span className="truncate">{operatorLabel(row)}</span>
@@ -245,7 +245,12 @@ function TeamScreen() {
                   </span>
                   <span className="hidden text-right text-body-13 tabular-nums text-02 tablet:block">{limitCell(row)}</span>
                   <span className="flex min-w-0 items-center gap-2 text-body-xs text-03">
-                    {row.walletAddress ? <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" /> : <span>No wallet</span>}
+                    {row.walletAddress ? (
+                      <CopyChip value={toChecksumAddress(row.walletAddress)} label="wallet address" />
+                    ) : (
+                      // Sign-in is by wallet: without one this person cannot sign in, Active or not.
+                      <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">Can&apos;t sign in: no wallet</span>
+                    )}
                     <span className="tablet:hidden">· {row.lastSeenAt ? <>last seen <UtcTime value={row.lastSeenAt} /></> : "never signed in"}</span>
                   </span>
                   <span className="hidden text-body-13 text-02 tablet:block">
@@ -264,7 +269,7 @@ function TeamScreen() {
                         <DropdownMenuContent align="end" className="min-w-[180px] border border-01">
                           <DropdownMenuItem onSelect={() => setSheet({ kind: "change", row })}>Change access</DropdownMenuItem>
                           <DropdownMenuItem asChild>
-                            <Link href={`/operator/override-log?targetId=${encodeURIComponent(row.id)}`}>History in Activity</Link>
+                            <Link href={`/operator/activity?targetId=${encodeURIComponent(row.id)}`}>History in Activity</Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => setSheet({ kind: "remove", row })} className="text-danger-600 focus:text-danger-700">
                             Remove
@@ -364,7 +369,7 @@ function TeamScreen() {
                 <ResultCard
                   title={`${operatorLabel(row)} was removed`}
                   next="Every session they held has ended. Their past actions stay in Activity."
-                  activityHref={`/operator/override-log?targetId=${encodeURIComponent(row.id)}`}
+                  activityHref={`/operator/activity?targetId=${encodeURIComponent(row.id)}`}
                   onDismiss={() => setResult(null)}
                 />,
               );
@@ -493,7 +498,7 @@ function LimitField({
         value={choice}
         onChange={onChange}
         error={error ?? undefined}
-        hint="Penalties and compensations above it need someone with a higher limit."
+        hint={limitHint(roles)}
       />
     </div>
   );
@@ -597,7 +602,8 @@ function AddSheet({
   const [handle, setHandle] = React.useState<string | null>(null);
   const [wallet, setWallet] = React.useState("");
   const [roles, setRoles] = React.useState<OperatorRole[]>([]);
-  const limit = useLimit("0");
+  // No limit is preselected (D25): the admin picks one, knowing what $0 means.
+  const limit = useLimit("");
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
   const { errors, setErrors, clear } = useFieldErrors();
@@ -623,7 +629,7 @@ function AddSheet({
       setHandle(null);
       setWallet("");
       setRoles([]);
-      limit.setChoice("0");
+      limit.setChoice("");
       setReason("");
       setNote("");
       setErrors({});
@@ -780,7 +786,6 @@ function AddSheet({
 function onlyYouAndThem(name: string): string {
   return `the only Admins are you and ${name}. You asked for this and it is about ${name}, so neither of you can approve it. Add a third Admin first.`;
 }
-
 
 function ChangeSheet({
   row,

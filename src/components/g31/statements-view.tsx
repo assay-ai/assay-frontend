@@ -12,7 +12,9 @@ import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import { notChargedLines, type NotChargedLine } from "@/features/buyer/not-charged";
 import { recentMonths } from "@/features/buyer/period";
+import { statementCheckSentence, statementMoneyLines } from "@/features/buyer-money/funding-lines";
 import { MATCHES_SENTENCE, ReconcileNote, reconcileState } from "@/features/buyer/reconcile-note";
 import { readWithheld } from "@/features/buyer/wire";
 import { spendCsv } from "@/features/g30/spend-view";
@@ -23,6 +25,8 @@ import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { getWithheld } from "@/services/balances.service";
+import { chainDisplayName } from "@/services/chains.service";
+import { getStatementBalance, type StatementBalance } from "@/services/funding.service";
 import { getReceiptsSummary } from "@/services/receipts.service";
 import { formatMoney } from "@/utils/money";
 
@@ -35,8 +39,10 @@ import { formatCount } from "./format";
  * One statement card per UTC month (picked here, or `?month=2026-10` from Not
  * charged) with one primary action, Download CSV, built in the browser from
  * the same `GET /receipts/summary` rows the dashboard reads — so the two can
- * never disagree. Opening and closing balances, deposits and withdrawals have
- * no historical endpoint and are not drawn at all rather than shown as "—".
+ * never disagree. Above it, the money half (B7, `GET /statements/balance`):
+ * opening balance + deposits − withdrawals − paid = closing balance, per
+ * escrow, derived by the API from its records and, for the current month,
+ * checked against the escrow read from the chain.
  */
 
 const MONTHS_BACK = 6;
@@ -45,17 +51,18 @@ function hasMoney(money: Money | null | undefined): boolean {
   return Boolean(money) && BigInt(money!.amount || "0") > 0n;
 }
 
-/** The summary's not-charged bucket; an older API sends only `withheldTotal`. */
+/** The summary's not-charged bucket. */
 function notChargedOf(figures: SummaryFigures): Money {
-  return figures.notChargedTotal ?? figures.withheldTotal;
+  return figures.notChargedTotal;
 }
 
 /**
  * The month's figures, adding up like /spend's buckets:
- * listed = paid + not charged + owed + in progress. The guarantee's withheld
- * amount is a part of not charged, not all of it (final review M1).
+ * listed = paid + not charged + owed + in progress. Not charged is itemised
+ * into the same three lines as the Not charged page (`GET /withheld`), so
+ * every not-charged call has its reason on the statement.
  */
-export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigures; withheldSub: string | null }) {
+export function StatementFigures({ totals, lines }: { totals: SummaryFigures; lines: readonly NotChargedLine[] | null }) {
   const notChargedCalls = totals.notChargedCalls ?? totals.refundedCalls;
   const owedCalls = totals.owedCalls ?? 0;
   const inProgressCalls = totals.inProgressCalls ?? 0;
@@ -68,17 +75,21 @@ export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigur
       />
       <KeyValueRow
         label={<Term k="not-charged">Not charged</Term>}
-        sub={[
-          plural(notChargedCalls, "call"),
-          hasMoney(totals.withheldTotal)
-            ? `${formatMoney(totals.withheldTotal, { decimals: 2 })} by the guarantee${withheldSub ? ` (${withheldSub})` : ""}`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(" · ")}
+        sub={plural(notChargedCalls, "call")}
         value={`−${formatMoney(notChargedOf(totals), { decimals: 2 })}`}
         valueClassName="text-teal-600"
       />
+      {(lines ?? [])
+        .filter((line) => line.calls > 0)
+        .map((line) => (
+          <KeyValueRow
+            key={line.bucket}
+            label={<span className="pl-3">{line.label}</span>}
+            sub={<span className="pl-3">{`${plural(line.calls, "call")}${line.note ? ` · ${line.note}` : ""}`}</span>}
+            value={formatMoney(line.amount, { decimals: 2 })}
+            valueClassName="font-normal text-03"
+          />
+        ))}
       {owedCalls > 0 || hasMoney(totals.owedTotal) ? (
         <KeyValueRow
           label={<Term k="owed">Owed</Term>}
@@ -101,6 +112,29 @@ export function StatementFigures({ totals, withheldSub }: { totals: SummaryFigur
         divider={false}
       />
     </>
+  );
+}
+
+/** Opening + deposits − withdrawals − paid = closing, for one escrow; the check sentence under it. */
+export function StatementMoney({ balance, chainName }: { balance: StatementBalance; chainName: string | null }) {
+  const check = statementCheckSentence(balance);
+  return (
+    <div className="flex flex-col" data-testid="statement-money">
+      {chainName ? <p className="pb-1 text-body-xs text-03">Your escrow on {chainName}</p> : null}
+      {statementMoneyLines(balance).map((line) => (
+        <KeyValueRow
+          key={line.key}
+          label={line.label}
+          value={line.key === "closing" ? <span className="text-heading-sm">{line.value}</span> : line.value}
+          divider={line.key !== "closing"}
+        />
+      ))}
+      {check ? (
+        <p className={balance.check?.matches ? "pt-2 text-body-13 text-success-700" : "pt-2 text-body-13 text-warning-700"} data-testid="statement-check">
+          {check}
+        </p>
+      ) : null}
+    </div>
   );
 }
 
@@ -134,16 +168,18 @@ function StatementsContent() {
   });
   const withheld = withheldQuery.data ? readWithheld(withheldQuery.data, summary.data?.asset) : null;
   const matches = reconcileState(withheld) === "matches";
-  const notChargedCalls = withheld?.withheld.calls ?? null;
-  const failedChecks = withheld?.withheld.buckets.find((b) => b.bucket === "FAILED_VERIFICATION")?.calls ?? null;
-  const noResult = withheld?.withheld.buckets.find((b) => b.bucket === "PROVIDER_OR_PLATFORM_ERROR")?.calls ?? null;
+
+  // The money half: derived by the API from deposits, withdrawals and paid calls; never stored.
+  const balanceQuery = useQuery({
+    queryKey: ["statements", "balance", period.key],
+    retry: 0,
+    queryFn: () => getStatementBalance({ from: period.from, to: period.to }),
+  });
+  const balances = balanceQuery.data?.items ?? [];
 
   const totals = summary.data?.totals;
-  // Why calls were withheld, from `GET /withheld`: a part of Not charged, never all of it.
-  const withheldSub =
-    notChargedCalls !== null && failedChecks !== null && noResult !== null
-      ? `${formatCount(failedChecks)} failed checks, ${formatCount(noResult)} had no usable result or went uncollected`
-      : null;
+  // Why calls were not charged, from `GET /withheld`: the three lines add up to Not charged.
+  const lines = withheld ? notChargedLines(withheld) : null;
   const groups = summary.data?.groups ?? [];
 
   const download = React.useCallback(() => {
@@ -234,10 +270,34 @@ function StatementsContent() {
               {!totals || totals.calls === 0 ? (
                 <p className="py-3 text-body-13 text-02">No paid calls in {period.label}, so there is nothing to itemise.</p>
               ) : (
-                <StatementFigures totals={totals} withheldSub={withheldSub} />
+                <StatementFigures totals={totals} lines={lines} />
               )}
             </PanelBody>
           </Panel>
+
+          {balances.length > 0 ? (
+            <Panel>
+              <PanelHeader>
+                <PanelTitles>
+                  <PanelTitle>Money in and out</PanelTitle>
+                  <PanelDescription className="whitespace-normal">
+                    Opening balance + deposits − withdrawals − paid = closing balance
+                  </PanelDescription>
+                </PanelTitles>
+              </PanelHeader>
+              <PanelBody className="flex flex-col gap-4 px-5 pb-[18px] pt-2">
+                {balances.map((balance) => (
+                  <StatementMoney
+                    key={balance.account}
+                    balance={balance}
+                    chainName={balances.length > 1 ? chainDisplayName(chains, balance.chainId) : null}
+                  />
+                ))}
+              </PanelBody>
+            </Panel>
+          ) : balanceQuery.isError ? (
+            <p className="text-body-13 text-03">The opening and closing balances could not be loaded just now.</p>
+          ) : null}
 
           <ReconcileNote withheld={withheld} />
 

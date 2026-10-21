@@ -90,7 +90,7 @@ export function NotChargedSummary({ className }: { className?: string }) {
         Last {query.data.windowDays} days: {plural(callsChecked, "paid call")} checked,{" "}
         <span className="font-semibold text-teal-600">{callsNotCharged.toLocaleString("en-US")} not charged</span> (
         {amountsText(amountNotCharged, chainName)} kept by buyers).{" "}
-        <a href="#not-charged" className="text-01 underline underline-offset-2 hover:text-primary-700">
+        <a href="#not-charged" className="inline-flex min-h-10 items-center text-01 underline underline-offset-2 hover:text-primary-700">
           See what was refused
         </a>
       </span>

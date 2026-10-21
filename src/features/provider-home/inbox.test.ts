@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { inboxBreakdown, inboxCount, inboxHeadline, isProviderEvent } from "./inbox";
+import { inboxBreakdown, inboxCount, inboxHeadline, isProviderEvent, noticesBesideActions } from "./inbox";
 
 describe("provider inbox audience", () => {
   it("keeps provider events only", () => {
@@ -17,7 +17,7 @@ describe("provider inbox audience", () => {
         notifications: [
           { event: "provider.slash_proposed", readAt: null, subjectId: "CASE-1" },
           { event: "provider.sla_window_warning", readAt: null, subjectId: "w1" },
-          { event: "provider.payout_sent", readAt: "2026-10-01T00:00:00Z" },
+          { event: "provider.slash_reversed", readAt: "2026-10-01T00:00:00Z" },
           { event: "velocity.anomaly", readAt: null },
         ],
       }),
@@ -35,8 +35,48 @@ describe("inboxHeadline", () => {
         { event: "provider.slash_executed", readAt: "2026-10-01T00:00:00Z", subjectId: "p3" },
       ],
     });
-    expect(breakdown).toEqual({ penalties: 1, notices: 1 });
+    expect(breakdown).toEqual({ penalties: 1, reports: 0, notices: 1 });
     expect(inboxHeadline(breakdown)).toBe("2 new: 1 penalty to decide on, 1 unread notice (marked with a dot).");
     expect(inboxHeadline({ penalties: 0, notices: 0 })).toMatch(/^Nothing new/);
+  });
+});
+
+describe("call disputes in the provider Inbox", () => {
+  it("routes on the payload's role: the provider's side only", () => {
+    expect(isProviderEvent("call_dispute.opened", { role: "provider" })).toBe(true);
+    expect(isProviderEvent("call_dispute.decided", { role: "provider" })).toBe(true);
+    expect(isProviderEvent("call_dispute.decided", { role: "buyer" })).toBe(false);
+    expect(isProviderEvent("call_dispute.decided", {})).toBe(false);
+    expect(isProviderEvent("call_dispute.responded", { role: "buyer" })).toBe(false);
+    expect(isProviderEvent("provider_tool.taken_down")).toBe(true);
+  });
+});
+
+describe("open reports and folded notices in the badge", () => {
+  it("counts a report once, not again through its notice, and a folded run once", () => {
+    const breakdown = inboxBreakdown({
+      urgent: [],
+      reports: ["d1"],
+      notifications: [
+        { event: "call_dispute.opened", readAt: null, subjectId: "d1", payload: { role: "provider" } },
+        { event: "provider.stake_headroom_low", readAt: null, subjectId: "b1", payload: { bindingId: "b1" } },
+        { event: "provider.stake_headroom_low", readAt: null, subjectId: "b1", payload: { bindingId: "b1" } },
+      ],
+      groupKey: (item) => (item.event === "provider.stake_headroom_low" ? `headroom:${item.subjectId}` : null),
+    });
+    expect(breakdown).toEqual({ penalties: 0, reports: 1, notices: 1 });
+    expect(inboxHeadline(breakdown)).toBe("2 new: 1 report to reply to, 1 unread notice (marked with a dot).");
+  });
+});
+
+describe("an open report is shown once (V1-12)", () => {
+  const opened = { event: "call_dispute.opened", subjectId: "D1", payload: { role: "provider" } };
+  const decided = { event: "call_dispute.decided", subjectId: "d1", payload: { role: "provider" } };
+  const other = { event: "call_dispute.opened", subjectId: "d2", payload: { role: "provider" } };
+  it("leaves out the opened notice of a report in Needs action, and nothing else", () => {
+    expect(noticesBesideActions([opened, decided, other], ["d1"])).toEqual([decided, other]);
+  });
+  it("lists it again once the report leaves Needs action", () => {
+    expect(noticesBesideActions([opened], [])).toEqual([opened]);
   });
 });

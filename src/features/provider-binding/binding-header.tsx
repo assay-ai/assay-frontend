@@ -10,7 +10,6 @@ import { Skeleton } from "@/components/patterns/page-state";
 import type { BindingStatus, ToolBindingDetail } from "@/interfaces";
 import { routes } from "@/libs/routes";
 import { getToolBinding } from "@/services/provider-tool-bindings.service";
-import { labelForEndpoint } from "@/utils/provider-label";
 
 import { overlayJustPublished } from "./after-publish";
 import { bindingScreens, type BindingTabId } from "./screens";
@@ -99,7 +98,6 @@ export function BindingHeader({
           </div>
           {binding ? (
             <p className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
-              <span className="min-w-0 break-all font-mono">{labelForEndpoint(binding.endpoint)}</span>
               {binding.status === "ACTIVE" ? (
                 <a
                   href={routes.publicTool(binding.toolId)}

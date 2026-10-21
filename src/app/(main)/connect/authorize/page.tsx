@@ -1,0 +1,168 @@
+"use client";
+
+import { usePrivy } from "@privy-io/react-auth";
+import { useQuery } from "@tanstack/react-query";
+import * as React from "react";
+
+import { ConsentCard } from "@/components/oauth/consent-card";
+import { ConsentSetLimits } from "@/components/oauth/consent-set-limits";
+import { CONSENT_STRINGS, ContinueUrlRefused, consentFailure, isContinueUrl } from "@/features/oauth/consent";
+import { forgetRequestId, takeRequestId } from "@/features/oauth/request-id";
+import { loadPage, useFullLoadLinks } from "@/features/oauth/strict-pages";
+import { ApiError } from "@/libs/ApiClient";
+import { loginHref } from "@/libs/login-redirect";
+import { approveOAuthRequest, denyOAuthRequest, getOAuthRequest } from "@/services/oauth-consent.service";
+
+/**
+ * `{WEB}/connect/authorize`: the OAuth consent page (spec §6.5).
+ *
+ * The MCP host sends the browser here with the request id in the fragment.
+ * `takeRequestId` reads it, keeps it for this tab and strips it from the
+ * address bar; a signed-out visitor goes through `/login?next=%2Fconnect%2Fauthorize`
+ * and the id is found again on return. The id is used only in the consent
+ * API's path: never in a query key, a URL built here, analytics or a log.
+ *
+ * Approve and Cancel are a person's clicks on this page (the API accepts only
+ * a person's session, and the card's guards refuse framed or hurried clicks).
+ * Each one then navigates to the API's `redirectTo`, the MCP host's
+ * `continue` step, which hands the result to the app.
+ *
+ * No analytics on this route, and `_headers` gives `/connect/*` a strict CSP,
+ * `frame-ancestors 'none'` and `Referrer-Policy: no-referrer`.
+ */
+export default function ConsentPage() {
+  const { ready, authenticated, user, logout } = usePrivy();
+  // undefined: not read yet (before mount); null: there is none.
+  const [rid, setRid] = React.useState<string | null | undefined>(undefined);
+  // Bumped when a new fragment lands in this tab: a fresh read of the request
+  // and a fresh card, without putting the id itself in the query key.
+  const [generation, setGeneration] = React.useState(0);
+  const [now, setNow] = React.useState(() => new Date());
+
+  React.useEffect(() => {
+    setRid(takeRequestId());
+    // A second sign-in opened in this tab changes only the fragment: read the
+    // id again so the page never shows or decides the first request.
+    const onHashChange = () => {
+      setRid(takeRequestId());
+      setGeneration((g) => g + 1);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  React.useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Leaving this strict page is a full page load (`strict-pages.ts`).
+  useFullLoadLinks();
+
+  // Signed out: sign in on the normal login page, as a full page load (its
+  // captcha does not run under this page's policy). The rid is not in that
+  // URL: it waits in this tab's sessionStorage, and `takeRequestId` finds it
+  // when the login page loads this page again.
+  const signedOut = ready && !authenticated;
+  React.useEffect(() => {
+    if (signedOut && rid) loadPage(loginHref({ next: "/connect/authorize" }));
+  }, [signedOut, rid]);
+
+  const query = useQuery({
+    // The id is deliberately not in the key; the generation is.
+    queryKey: ["oauth", "consent-request", generation],
+    enabled: Boolean(rid) && ready && authenticated,
+    queryFn: () => getOAuthRequest(rid!),
+    retry: false,
+    gcTime: 0,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  const loadFailure = query.error ? consentFailure(query.error instanceof ApiError ? query.error.code : undefined) : null;
+  React.useEffect(() => {
+    if (loadFailure?.kind === "final") forgetRequestId();
+  }, [loadFailure?.kind]);
+
+  /**
+   * After a decision whose answer was lost, the request reads as answered:
+   * the `continue` step on the MCP host (the URL the API returns, spec
+   * §6.3.5), which only works in the browser that started the sign-in.
+   */
+  const resume = React.useMemo(() => {
+    if (!rid) return undefined;
+    const mcp = process.env.NEXT_PUBLIC_MCP_URL?.trim();
+    if (!mcp) return undefined;
+    let url: string;
+    try {
+      url = `${new URL(mcp).origin}/oauth/authorize/continue?request=${encodeURIComponent(rid)}`;
+    } catch {
+      return undefined;
+    }
+    return isContinueUrl(url) ? () => loadPage(url) : undefined;
+  }, [rid]);
+
+  const go = (redirectTo: string) => {
+    if (!isContinueUrl(redirectTo)) throw new ContinueUrlRefused();
+    forgetRequestId();
+    loadPage(redirectTo);
+  };
+
+  const signedInAs = user?.email?.address ?? user?.wallet?.address ?? null;
+
+  let body: React.ReactNode;
+  if (rid === null) {
+    body = <Notice text={CONSENT_STRINGS.missing} />;
+  } else if (rid !== undefined && ready && !signedOut && query.data) {
+    body = (
+      <ConsentCard
+        key={generation}
+        request={query.data}
+        now={now}
+        signedInAs={signedInAs}
+        onSignOut={() => void logout()}
+        onApprove={async (decision) => go((await approveOAuthRequest(rid, decision)).redirectTo)}
+        onDeny={async () => go((await denyOAuthRequest(rid)).redirectTo)}
+        onFinal={forgetRequestId}
+        fetchedAt={query.dataUpdatedAt}
+        recheck={async () => {
+          await getOAuthRequest(rid);
+        }}
+        onResume={resume}
+        setLimits={(slot) => <ConsentSetLimits {...slot} />}
+      />
+    );
+  } else if (loadFailure) {
+    body =
+      loadFailure.kind === "final" ? (
+        <Notice text={loadFailure.text} />
+      ) : (
+        <Notice text={loadFailure.text} retry={() => void query.refetch()} />
+      );
+  } else {
+    body = <Notice text="Loading the request…" busy />;
+  }
+
+  return <div className="flex w-full flex-1 justify-center px-4 py-8 tablet:py-12">{body}</div>;
+}
+
+function Notice({ text, busy = false, retry }: { text: string; busy?: boolean; retry?: () => void }) {
+  return (
+    <section className="flex w-full max-w-[560px] flex-col gap-3 rounded-xl border border-01 bg-01 p-5 tablet:p-6">
+      <h1 className="text-heading-md text-01">{CONSENT_STRINGS.heading}</h1>
+      <p role="status" aria-busy={busy || undefined} className="text-body-sm text-02">
+        {text}
+      </p>
+      {retry ? (
+        <button
+          type="button"
+          onClick={retry}
+          className="self-start text-label-13 font-semibold text-primary-600 hover:underline"
+        >
+          Try again
+        </button>
+      ) : null}
+    </section>
+  );
+}

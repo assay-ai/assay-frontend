@@ -149,7 +149,7 @@ export function EntityPicker({
       </label>
       <div
         className={cn(
-          "flex w-full items-center gap-2 rounded-md border bg-01 px-3 py-2 focus-within:ring-2 focus-within:ring-primary-500",
+          "flex w-full items-center gap-2 rounded-md border bg-01 px-3 focus-within:ring-2 focus-within:ring-primary-500",
           error ? "border-danger-500" : "border-02",
           disabled && "opacity-40",
         )}
@@ -175,7 +175,7 @@ export function EntityPicker({
             setOpen(true);
           }}
           onKeyDown={onKeyDown}
-          className="w-full min-w-0 bg-transparent text-body-sm text-01 outline-none placeholder:text-03"
+          className="min-h-10 w-full min-w-0 bg-transparent py-2 text-body-sm text-01 outline-none placeholder:text-03"
         />
         {value && !disabled ? (
           <button
@@ -193,12 +193,16 @@ export function EntityPicker({
 
       {open ? (
         <ul
+          // An inline list opening low in a sheet scrolls into view, clear of a sticky footer.
+          ref={(el) => {
+            if (el && inline) el.scrollIntoView?.({ block: "nearest" });
+          }}
           id={`${id}-list`}
           role="listbox"
           aria-label={label}
           className={cn(
             "overflow-y-auto rounded-lg border border-01 bg-01 p-1",
-            inline ? "max-h-[200px] w-full" : "absolute inset-x-0 top-full z-50 mt-1 max-h-[280px] shadow-soft",
+            inline ? "max-h-[200px] w-full scroll-mb-24" : "absolute inset-x-0 top-full z-50 mt-1 max-h-[280px] shadow-soft",
           )}
         >
           {search && (remote.loading || stale) ? (

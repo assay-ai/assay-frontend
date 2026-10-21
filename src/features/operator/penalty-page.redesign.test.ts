@@ -46,14 +46,15 @@ describe("the measurement's verdict", () => {
 
 describe("a refused action in one line", () => {
   const support = { roles: ["SRE", "SUP"] as OperatorRole[], authorityLimit: USD("0") };
+  const treasury = { roles: ["TRE"] as OperatorRole[], authorityLimit: USD("0") };
   const adjudicator = { roles: ["ADJ"] as OperatorRole[], authorityLimit: USD("100000000") };
 
   it("names the $0 limit and who to ask", () => {
-    expect(shortWhyNot(support, "suspend", USD("28470000"), ["Jordan Blake"])).toBe("Your limit is $0 · Ask Jordan Blake");
+    expect(shortWhyNot(treasury, "compensate", USD("28470000"), ["Jordan Blake"])).toBe("Your limit is $0 · Ask Jordan Blake");
   });
 
   it("names a limit below the penalty", () => {
-    expect(shortWhyNot(adjudicator, "suspend", USD("412000000"), null)).toBe("Above your $100.00 limit");
+    expect(shortWhyNot(adjudicator, "upholdRefund", USD("412000000"), null)).toBe("Above your $100.00 limit");
   });
 
   it("names the role a ruling needs", () => {
@@ -61,15 +62,14 @@ describe("a refused action in one line", () => {
   });
 
   it("is nothing when allowed", () => {
-    expect(shortWhyNot(adjudicator, "suspend", USD("28470000"), [])).toBeNull();
+    expect(shortWhyNot(adjudicator, "upholdRefund", USD("28470000"), [])).toBeNull();
   });
 });
 
 describe("a dispute nobody ruled on", () => {
-  it("reads as expired, not cancelled, on the page and in the list", async () => {
+  it("reads as expired, not cancelled, on the page", async () => {
     const { demoResponse } = await import("@/libs/demo/demo-api");
     const { caseFacts, caseNextStep, caseAuthority, caseTimelineSteps } = await import("./case-flow");
-    const { rowFromBrief } = await import("./penalty-list");
     process.env.NEXT_PUBLIC_DEMO_CHAINS = "robinhood";
     try {
       const brief = demoResponse("GET", "/operator/cases/93d0e7b5-4c18-4a2f-8e61-7b5c0a9d2e13") as import("@/interfaces/operator").OperatorCaseBrief;
@@ -80,7 +80,6 @@ describe("a dispute nobody ruled on", () => {
       const steps = caseTimelineSteps(brief, facts);
       expect(steps.find((s) => s.id === "ruling")).toMatchObject({ label: "Not ruled in 30 days", state: "skipped" });
       expect(steps.at(-1)?.label).toBe("Expired");
-      expect(rowFromBrief(brief, "Quanta Signals").status).toBe("EXPIRED");
     } finally {
       delete process.env.NEXT_PUBLIC_DEMO_CHAINS;
     }
@@ -219,7 +218,7 @@ describe("round 4: a request already waiting on the penalty", () => {
   it("holds the same ⋯ action back with a reason", async () => {
     const { alreadyWaiting } = await import("./case-flow");
     expect(alreadyWaiting("slash.compensated", ["slash.compensated"])).toBe("A pay-back request is already waiting");
-    expect(alreadyWaiting("slash.suspend", ["slash.compensated"])).toBeNull();
+    expect(alreadyWaiting("slash.repropose", ["slash.compensated"])).toBeNull();
   });
 });
 

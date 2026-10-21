@@ -33,7 +33,7 @@ const TONE_TEXT: Record<Tone, string> = {
  * 13px paragraph, `$radius-lg`, 1px border, padding 14.
  *
  * A local copy rather than `@/features/g30/ui`'s `NoteBox`: that one has no
- * `danger` tone, and a blocked egress address is the one outcome on this
+ * `danger` tone, and a blocked address is the one outcome on this
  * screen that has to read as a refusal rather than a caution.
  */
 export function Outcome({

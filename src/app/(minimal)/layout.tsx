@@ -10,12 +10,7 @@ import { AccountBlockBanner } from "@/features/account-block/account-block-banne
  * `@/components/layout/minimal-bar` (see that file for the five frames that
  * each carry a local copy of it).
  *
- * | Screen              | Route                    |
- * |---------------------|--------------------------|
- * | Provider view       | `/provider/view`         |
- * | Provider setup      | `/provider/setup`        |
- * | Binding and traffic | `/provider/traffic`      |
- * | Verdicts and flags  | `/provider/flags`        |
+ * The group holds `/login` and `/provider/setup`.
  *
  * ## The bar's copy
  *
@@ -25,11 +20,7 @@ import { AccountBlockBanner } from "@/features/account-block/account-block-banne
  *
  * ## Body
  *
- * `layout vertical`, `gap 16`, `padding [22, 26]` on the provider setup, binding traffic and
- * verdicts-and-flags screens; the page ground is `$bg-02` on the four
- * frames. **The provider view screen's body diverges**: `gap 18`, `padding [24, 28]`.
- * The layout applies the three-way majority and `/provider/view` overrides it
- * on its own root element — do not change the default for it.
+ * `layout vertical`, `gap 16`, `padding [22, 26]`; the page ground is `$bg-02`.
  */
 
 /*
@@ -68,12 +59,8 @@ export default function MinimalLayout({ children }: { children: React.ReactNode 
       {!isLogin && (
         <MinimalBar context={context} />
       )}
-      {/* This group is not just /login: /provider/setup, /provider/view,
-          /provider/traffic and /provider/flags are all authenticated screens
-          that a brand-new user can land on directly. They used to be wrapped
-          in `WalletProvisioningGate`, which never once activated in a browser
-          and was removed; a new user's first minute of 424s is again the
-          unsolved problem it always was. */}
+      {/* This group is not just /login: /provider/setup is an authenticated
+          screen that a brand-new user can land on directly. */}
       <main
         className={
           isLogin

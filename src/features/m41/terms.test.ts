@@ -11,7 +11,16 @@ describe("provider terms copy (BUG-R5-03)", () => {
   it("states payouts the way every earnings screen does", () => {
     const row = (key: string) => DESIGN_TERMS.commercialTerms.find((term) => term.key === key);
     expect(row("payouts")?.value).toBe("as each call settles");
+    // A payment is final only after the 1-hour report window.
+    expect(row("payouts")?.caption).toBe("on chain; final 1 hour after each call");
     expect(row("slashedWhen")?.value).not.toContain("DATA_FAIL");
+  });
+
+  // B5 review M2: "we hold nothing back" contradicted the 1-hour hold for buyer reports.
+  it("says each paid call is held for buyer reports, not that nothing is held", () => {
+    const reserve = DESIGN_TERMS.commercialTerms.find((term) => term.key === "reserveHeld");
+    expect(reserve?.caption).toBe("No standing reserve: each paid call is held for 1 hour for buyer reports");
+    expect(reserve?.caption).not.toMatch(/nothing back/);
   });
 
   it("names the policy the console's way", () => {

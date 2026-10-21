@@ -43,9 +43,9 @@ export function debtDeadline(iso: string, options: DeadlineOptions = {}): string
   return countdown ? `${when} (${countdown})` : when;
 }
 
-/** A debt's state; an older backend sends none, and every debt it lists is open. */
+/** A debt's state. */
 export function debtStateOf(debt: Pick<BuyerDebt, "state">): BuyerDebtState {
-  return debt.state ?? "OPEN";
+  return debt.state;
 }
 
 /**
@@ -58,11 +58,11 @@ export function debtsToSign<T extends Pick<BuyerDebt, "state">>(debts: readonly 
 
 /**
  * Whether a debt can be settled at `nowMs`: its original voucher is past its
- * on-chain deadline (`replaceableAt`). One without the field (an older
- * backend) or with an unreadable one can be settled at once.
+ * on-chain deadline (`replaceableAt`). One with an unreadable deadline can be
+ * settled at once.
  */
 export function isReplaceable(debt: Pick<BuyerDebt, "replaceableAt">, nowMs: number): boolean {
-  const at = debt.replaceableAt ? Date.parse(debt.replaceableAt) : Number.NaN;
+  const at = Date.parse(debt.replaceableAt);
   return Number.isNaN(at) || at <= nowMs;
 }
 
@@ -71,7 +71,7 @@ export function nextReplaceableAt(debts: readonly Pick<BuyerDebt, "replaceableAt
   let next: number | null = null;
   for (const debt of debts) {
     if (isReplaceable(debt, nowMs)) continue;
-    const at = Date.parse(debt.replaceableAt!);
+    const at = Date.parse(debt.replaceableAt);
     if (next === null || at < next) next = at;
   }
   return next;
@@ -277,11 +277,8 @@ export function callPaymentNote(call: {
  * and nothing was withheld for it, so `listed − charged` must not be counted
  * as withheld.
  */
-export function uncollectedNotWithheld(call: {
-  forfeited?: boolean;
-  debt?: CallDebt | null;
-}): boolean {
-  return call.forfeited === true || call.debt === "WRITTEN_OFF" || call.debt === "VOIDED";
+export function uncollectedNotWithheld(call: { forfeited: boolean; debt: CallDebt | null }): boolean {
+  return call.forfeited || call.debt === "WRITTEN_OFF" || call.debt === "VOIDED";
 }
 
 /**

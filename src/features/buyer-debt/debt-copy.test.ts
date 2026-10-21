@@ -49,6 +49,7 @@ function debt(overrides: Partial<BuyerDebt> = {}): BuyerDebt {
     writeOffAt: "2026-11-15T00:00:00.000Z",
     replacedAt: null,
     createdAt: "2026-10-15T23:59:00.000Z",
+    replaceableAt: "2026-10-16T00:00:00.000Z",
     ...overrides,
   };
 }
@@ -228,12 +229,10 @@ describe("the debt refusals", () => {
 describe("when a debt can be settled", () => {
   const now = Date.parse("2026-10-17T10:00:00.000Z");
 
-  it("waits for replaceableAt, and settles at once without one", () => {
+  it("waits for replaceableAt, and settles at once when it cannot be read", () => {
     expect(isReplaceable(debt({ replaceableAt: "2026-10-17T10:30:00.000Z" }), now)).toBe(false);
     expect(isReplaceable(debt({ replaceableAt: "2026-10-17T10:00:00.000Z" }), now)).toBe(true);
     expect(isReplaceable(debt({ replaceableAt: "2026-10-17T09:00:00.000Z" }), now)).toBe(true);
-    expect(isReplaceable(debt({ replaceableAt: null }), now)).toBe(true);
-    expect(isReplaceable(debt(), now)).toBe(true);
     expect(isReplaceable(debt({ replaceableAt: "not a time" }), now)).toBe(true);
   });
 
@@ -315,11 +314,11 @@ describe("call payment notes", () => {
   });
 
   it("does not count a forfeited, written-off or voided call as withheld", () => {
-    expect(uncollectedNotWithheld({ forfeited: true })).toBe(true);
-    expect(uncollectedNotWithheld({ debt: "WRITTEN_OFF" })).toBe(true);
-    expect(uncollectedNotWithheld({ debt: "VOIDED" })).toBe(true);
-    expect(uncollectedNotWithheld({ debt: "OUTSTANDING" })).toBe(false);
-    expect(uncollectedNotWithheld({})).toBe(false);
+    expect(uncollectedNotWithheld({ forfeited: true, debt: null })).toBe(true);
+    expect(uncollectedNotWithheld({ forfeited: false, debt: "WRITTEN_OFF" })).toBe(true);
+    expect(uncollectedNotWithheld({ forfeited: false, debt: "VOIDED" })).toBe(true);
+    expect(uncollectedNotWithheld({ forfeited: false, debt: "OUTSTANDING" })).toBe(false);
+    expect(uncollectedNotWithheld({ forfeited: false, debt: null })).toBe(false);
   });
 });
 

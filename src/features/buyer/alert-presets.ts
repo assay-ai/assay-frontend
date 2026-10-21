@@ -1,3 +1,4 @@
+import { PROVIDER_NOTIFICATION_EVENTS } from "@/features/provider-home/inbox";
 import type { NotificationChannel, NotificationEvent } from "@/services/notifications.service";
 
 /**
@@ -30,7 +31,7 @@ export function availableChannels(raw: string | undefined = process.env.NEXT_PUB
 }
 
 export interface AlertPreset {
-  id: "money-security" | "spend" | "summary";
+  id: "money-security" | "spend" | "toolsets" | "disputes" | "summary";
   title: string;
   description: string;
   events: readonly NotificationEvent[];
@@ -43,7 +44,7 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
     id: "money-security",
     title: "Money & security",
     description:
-      "Balance low or empty, deposits, withdrawals, a new withdrawal address, an agent paused or its key expiring.",
+      "Balance low or empty, deposits, withdrawals, a new withdrawal address, an agent paused or its key expiring, an app stopped because its sign-in was used twice, a payment key's first paid call.",
     events: [
       "balance.low",
       "balance.zero",
@@ -55,6 +56,8 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
       "agent.paused",
       "session.expiring",
       "session.expired",
+      "oauth.grant_stopped_reuse",
+      "payment_key.first_spend",
     ],
     alwaysOn: true,
   },
@@ -66,16 +69,44 @@ export const ALERT_PRESETS: readonly AlertPreset[] = [
     alwaysOn: false,
   },
   {
+    id: "toolsets",
+    title: "Tool set and tool updates",
+    description: "A tool set your agents use has a new version, or a version of a tool they use is going away, with what to do.",
+    events: ["toolset.update_available", "tool_version.deprecated", "tool_version.retired"],
+    alwaysOn: false,
+  },
+  {
+    id: "disputes",
+    title: "Reports about bad results",
+    description: "The provider replied to a call you reported, the report was decided, or the call was refunded.",
+    events: ["call_dispute.responded", "call_dispute.decided", "call_dispute.refunded"],
+    alwaysOn: false,
+  },
+  {
     id: "summary",
     title: "Daily summary",
-    description: "One message a day with what you spent and anything not charged.",
-    events: ["digest.daily"],
+    description: "One message a day with what you spent and anything not charged, and what each payment key spent yesterday.",
+    events: ["payment_key.daily_summary", "digest.daily"],
     alwaysOn: false,
   },
 ];
 
 /** Every buyer event, in preset order (provider events are not a buyer's). */
-export const BUYER_EVENTS: readonly NotificationEvent[] = ALERT_PRESETS.flatMap((p) => p.events);
+export const BUYER_EVENTS: readonly NotificationEvent[] = [...new Set(ALERT_PRESETS.flatMap((p) => p.events))];
+
+/**
+ * What "Customise" lists: every buyer event in preset order, then the
+ * catalogue's other events in catalogue order (an event missing from every
+ * preset still shows). Provider-side events (`PROVIDER_NOTIFICATION_EVENTS`)
+ * are listed only for an organization that is a provider; an event shared
+ * by both sides is a buyer one too and always shows.
+ */
+export function customiseEvents(catalogue: readonly NotificationEvent[], options: { provider: boolean }): NotificationEvent[] {
+  const buyer = new Set<NotificationEvent>(BUYER_EVENTS);
+  const providerOnly = new Set<string>(PROVIDER_NOTIFICATION_EVENTS);
+  const rest = catalogue.filter((e) => !buyer.has(e) && (options.provider || !providerOnly.has(e)));
+  return [...BUYER_EVENTS.filter((e) => catalogue.includes(e)), ...rest];
+}
 
 /** Whether a preset is on for a channel: on, off, or mixed (some events customised). */
 export function presetState(

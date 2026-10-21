@@ -27,7 +27,7 @@ import type {
  * `hasProducer: false` marks the events the backend's own enum comments say
  * have no producer yet (`withdrawal.initiated`, `withdrawal.completed`,
  * `withdrawal_destination.added`, `slash.compensation_received`,
- * `provider.slash_proposed`, `provider.payout_sent`, `digest.daily`). The UI
+ * `provider.slash_proposed`, `digest.daily`). The UI
  * must say so rather than implying they fire today — they are in the table
  * only because the backend's catalogue is `Record`-exhaustive over the enum,
  * not `Partial`, so an event with no producer still has a decided severity
@@ -136,6 +136,14 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     nonSuppressible: false,
     hasProducer: true,
   },
+  "call.refused_repeatedly": {
+    // The fifth identical refusal in an hour; once per UTC day so a looping agent does not page all day.
+    severity: "WARNING",
+    channels: IN_APP_PUSH,
+    aggregation: "ONCE_PER_UTC_DAY",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
 
   // ── Credentials and signing ───────────────────────────────────────────────
   "session.expiring": {
@@ -152,6 +160,30 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     channels: EVERYTHING,
     aggregation: "ONCE",
     nonSuppressible: true,
+    hasProducer: true,
+  },
+  "oauth.grant_stopped_reuse": {
+    // An app's sign-in was used twice, so the connection was stopped (possible theft).
+    severity: "CRITICAL",
+    channels: EVERYTHING,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+  "payment_key.first_spend": {
+    // A payment key on a computer made its first paid call (stolen-laptop / malware signal).
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+  "payment_key.daily_summary": {
+    // Yesterday's (UTC) paid calls and amount per payment key; one per organization per day.
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE_PER_UTC_DAY",
+    nonSuppressible: false,
     hasProducer: true,
   },
 
@@ -237,12 +269,122 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     nonSuppressible: false,
     hasProducer: true,
   },
-  "provider.payout_sent": {
+  "provider.slash_decided": {
+    severity: "CRITICAL",
+    channels: EVERYTHING,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+  "provider.slash_executed": {
+    severity: "CRITICAL",
+    channels: EVERYTHING,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+  "provider.slash_reversed": {
+    severity: "INFO",
+    channels: EVERYTHING,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+
+  // ── Tool sets ─────────────────────────────────────────────────────────────
+  "toolset.update_available": {
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+
+  // ── Tool versions (T3; producer: ContractLifecycleService) ───────────────
+  "tool_version.deprecated": {
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "tool_version.retired": {
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+
+  // ── Buyer call disputes (G3.B1; producers: CallDisputeService, HeldCollectionService) ──
+  "call_dispute.opened": {
+    // Sent to the provider: its one chance to reply comes before the decision.
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "call_dispute.responded": {
+    severity: "INFO",
+    channels: IN_APP_ONLY,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "call_dispute.decided": {
+    // Sent to the buyer and to the provider.
     severity: "INFO",
     channels: IN_APP_EMAIL,
     aggregation: "PER_EVENT",
     nonSuppressible: false,
-    hasProducer: false,
+    hasProducer: true,
+  },
+  "call_dispute.refunded": {
+    // The provider was blocked and the held payment went back before any decision.
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+
+  // ── Provider tools (T4; producers: the review, the takedown, promotion invites) ──
+  "provider_tool.approved": {
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "provider_tool.rejected": {
+    severity: "WARNING",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "provider_tool.taken_down": {
+    // It stopped serving everywhere at once: no preference can mute it.
+    severity: "CRITICAL",
+    channels: IN_APP_EMAIL_PUSH,
+    aggregation: "PER_EVENT",
+    nonSuppressible: true,
+    hasProducer: true,
+  },
+  "provider_tool.takedown_lifted": {
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "PER_EVENT",
+    nonSuppressible: false,
+    hasProducer: true,
+  },
+  "provider_tool.promotion_invited": {
+    severity: "INFO",
+    channels: IN_APP_EMAIL,
+    aggregation: "ONCE",
+    nonSuppressible: false,
+    hasProducer: true,
   },
 
   // ── Digest ────────────────────────────────────────────────────────────────
@@ -254,11 +396,6 @@ export const NOTIFICATION_CATALOGUE: Readonly<Record<NotificationEvent, Notifica
     hasProducer: false,
   },
 };
-
-/** Stable render order — the backend's own grouping, not alphabetical. */
-export const NOTIFICATION_EVENT_ORDER: readonly NotificationEvent[] = Object.keys(
-  NOTIFICATION_CATALOGUE
-) as NotificationEvent[];
 
 /**
  * What each event is, in words. The id beside it on the Alerts screen stays
@@ -276,8 +413,12 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "spend.threshold_crossed": "Spend limit threshold reached",
   "velocity.anomaly": "Unusual spending speed",
   "agent.paused": "Agent paused",
+  "call.refused_repeatedly": "An agent keeps getting the same refusal",
   "session.expiring": "Agent credential expiring soon",
   "session.expired": "Agent credential expired",
+  "oauth.grant_stopped_reuse": "App stopped: sign-in used twice",
+  "payment_key.first_spend": "A payment key made its first paid call",
+  "payment_key.daily_summary": "Daily spend per payment key",
   "free_quota.exhausted": "Free calls used up",
   "payment_intent.refunded": "Call refunded",
   "slash.compensation_received": "Compensation received",
@@ -288,7 +429,21 @@ export const NOTIFICATION_EVENT_LABEL: Readonly<Record<NotificationEvent, string
   "provider.slash_proposed": "Penalty proposed against your stake",
   "provider.sla_breach_proposed": "SLA breach recorded",
   "provider.sla_window_warning": "SLA window at risk",
-  "provider.payout_sent": "Payout sent",
+  "provider.slash_decided": "Penalty decided",
+  "provider.slash_executed": "Penalty taken from your stake",
+  "provider.slash_reversed": "Penalty reversed, stake restored",
+  "toolset.update_available": "A tool set you use has a new version",
+  "tool_version.deprecated": "A version of a tool you use is going away",
+  "tool_version.retired": "A version of a tool you use stopped working",
+  "call_dispute.opened": "A buyer reported a bad result on a call you served",
+  "call_dispute.responded": "The provider replied to your report",
+  "call_dispute.decided": "A report about a bad result was decided",
+  "call_dispute.refunded": "A call you reported was refunded",
+  "provider_tool.approved": "Your own API passed review",
+  "provider_tool.rejected": "Your own API needs changes before it is listed",
+  "provider_tool.taken_down": "Your own API was taken down",
+  "provider_tool.takedown_lifted": "The takedown of your own API was lifted",
+  "provider_tool.promotion_invited": "Invited to serve a standard tool",
   "digest.daily": "Daily summary",
 };
 

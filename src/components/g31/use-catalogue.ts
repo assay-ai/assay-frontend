@@ -1,8 +1,10 @@
 "use client";
 
+import type { ToolVersionBrief } from "@/interfaces/contracts";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
+import type { ChainPrice } from "@/features/explorer/explorer-text";
 import type { Money } from "@/interfaces";
 import {
   listCatalogueProviders,
@@ -46,11 +48,10 @@ import type { ChainStake } from "./format";
  * ## Quality is now the platform's measurement
  *
  * The old `quality` was passed-over-measured across **your** calls. The new one
- * is summed from the provider's closed SLA windows — the same counters that
- * decide a strike and, eventually, a slash. So the number on the card is the
- * number the provider is actually held to, it is the same for every buyer, and
- * `measuredCalls` rides along because 100% of four calls and 95% of sixteen
- * thousand are not the same claim.
+ * is summed from the provider's SLA windows of the last 30 days, open and
+ * closed (D5) — the counters the penalties are judged on, window by window. It
+ * is the same for every buyer, and `measuredCalls` rides along because 100% of
+ * four calls and 95% of sixteen thousand are not the same claim.
  *
  * `null` still means **not measured**, and still must not render as a number.
  */
@@ -75,7 +76,7 @@ export interface ProviderRow {
    * or picks a "lowest" across two different assets.
    */
   stake: ChainStake[];
-  /** Platform-measured, 0..1. null until a window has closed. */
+  /** Platform-measured pass rate, 0..1, last 30 days. null until a call was checked. */
   quality: number | null;
   /** The denominator behind `quality`. 0 when `quality` is null. */
   measuredCalls: number;
@@ -83,6 +84,12 @@ export interface ProviderRow {
   failedCalls: number;
   /** Calls **your** organization made to them. Zero is the normal case now. */
   yourCalls: number;
+  /** Chains a call to them can settle on now (the router's answer); [] = takes no call now; null = could not be read. */
+  chains?: string[] | null;
+  /** Whether a call from one of your agents can settle with them now; null/undefined = unknown. */
+  servesYou?: boolean | null;
+  /** WITHDRAWING when they don't serve you because every agent of yours is withdrawing. */
+  notServedReason?: "WITHDRAWING" | null;
 }
 
 export interface ToolRow {
@@ -99,25 +106,32 @@ export interface ToolRow {
   fromPrice: Money | null;
   /** What a call would be held for — the dearest eligible binding, not the floor. */
   price: Money | null;
-  /**
-   * Routable bindings that can be charged (PAID or FREEMIUM); above one, the
-   * quote reads "up to". Falls back to `routableBindings` for a backend that
-   * predates the field, the same fallback MCP `tools/list` uses.
-   */
-  paidBindings: number | undefined;
+  /** Routable bindings that can be charged (PAID or FREEMIUM); above one, the quote reads "up to". */
+  paidBindings: number;
   /** Free calls per agent per day before a FREEMIUM tool's quote applies (the backend's total, capped). */
-  freeCallsPerDay?: number | null;
+  freeCallsPerDay: number | null;
   routable: boolean;
   unroutableReason: string | null;
   /**
-   * CAIP-2, the chains this tool settles on — or `undefined` when the API said
-   * nothing, which is every row today. Passed straight through and **never**
-   * defaulted to `[]`: the two are the same to `settlementReach`, and an `[]`
-   * written here would be this hook claiming knowledge it does not have.
+   * CAIP-2, the chains this tool settles on — `null` when the API says it is
+   * not known (nothing routable), `undefined` when it said nothing. Passed
+   * straight through and **never** defaulted to `[]`: all three are the same
+   * to `settlementReach`, and an `[]` written here would be this hook claiming
+   * knowledge it does not have.
    */
-  settlementChains: string[] | undefined;
+  settlementChains: string[] | null | undefined;
+  /** The price per chain, with the provider setting it; empty when the API sends none. */
+  prices?: ChainPrice[];
   /** Your own traffic on this tool. */
   yourCalls: number;
+  /** T3: the version unpinned URLs serve, e.g. "2.0.0". */
+  version: string | null;
+  /** T3: every published version, newest first, with status and sunset. */
+  versions: ToolVersionBrief[];
+  /** T3: majors still serving until their sunset. */
+  deprecatedMajors: number[];
+  replacementName: string | null;
+  replacementVersion: string | null;
   listed: Money | null;
   charged: Money | null;
 }
@@ -192,6 +206,9 @@ export function useCatalogue() {
       measuredCalls: row.quality ? row.quality.measuredCalls : 0,
       failedCalls: row.quality ? row.quality.failedCalls : 0,
       yourCalls: calls.filter((call) => call.providerId === row.providerId).length,
+      chains: row.chains,
+      servesYou: row.servesYou,
+      notServedReason: row.notServedReason,
     }));
   }, [providersQuery.data, calls]);
 
@@ -218,12 +235,18 @@ export function useCatalogue() {
         providerCount: row.providerCount,
         fromPrice: row.fromPrice,
         price: row.price,
-        paidBindings: row.paidBindings ?? row.routableBindings,
+        paidBindings: row.paidBindings,
         freeCallsPerDay: row.freeCallsPerDay,
         routable: row.routable,
         unroutableReason: row.unroutableReason,
         settlementChains: row.settlementChains,
+        prices: row.prices ?? [],
         yourCalls: own.length,
+        version: row.version,
+        versions: row.versions,
+        deprecatedMajors: row.deprecatedMajors,
+        replacementName: row.replacementName,
+        replacementVersion: row.replacementVersion,
         listed,
         charged,
       };

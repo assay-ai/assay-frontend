@@ -17,7 +17,24 @@ import { chainDisplayName } from "@/features/operator/call-summary";
 import { Deadline } from "@/features/operator/deadline";
 import { DisputeLine } from "@/features/operator/dispute-line";
 import { HealthStrip } from "@/features/operator/health-strip";
-import { checkedAgo, groupApprovals, needsYouBreakdown, needsYouCount, sortDisputesByDaysLeft, waitingSummary } from "@/features/operator/inbox";
+import { mayAnswerToolRequests } from "@/features/operator/contract-editor";
+import {
+  checkedAgo,
+  groupApprovals,
+  needsYouBreakdown,
+  needsYouCount,
+  needsYouWork,
+  calmStateBlocker,
+  oldestCallDisputeDue,
+  sortDisputesByDaysLeft,
+  staleChainData,
+  staleChainSentence,
+  waitingSummary,
+  type ToolWork,
+} from "@/features/operator/inbox";
+import { may } from "@/features/operator/state";
+import { useCancelsDue, useToolRequestsDue } from "@/features/operator/use-cancels-due";
+import { useToolWork } from "@/features/operator/use-tool-work";
 import { ResultCard } from "@/features/operator/result-card";
 import { RoleIntro, useRoleIntro } from "@/features/operator/role-intro";
 import { capabilitiesFor } from "@/features/operator/roles";
@@ -29,33 +46,33 @@ import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-
 import { useToSign } from "@/features/operator/use-to-sign";
 import { holdChainName } from "@/features/slash-hold/model";
 import { ApiError } from "@/libs/ApiClient";
+import { routes } from "@/libs/routes";
 import { operatorHoldReasonText } from "@/libs/slash-hold";
-import { getPlatformHealth, listAccountBlocks, listApprovals, listArbiterDisputes } from "@/services/operator.service";
+import { listOperatorCallDisputes } from "@/services/operator-call-disputes.service";
+import { listAccountBlocks } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Home, route `/operator`: the "Needs you" inbox.
  *
- * Flat lists, in the order things can be lost: requests this operator can
- * approve (closest to expiring first), then — for whoever can rule — on-chain
+ * Flat lists, in the order things can be lost: penalties whose cancel the
+ * arbiter has to sign (overdue first), requests this operator can approve
+ * (closest to expiring first), then — for whoever can rule — on-chain
  * disputes by days left and what the arbiter's wallet still has to sign
  * (approved on-chain blocks, earlier penalties to cancel before anyone can
- * execute them), then their own requests waiting on someone else.
- * Under them "At a glance": four counts, each a link. Platform health is one
- * line that opens only when something is red. Each role gets its one way in
- * to its own work (Block an account, Add someone, Find a penalty).
+ * execute them), then their own requests waiting on someone else. Overdue
+ * tool requests and call disputes are links to their queues.
+ * Under them "At a glance": four counts, each a link, and platform health as
+ * one line that opens on demand: the inbox always comes first. Each role gets
+ * its one way in to its own work (Block an account, Add someone, Find a penalty).
  *
- * Not here, on purpose:
- *  - Penalties waiting for a cancel signature (CANCEL_REQUESTED). The backend
- *    has no endpoint that lists them; each one shows on its penalty page with
- *    its deadline. [backend] `GET /operator/cases`, then a group here.
- *  - The retired off-chain objection queue (claim / decide / second).
+ * While the chain indexer is stale, Home never says "Nothing needs you": it
+ * cannot confirm that (D16).
  *
  * j / k move between rows and Enter takes a row's main action (`?` lists the keys).
  */
-
-const PENDING_PAGE = 100;
 
 function useNow(intervalMs: number): number {
   const [now, setNow] = React.useState(() => Date.now());
@@ -119,6 +136,53 @@ function Tile({ label, value, opens = "page" }: { label: string; value: number |
   );
 }
 
+/** Pending provider tool reviews, open call disputes and overdue tool requests: each a link to its queue. */
+function ToolWorkLinks({
+  work,
+  readOnly,
+  callDisputeDue = null,
+}: {
+  work: ToolWork;
+  readOnly: { reviews: number; callDisputes: number };
+  /** "oldest due in 71h", for the call-dispute card. */
+  callDisputeDue?: string | null;
+}) {
+  const rows = [
+    { count: work.reviews ?? 0, label: "Provider tools to review", hint: "First reviews and changes to listed tools, oldest first.", href: "/operator/tools/reviews" },
+    {
+      count: work.callDisputes ?? 0,
+      label: "Call disputes to decide",
+      hint: `Buyers' reports of bad results. An operator decides within 72 hours${callDisputeDue ? `; ${callDisputeDue}` : ""}.`,
+      href: "/operator/disputes",
+    },
+    { count: work.takedowns ?? 0, label: "Takedowns to confirm", hint: "Another operator took a provider tool down; confirm or reject it within 72 hours.", href: "/operator/tools/takedowns" },
+    {
+      count: work.toolRequestsOverdue ?? 0,
+      label: "Tool requests overdue",
+      hint: "Past their answer deadline. Answer, accept or decline each on Tools.",
+      href: "/operator/tools",
+    },
+    { count: readOnly.reviews, label: "Provider tools in review (read only)", hint: "Deciding needs an Adjudicator, a Lead adjudicator or a Policy author.", href: "/operator/tools/reviews" },
+    { count: readOnly.callDisputes, label: "Call disputes (read only)", hint: "Deciding needs an Adjudicator or a Lead adjudicator.", href: "/operator/disputes" },
+  ].filter((row) => row.count > 0);
+  if (rows.length === 0) return null;
+  return (
+    <section aria-label="Tools and call disputes" className="grid w-full grid-cols-1 gap-2 tablet:grid-cols-2" data-testid="tool-work">
+      {rows.map((row) => (
+        <Link key={row.href} href={row.href} className={TILE}>
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-label-13 text-01">
+              {row.label} <span className="tabular-nums text-danger-700">{row.count}</span>
+            </span>
+            <span className="text-body-xs text-03">{row.hint}</span>
+          </span>
+          <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-03" />
+        </Link>
+      ))}
+    </section>
+  );
+}
+
 export default function OperatorHome() {
   const me = useOperatorSession();
   const caps = capabilitiesFor(me.roles);
@@ -130,21 +194,18 @@ export default function OperatorHome() {
 
   // Same key as the shell's badge, so the two never disagree.
   const pending = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: PENDING_PAGE }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });
+  // Read by every operator: the "Penalty disputes open" tile counts disputes on chain from this one list.
   const disputes = useQuery({
-    queryKey: ["operator", "arbiter", "disputes"],
-    queryFn: listArbiterDisputes,
-    enabled: caps.rule,
+    ...operatorQueries.arbiterDisputes(),
     refetchInterval: 60_000,
     retry: 0,
   });
   const health = useQuery({
-    queryKey: ["operator", "health"],
-    queryFn: getPlatformHealth,
+    ...operatorQueries.health(),
     refetchInterval: 60_000,
     retry: 0,
   });
@@ -164,23 +225,47 @@ export default function OperatorHome() {
   const holds = sortHoldsOldestFirst(health.data?.slashHolds ?? []);
   const blockCount = activeBlocks.data?.items.length ?? null;
   const openApprovals = groups.needsYou.length + groups.yours.length + groups.others.length;
-  const openDisputes = caps.rule ? (disputes.data ? disputeRows.length : null) : (health.data?.openDisputes ?? null);
+  // Disputes on chain, from the arbiter's list for every role: the same number Arbiter and "Needs ruling" show.
+  const openDisputes = disputes.data ? disputeRows.length : null;
 
-  const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt);
-  const refreshing = pending.isFetching || disputes.isFetching || health.isFetching;
+  const toolWork = useToolWork(me);
+  const cancelsDue = useCancelsDue(may(me.roles, "cancel"));
+  const answersRequests = mayAnswerToolRequests(me.roles);
+  const requestsDue = useToolRequestsDue(answersRequests);
+  const callQueue = useQuery({
+    queryKey: ["operator", "call-disputes", "oldest-open"],
+    queryFn: () => listOperatorCallDisputes({ state: ["OPEN"], order: "asc", limit: 20 }),
+    enabled: (toolWork.work.callDisputes ?? 0) > 0,
+    refetchInterval: 60_000,
+    retry: 0,
+  });
+  const callDisputeDue = oldestCallDisputeDue(callQueue.data?.items ?? [], now);
+  // The same builder as the nav badge (layout), so the two counts cannot drift.
+  const work: ToolWork = needsYouWork(toolWork.work, cancelsDue.count, requestsDue.overdue.length);
+  const stale = staleChainData(health.data);
+  // D16: stale chain data, or freshness that could not be read, never reads as a calm Home.
+  const calmBlocker = calmStateBlocker({ stale, unreadable: health.isError });
+  // Only the calm empty state needs the health read: the inbox sections render without it.
+  const calmUnknown = health.isLoading;
+  const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt, toolWork.dataUpdatedAt, cancelsDue.dataUpdatedAt);
+  const refreshing = pending.isFetching || disputes.isFetching || health.isFetching || toolWork.isFetching;
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["operator", "approvals"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "arbiter", "disputes"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "health"] });
     void queryClient.invalidateQueries({ queryKey: ["operator", "blocks"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "reviews"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "call-disputes"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "cases", "cancels-due"] });
+    void queryClient.invalidateQueries({ queryKey: ["operator", "tool-requests"] });
   };
 
   const [results, setResults] = React.useState<ApprovalResult[]>([]);
   const onDecided = React.useCallback((result: ApprovalResult) => setResults((list) => [result, ...list.filter((r) => r.id !== result.id)]), []);
 
-  const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count);
-  const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count);
-  const loading = pending.isLoading || (caps.rule && (disputes.isLoading || toSign.isLoading));
+  const needsYouTotal = needsYouCount(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count, work);
+  const breakdown = needsYouBreakdown(groups.needsYou.length, disputeRows.length, caps.rule, toSign.count, work);
+  const loading = pending.isLoading || cancelsDue.isLoading || (caps.rule && (disputes.isLoading || toSign.isLoading));
   const nothing = needsYouTotal === 0 && groups.yours.length === 0;
   // Every waiting request, accounted for in one line: the same split and numbers as the Approvals tabs.
   const waiting = waitingSummary({ needsYou: groups.needsYou.length, yours: groups.yours.length, others: groups.others.length });
@@ -220,8 +305,6 @@ export default function OperatorHome() {
 
       {intro.open ? <RoleIntro identity={me} onDismiss={intro.dismiss} /> : null}
 
-      <HealthStrip health={health.data} error={health.isError} />
-
       {results.map((result) => (
         <React.Fragment key={result.id}>
           <ResultCard
@@ -245,6 +328,19 @@ export default function OperatorHome() {
           code={pending.error instanceof ApiError ? pending.error.code : null}
           details={pending.error instanceof Error ? pending.error.message : null}
         />
+      ) : nothing && calmUnknown ? (
+        <PageState kind="loading" rows={1} label="Checking the chain data before saying nothing needs you" />
+      ) : nothing && calmBlocker ? (
+        // Stale chain data: never a calm "Nothing needs you" (D16).
+        <div role="status" className="flex w-full flex-col items-center gap-3 rounded-xl border border-warning-20 bg-warning-10 px-4 py-8 text-center" data-testid="stale-empty">
+          <div className="flex flex-col gap-1">
+            <p className="text-label-md text-warning-700">{calmBlocker}</p>
+            <p className="text-body-13 text-02">
+              Nothing else waits for you. {checkedAgo(lastChecked || now, now).replace(/^c/, "C")}; Home updates once the chain indexer catches up.
+            </p>
+          </div>
+          <QuickAction caps={caps} />
+        </div>
       ) : nothing ? (
         <div className="flex w-full flex-col items-center gap-3 rounded-xl border border-01 bg-01 px-4 py-8 text-center">
           <div className="flex flex-col gap-1">
@@ -255,9 +351,48 @@ export default function OperatorHome() {
           </div>
           <QuickAction caps={caps} />
         </div>
-      ) : (
+      ) : null}
+      {nothing && !loading && !pending.isError ? <ToolWorkLinks work={{}} readOnly={toolWork.readOnly} /> : null}
+      {loading || pending.isError || nothing ? null : (
         <>
-          {needsYouTotal === 0 ? <p className="text-body-13 text-03">Nothing needs you right now.</p> : null}
+          {calmBlocker ? (
+            <p role="status" className="w-full rounded-lg border border-warning-20 bg-warning-10 px-3.5 py-2.5 text-body-13 text-warning-700">
+              {calmBlocker}.
+            </p>
+          ) : needsYouTotal === 0 ? (
+            <p className="text-body-13 text-03">Nothing needs you right now.</p>
+          ) : null}
+          {cancelsDue.count > 0 ? (
+            <RowSection
+              id="cancels-to-sign"
+              title={cancelsDue.title}
+              hint="Penalties closed here whose record on chain waits for the arbiter key's cancel. Overdue first."
+              action={<ViewAll href="/operator/cases?tab=signature">All waiting for signature</ViewAll>}
+            >
+              {cancelsDue.rows.map((row) => {
+                const at = row.nextDeadline ? Date.parse(row.nextDeadline) : Number.NaN;
+                const overdue = !Number.isNaN(at) && at <= now;
+                return (
+                  // `act=resolve`: the penalty opens on its stuck-cancel action when its live read offers one (B18).
+                  <Link key={row.proposalId} href={`${routes.operatorCase(row.proposalId)}&act=resolve`} className="flex w-full min-w-0 flex-col gap-1 px-4 py-3 hover:bg-02 tablet:flex-row tablet:items-center tablet:gap-4">
+                    <span className="min-w-0 flex-1 text-label-sm text-01">
+                      Cancel {possessive(providers.lookup(row.providerId) ?? row.providerName)} {formatMoney(row.amount)} penalty
+                      <span className="block text-body-xs font-normal text-03">
+                        {row.toolName ? `${row.toolName} · ` : ""}open it to see what stands on chain
+                      </span>
+                    </span>
+                    {row.nextDeadline ? (
+                      <span className={cn("shrink-0 text-body-xs", overdue ? "text-danger-700" : "text-02")}>
+                        {overdue ? "Overdue since " : "Sign by "}
+                        <UtcTime value={row.nextDeadline} midSentence />
+                      </span>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </RowSection>
+          ) : null}
+          <ToolWorkLinks work={work} readOnly={toolWork.readOnly} callDisputeDue={callDisputeDue} />
           {groups.needsYou.length > 0 ? (
             <RowSection
               id="to-approve"
@@ -394,6 +529,15 @@ export default function OperatorHome() {
         />
       ) : null}
 
+      {cancelsDue.isError ? (
+        <PageState
+          kind="error"
+          title="Cancels to sign could not be loaded"
+          description="The penalties waiting for a cancel signature could not be read. Open Penalties, Waiting for signature."
+          code={null}
+        />
+      ) : null}
+
       <section aria-labelledby="at-a-glance" className="flex w-full flex-col gap-2">
         <h2 id="at-a-glance" className="text-label-13 text-02">
           At a glance
@@ -433,13 +577,16 @@ export default function OperatorHome() {
             </DropdownMenuContent>
           </DropdownMenu>
           <Link href={caps.rule ? "/operator/arbiter" : "/operator/cases"} className={TILE}>
-            <Tile label="Disputes open" value={openDisputes} />
+            <Tile label="Penalty disputes open" value={openDisputes} />
           </Link>
           <Link href="/operator/approvals" className={TILE}>
             <Tile label="Approvals waiting" value={pending.data ? openApprovals : null} />
           </Link>
         </div>
       </section>
+
+      {/* One line, closed by default, under the inbox: the figures are context, not tasks. */}
+      <HealthStrip health={health.data} error={health.isError} />
     </>
   );
 }

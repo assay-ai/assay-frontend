@@ -45,8 +45,8 @@ describe("approvalTitle", () => {
     expect(approvalTitle(compensated, context)).toBe("Pay back Meridian Index's $3.75 penalty");
     expect(approvalTitle(approval({}), context)).toMatch(/^Lift the block on Wallet 0x9f3c…/i);
     expect(
-      approvalTitle(approval({ action: "slash.suspend", code: "S-1", target: `slash_proposal:${PENALTY}`, payload: { proposalId: PENALTY } }), context),
-    ).toBe("Suspend Meridian Index's $3.75 penalty");
+      approvalTitle(approval({ action: "slash.repropose", code: "S-17", target: `slash_proposal:${PENALTY}`, payload: { proposalId: PENALTY } }), context),
+    ).toBe("Propose Meridian Index's $3.75 penalty on chain again");
     expect(
       approvalTitle(
         approval({ action: "operator.add", code: "A-12", target: "operator_wallet:0x1", payload: { body: { displayName: "Noor Hassan", roles: ["ADJ"] } } }),

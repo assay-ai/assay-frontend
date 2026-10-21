@@ -16,11 +16,36 @@ import { approveBlockedBecause, approverRolesFor, isOwnRequest } from "./approva
  */
 
 /**
- * What the Home heading and the nav badge both count: approvals this operator
- * can decide, plus — for whoever can rule — every open on-chain dispute.
+ * Provider tool reviews and buyer call disputes waiting for this operator.
+ * The caller counts each only for a role that can decide it (`useToolWork`).
  */
-export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean, toSign: number = 0): number {
-  return needsYouApprovals + (canRule ? openDisputes + toSign : 0);
+export interface ToolWork {
+  reviews?: number;
+  callDisputes?: number;
+  /** Provider-tool takedowns another operator took, waiting for this one to confirm. */
+  takedowns?: number;
+  /** Penalties waiting for the arbiter's cancel signature (CANCEL_REQUESTED), for whoever gets it signed. */
+  cancels?: number;
+  /** Tool requests past their answer deadline, for whoever answers them. */
+  toolRequestsOverdue?: number;
+}
+
+/**
+ * What the Home heading and the nav badge both count: approvals this operator
+ * can decide, plus — for whoever can rule — every open on-chain dispute, plus
+ * the pending provider tool reviews, open call disputes, cancels to sign and
+ * overdue tool requests its roles act on.
+ */
+export function needsYouCount(needsYouApprovals: number, openDisputes: number, canRule: boolean, toSign: number = 0, work: ToolWork = {}): number {
+  return (
+    needsYouApprovals +
+    (canRule ? openDisputes + toSign : 0) +
+    (work.reviews ?? 0) +
+    (work.callDisputes ?? 0) +
+    (work.takedowns ?? 0) +
+    (work.cancels ?? 0) +
+    (work.toolRequestsOverdue ?? 0)
+  );
 }
 
 // ── Approvals ───────────────────────────────────────────────────────────────
@@ -62,12 +87,18 @@ export function waitingSummary(counts: { needsYou: number; yours: number; others
  * approvals and disputes: "2 to approve · 2 to rule". Null when it is one kind
  * only (the section below says it). Pure.
  */
-export function needsYouBreakdown(approvals: number, disputes: number, canRule: boolean, toSign: number = 0): string | null {
-  if (!canRule) return null;
+export function needsYouBreakdown(approvals: number, disputes: number, canRule: boolean, toSign: number = 0, work: ToolWork = {}): string | null {
+  const reviews = work.reviews ?? 0;
+  const calls = work.callDisputes ?? 0;
   const parts = [
     ...(approvals > 0 ? [`${approvals} to approve`] : []),
-    ...(disputes > 0 ? [`${disputes} to rule`] : []),
-    ...(toSign > 0 ? [`${toSign} to sign`] : []),
+    ...(canRule && disputes > 0 ? [`${disputes} to rule`] : []),
+    ...(canRule && toSign > 0 ? [`${toSign} to sign`] : []),
+    ...(reviews > 0 ? [`${reviews} to review`] : []),
+    ...(calls > 0 ? [`${calls} call ${calls === 1 ? "dispute" : "disputes"}`] : []),
+    ...((work.takedowns ?? 0) > 0 ? [`${work.takedowns} ${work.takedowns === 1 ? "takedown" : "takedowns"} to confirm`] : []),
+    ...((work.cancels ?? 0) > 0 ? [`${work.cancels} ${work.cancels === 1 ? "cancel" : "cancels"} to sign`] : []),
+    ...((work.toolRequestsOverdue ?? 0) > 0 ? [`${work.toolRequestsOverdue} tool ${work.toolRequestsOverdue === 1 ? "request" : "requests"} overdue`] : []),
   ];
   return parts.length < 2 ? null : parts.join(" · ");
 }
@@ -219,19 +250,115 @@ export function healthIssues(health: PlatformHealth): HealthIssue[] {
       text: `False-positive rate ${pct(health.falsePositiveRate)}, gate ${pct(health.falsePositiveGate)}`,
     });
   }
-  for (const chain of health.chainState ?? []) {
+  for (const chain of health.chainState) {
     if (chain.paused) issues.push({ id: `paused:${chain.chainId}`, text: "Contracts paused" });
     if (chain.stale) {
       issues.push({
         id: `stale:${chain.chainId}`,
-        text:
-          chain.lagSeconds === null
-            ? "Chain indexer has not caught up"
-            : `Chain indexer ${Math.max(1, Math.round(chain.lagSeconds / 60))} min behind`,
+        text: chain.lagSeconds === null ? "Chain indexer has not caught up" : `Chain indexer ${lagText(chain.lagSeconds)} behind`,
       });
     }
   }
   return issues;
+}
+
+/**
+ * A lag or an age, in the two largest units: "3 d 7 h", "5 h 12 min",
+ * "12 min", "under a minute". Never minutes alone past an hour (operator
+ * review E: "4736 min behind").
+ */
+export function lagText(seconds: number): string {
+  const minutes = Math.floor(Math.max(0, seconds) / 60);
+  if (minutes < 1) return "under a minute";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 === 0 ? `${hours} h` : `${hours} h ${minutes % 60} min`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 === 0 ? `${days} d` : `${days} d ${hours % 24} h`;
+}
+
+/**
+ * The chain data behind the console when it is stale (D16): the worst lag of
+ * any stale chain, or `lagSeconds: null` when one never caught up. Null when
+ * every chain is current (or none is reported). Pure.
+ */
+export function staleChainData(health: Pick<PlatformHealth, "chainState"> | undefined): { lagSeconds: number | null } | null {
+  const stale = (health?.chainState ?? []).filter((chain) => chain.stale);
+  if (stale.length === 0) return null;
+  if (stale.some((chain) => chain.lagSeconds === null)) return { lagSeconds: null };
+  return { lagSeconds: Math.max(...stale.map((chain) => chain.lagSeconds ?? 0)) };
+}
+
+/**
+ * Home's empty state while chain data is stale: never "Nothing needs you",
+ * because disputes and rulings filed since may be missing (operator review E).
+ */
+export function staleChainSentence(stale: { lagSeconds: number | null }): string {
+  return stale.lagSeconds === null
+    ? "Can't confirm: chain data has not caught up yet (disputes and rulings may be missing)"
+    : `Can't confirm: chain data is ${lagText(stale.lagSeconds)} old (disputes and rulings may be missing)`;
+}
+
+// ── Cancels, tool requests, call disputes: what Home lists ─────────────────
+
+/**
+ * Penalties waiting for the arbiter's cancel signature: how many, how many
+ * past their deadline, and the section title "Cancels to sign (4, 3 overdue)".
+ * `nextDeadline` is the list's (the instant it must be signed by). Pure.
+ */
+export function cancelsDue(
+  rows: readonly { nextDeadline: string | null }[],
+  now: number = Date.now(),
+  more = false,
+): { count: number; overdue: number; title: string } {
+  const overdue = rows.filter((row) => {
+    const at = row.nextDeadline ? Date.parse(row.nextDeadline) : Number.NaN;
+    return !Number.isNaN(at) && at <= now;
+  }).length;
+  const count = rows.length;
+  // More than one page: the count is a floor ("100+"), never a wrong exact number.
+  return { count, overdue, title: `Cancels to sign (${count}${more ? "+" : ""}${overdue > 0 ? `, ${overdue}${more ? "+" : ""} overdue` : ""})` };
+}
+
+/**
+ * What Home and the nav badge both add to the Needs-you count, built in one
+ * place so the two can never be assembled differently. Pure.
+ */
+export function needsYouWork(base: ToolWork, cancels: number, toolRequestsOverdue: number): ToolWork {
+  return { ...base, cancels, toolRequestsOverdue };
+}
+
+/**
+ * Why Home may not show a calm "Nothing needs you" (D16): stale chain data,
+ * or chain freshness that could not be read at all. Null when it may. Pure.
+ */
+export function calmStateBlocker(health: { stale: { lagSeconds: number | null } | null; unreadable: boolean }): string | null {
+  if (health.stale) return staleChainSentence(health.stale);
+  if (health.unreadable) return "Can't confirm: chain data freshness could not be read (disputes and rulings may be missing)";
+  return null;
+}
+
+/** Tool requests past their answer deadline (`firstResponseDueAt`). Pure. */
+export function overdueToolRequests<T extends { firstResponseDueAt: string }>(rows: readonly T[], now: number = Date.now()): T[] {
+  return rows.filter((row) => {
+    const at = Date.parse(row.firstResponseDueAt);
+    return !Number.isNaN(at) && at < now;
+  });
+}
+
+/**
+ * "oldest due in 71h" / "oldest overdue by 3h": the open call dispute closest
+ * to its decision deadline (`decisionDueAt`). Null when none is open. Pure.
+ */
+export function oldestCallDisputeDue(rows: readonly { state: string; decisionDueAt: string }[], now: number = Date.now()): string | null {
+  const due = rows
+    .filter((row) => row.state === "OPEN")
+    .map((row) => Date.parse(row.decisionDueAt))
+    .filter((at) => !Number.isNaN(at));
+  if (due.length === 0) return null;
+  const left = Math.min(...due) - now;
+  const hours = (ms: number) => (ms < 3_600_000 ? `${Math.max(1, Math.floor(ms / 60_000))} min` : `${Math.floor(ms / 3_600_000)}h`);
+  return left > 0 ? `oldest due in ${hours(left)}` : `oldest overdue by ${hours(-left)}`;
 }
 
 function pct(share: number): string {

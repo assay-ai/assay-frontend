@@ -20,10 +20,10 @@ import type { Money } from "@/interfaces";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import { getSlaWindow } from "@/services/provider-sla-windows.service";
 import { cn } from "@/utils";
-import { formatMoney } from "@/utils/money";
 
 import { DISPUTE_TIMEOUT_DAYS, describeDisputeError } from "./dispute";
-import { ARBITER_TARGET_SECONDS, lossBasis, lossOf, penaltyTimeline, type PenaltyRow } from "./model";
+import { ARBITER_TARGET_SECONDS, lossBasis, lossOf, penaltyTimeline, penaltyTitle, type PenaltyRow } from "./model";
+import { penaltyMoney } from "./money";
 import { failureSentence } from "./sentences";
 
 /** The arbiter's target (Business #21), in days, for the sentences below. */
@@ -58,6 +58,19 @@ export function WindowRange({ windowId, className }: { windowId: string | null |
       Window <UtcTime value={window.data.openedAt} /> – <UtcTime value={window.data.closedAt ?? window.data.deadlineAt} />
     </span>
   );
+}
+
+/**
+ * The penalty's title — tool and window ("get_weather, Oct 14 – Oct 15") —
+ * read from the case and its window. Never an id.
+ */
+export function usePenaltyTitle(row: PenaltyRow | null, detail: SlashProposalCaseDetail | null): string | null {
+  const windowId = detail?.proposal.windowId ?? null;
+  const window = useWindowRange(windowId);
+  if (!row) return null;
+  if (row.proposalId && !detail) return null;
+  if (windowId && window.isLoading) return detail?.proposal.toolName ?? "Penalty";
+  return penaltyTitle({ toolName: detail?.proposal.toolName ?? null, window: window.data ?? null, proposedAt: row.proposedAt });
 }
 
 /** The one date that matters for this row, with a live countdown when it is a deadline. */
@@ -103,14 +116,14 @@ export function DeadlineChip({ row }: { row: PenaltyRow }) {
 export function HeadlineAmount({ row }: { row: PenaltyRow }) {
   const loss = lossOf(row);
   if (!loss) {
-    return <span className="font-mono text-mono-13 text-03 line-through">{formatMoney(row.amount)}</span>;
+    return <span className="font-mono text-mono-13 text-03 line-through">{penaltyMoney(row.amount)}</span>;
   }
   const executed = row.closedAs === "executed";
   return (
     <span className="flex flex-wrap items-baseline gap-x-1.5">
       <span className="text-body-13 text-02">{executed ? "You lost" : "You would lose"}</span>
-      <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(loss)}</span>
-      <span className="text-body-xs text-03">of a {formatMoney(lossBasis(row))} penalty</span>
+      <span className="font-mono text-mono-13 font-semibold text-01">{penaltyMoney(loss)}</span>
+      <span className="text-body-xs text-03">of a {penaltyMoney(lossBasis(row))} penalty</span>
     </span>
   );
 }
@@ -136,12 +149,12 @@ export function PenaltyRowCard({
   /** Set when the only thing missing is the stake wallet: offer to connect it instead of a dead button. */
   onConnect?: () => void;
 }) {
-  const toolName = detail?.proposal.toolName ?? null;
+  const title = usePenaltyTitle(row, detail);
   return (
     <li className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:gap-5">
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="truncate text-label-md text-01">{toolName ?? (row.proposalId ? "Loading…" : "Penalty")}</span>
+          <span className="truncate text-label-md text-01">{title ?? "Loading…"}</span>
           <StatusChip status={statusKeyOf(row, nowSeconds)} />
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-body-13 text-02">
@@ -198,18 +211,18 @@ export function LossSentence({ row }: { row: PenaltyRow }) {
     <div className="flex flex-col gap-3">
       <p className="text-body-13 text-01">
         {executed ? "Of this " : "If it is executed, of this "}
-        {formatMoney(basis)} penalty <span className="font-semibold">{formatMoney(split.taken)}</span>{" "}
-        {executed ? "left" : "leaves"} your stake: {formatMoney(split.agent)} to the buyers whose calls failed and{" "}
-        {formatMoney(split.platform)} to Assay. The other {formatMoney(split.neverTaken)} is never taken.
+        {penaltyMoney(basis)} penalty <span className="font-semibold">{penaltyMoney(split.taken)}</span>{" "}
+        {executed ? "left" : "leaves"} your stake: {penaltyMoney(split.agent)} to the buyers whose calls failed and{" "}
+        {penaltyMoney(split.platform)} to Assay. The other {penaltyMoney(split.neverTaken)} is never taken.
       </p>
       <MoneySplit
         segments={[
-          { label: "To the buyers whose calls failed", value: SLASH_AGENT_BPS, amount: formatMoney(split.agent), tone: "teal" },
-          { label: "To Assay", value: SLASH_PLATFORM_BPS, amount: formatMoney(split.platform), tone: "indigo" },
+          { label: "To the buyers whose calls failed", value: SLASH_AGENT_BPS, amount: penaltyMoney(split.agent), tone: "teal" },
+          { label: "To Assay", value: SLASH_PLATFORM_BPS, amount: penaltyMoney(split.platform), tone: "indigo" },
           {
             label: "Never taken (stays in your stake)",
             value: 10_000 - SLASH_AGENT_BPS - SLASH_PLATFORM_BPS,
-            amount: formatMoney(split.neverTaken),
+            amount: penaltyMoney(split.neverTaken),
             tone: "neutral",
           },
         ]}
@@ -242,7 +255,7 @@ export function PenaltyDrawer({
   onConnect?: () => void;
 }) {
   const open = row !== null;
-  const toolName = detail?.proposal.toolName ?? null;
+  const title = usePenaltyTitle(row, detail);
   const failures = detail?.failuresByRule ?? [];
   const totalFailures = failures.reduce((sum, f) => sum + f.count, 0);
   const topAgent = [...(detail?.failuresByAgent ?? [])].sort((a, b) => b.count - a.count)[0];
@@ -252,9 +265,9 @@ export function PenaltyDrawer({
         {row ? (
           <>
             <SheetHeader className="tablet:pt-5">
-              <SheetTitle className="pr-8">{toolName ? `Why ${toolName} got a penalty` : "Why this penalty"}</SheetTitle>
+              <SheetTitle className="pr-8">{title ? `Why this penalty: ${title}` : "Why this penalty"}</SheetTitle>
               <SheetDescription>
-                {lossOf(row) ? `${row.closedAs === "executed" ? "You lost" : "You would lose"} ${formatMoney(lossOf(row))} · ` : null}
+                {lossOf(row) ? `${row.closedAs === "executed" ? "You lost" : "You would lose"} ${penaltyMoney(lossOf(row))} · ` : null}
                 {detail?.proposal.windowId ? <WindowRange windowId={detail.proposal.windowId} /> : "proposed "}
                 {detail?.proposal.windowId ? null : <UtcTime value={row.proposedAt} />}
               </SheetDescription>
@@ -414,9 +427,9 @@ export function DisputeSheet({
             <div className="flex flex-col gap-0.5">
               <dt className="text-label-13 text-01">If the arbiter upholds it</dt>
               <dd className="text-02">
-                You lose <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(loss)}</span> of your
-                stake ({formatMoney(split?.agent)} to the buyers whose calls failed, {formatMoney(split?.platform)} to
-                Assay); the other {formatMoney(split?.neverTaken)} of the penalty is never taken. It can be taken from <UtcTime value={row.executableAt} />, or as soon as it is upheld if
+                You lose <span className="font-mono text-mono-13 font-semibold text-01">{penaltyMoney(loss)}</span> of your
+                stake ({penaltyMoney(split?.agent)} to the buyers whose calls failed, {penaltyMoney(split?.platform)} to
+                Assay); the other {penaltyMoney(split?.neverTaken)} of the penalty is never taken. It can be taken from <UtcTime value={row.executableAt} />, or as soon as it is upheld if
                 that is later.
               </dd>
             </div>

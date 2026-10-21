@@ -4,12 +4,8 @@ import type {
   ProviderCallsExportQuery,
   ProviderEarnings,
   ProviderEarningsQuery,
-  ProviderQuality,
-  ProviderQualityQuery,
   ProviderReconciliation,
   ProviderReconciliationQuery,
-  ProviderTraffic,
-  ProviderTrafficQuery,
 } from "@/interfaces";
 
 import { ApiError } from "@/libs/ApiClient";
@@ -17,6 +13,7 @@ import { demoEnabled } from "@/libs/demo/demo-api";
 import { demoCallsCsv } from "@/libs/demo/fixtures-provider-calls";
 
 import { api } from "./api";
+import { sharedRead } from "./shared-reads";
 import { getChains } from "./chains.service";
 import { pickDisplayAsset, storedDisplayAsset } from "./display-asset";
 
@@ -28,40 +25,6 @@ import { pickDisplayAsset, storedDisplayAsset } from "./display-asset";
  * wants every bucket in one response. `from` and `to` are required on all
  * four, ISO-8601, `from` inclusive and `to` exclusive.
  */
-
-/**
- * `GET /providers/me/traffic` — call volume bucketed by UTC calendar day.
- *
- * Every status is zero-filled in every bucket, so a series never gains or
- * loses a line mid-chart. Both latency fields are always `null` today: there
- * is no per-day latency source, and the rolling snapshot on the profile is a
- * different quantity.
- *
- * The traffic report also takes an optional `agentId` filter and the response's
- * `agentBreakdown` — see `ProviderTrafficQuery`/`ProviderAgentTraffic`. Both
- * ride the same request; there is no second endpoint.
- */
-export function getProviderTraffic(query: ProviderTrafficQuery): Promise<ProviderTraffic> {
-  return api.get<ProviderTraffic>(
-    "/providers/me/traffic",
-    query as unknown as Record<string, unknown>
-  );
-}
-
-/**
- * `GET /providers/me/quality`.
- *
- * `from`/`to` scope **only** `verdictMix` and `totalCalls`. The three rates
- * come off the registry snapshot and carry its own rolling window — 24h for
- * availability, 7d for quality. Labelling all five with one date range would
- * be wrong about three of them.
- */
-export function getProviderQuality(query: ProviderQualityQuery): Promise<ProviderQuality> {
-  return api.get<ProviderQuality>(
-    "/providers/me/quality",
-    query as unknown as Record<string, unknown>
-  );
-}
 
 /**
  * `GET /providers/me/earnings` — earned vs platform fee vs withheld, grouped
@@ -87,7 +50,7 @@ export async function getProviderEarnings(query: ProviderEarningsQuery): Promise
     // with an error page.
     const multiple = error instanceof ApiError && error.code === "PROVIDER_MULTIPLE_ASSETS";
     if (!multiple || asset) throw error;
-    const { chains } = await getChains();
+    const { chains } = await sharedRead(["chains"], getChains, 60_000);
     const fallback = pickDisplayAsset(
       chains.map((chain) => chain.settlementAsset),
       storedDisplayAsset()
@@ -105,19 +68,26 @@ let earningAssets: { at: number; value: Promise<string[]> } | null = null;
  * one, else `[]` (one asset, nothing to choose).
  *
  * Each settlement asset is asked about by name, because the unnamed question
- * is the one the API refuses. Memoised for a few seconds: one screen fires
- * several earnings requests at once and they must all name the same asset.
+ * is the one the API refuses: one request per settlement asset. Kept a minute
+ * in the app's query cache (`sharedRead`), so moving between the provider
+ * screens does not ask again; without the app's cache, a few seconds here.
+ * The window ends on the minute, so reads within it are the same request.
  */
 export function providerEarningAssets(): Promise<string[]> {
+  return sharedRead(["provider", "earning-assets"], memoisedEarningAssets, 60_000);
+}
+
+function memoisedEarningAssets(): Promise<string[]> {
   const now = Date.now();
   if (!earningAssets || now - earningAssets.at > 10_000) {
-    earningAssets = { at: now, value: lookUpEarningAssets(new Date(now)).catch(() => []) };
+    const minute = new Date(Math.floor(now / 60_000) * 60_000);
+    earningAssets = { at: now, value: lookUpEarningAssets(minute).catch(() => []) };
   }
   return earningAssets.value;
 }
 
 async function lookUpEarningAssets(now: Date): Promise<string[]> {
-  const { chains } = await getChains();
+  const { chains } = await sharedRead(["chains"], getChains, 60_000);
   const candidates = [...new Set(chains.map((chain) => chain.settlementAsset))];
   if (candidates.length < 2) return [];
   const window = {

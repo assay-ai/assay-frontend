@@ -26,7 +26,7 @@ function authorizeIntent(
         name: "Assay Settlement",
         version: "2",
         chainId: "46630",
-        verifyingContract: "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41",
+        verifyingContract: "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f",
       },
       types: {
         AuthorizeDelegate: [
@@ -55,7 +55,7 @@ function authorizeIntent(
   } as DelegateIntent;
 }
 
-const ESCROW = "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41";
+const ESCROW = "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f";
 const DOMAIN = { chainId: "46630", verifyingContract: ESCROW };
 const EXPECTED = {
   domain: DOMAIN,
@@ -84,6 +84,8 @@ describe("submitRelayedDelegation", () => {
       submitRelayedDelegation(authorizeIntent(), signer, EXPECTED, submit),
     ).resolves.toBe(RELAYED);
     expect(signer.signTypedData).toHaveBeenCalledTimes(1);
+    // The Privy confirmation is always shown for AuthorizeDelegate (R-WEB-5).
+    expect(signer.signTypedData.mock.calls[0][1]).toEqual({ showWalletUIs: true });
     expect(submit.mock.calls[0][0]).toEqual({
       payer: PAYER,
       delegate: DELEGATE,

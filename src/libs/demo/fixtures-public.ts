@@ -8,7 +8,7 @@ import type {
 } from "@/services/public-explorer.service";
 
 import { DEMO_NOW_MS } from "./demo-clock";
-import { EXPLORE_FIXTURES } from "./fixtures-explore";
+import { demoCategoryOf, EXPLORE_FIXTURES } from "./fixtures-explore";
 import type { DemoFixture } from "./fixtures";
 
 /**
@@ -45,6 +45,14 @@ function publicTool(row: CatalogueTool): PublicTool {
     id: row.id,
     name: row.name,
     description: row.description,
+    summary: row.summary,
+    version: row.version,
+    versions: row.versions.map((v) => ({ ...v })),
+    deprecatedMajors: [...row.deprecatedMajors],
+    replacementToolId: row.replacementToolId,
+    replacementName: row.replacementName,
+    replacementMajor: row.replacementMajor,
+    replacementVersion: row.replacementVersion,
     tier: row.tier,
     providerCount: row.providerCount,
     fromPrice: row.fromPrice,
@@ -52,8 +60,15 @@ function publicTool(row: CatalogueTool): PublicTool {
     pricingMode: row.pricingMode,
     routable: row.routable,
     settlementChains: row.routable ? (row.settlementChains ?? null) : null,
-    freeCallsPerDay: row.freeCallsPerDay ?? null,
-    paidBindings: row.paidBindings ?? 0,
+    prices: (row.prices ?? []).map((entry) => ({
+      chainId: entry.chainId,
+      price: entry.price,
+      providerId: entry.providerId,
+      listings: entry.listings,
+    })),
+    freeCallsPerDay: row.freeCallsPerDay,
+    paidBindings: row.paidBindings,
+    category: demoCategoryOf(row.name),
   };
 }
 
@@ -172,6 +187,11 @@ export const PUBLIC_FIXTURES: readonly DemoFixture[] = [
   },
   {
     method: "GET",
+    match: /^\/public\/catalogue\/tools\/[^/]+\/versions$/,
+    body: (path) => signedIn(`/catalogue/tools/${path.split("/")[4] ?? ""}/versions`),
+  },
+  {
+    method: "GET",
     match: "/public/catalogue/providers",
     body: () => ({
       providers: (signedIn<{ providers: CatalogueProvider[] }>("/catalogue/providers")?.providers ?? []).map(
@@ -193,6 +213,7 @@ export const PUBLIC_FIXTURES: readonly DemoFixture[] = [
           name: tool.name,
           pricingMode: tool.pricingMode,
           price: tool.price,
+          promisedFailureRate: tool.promisedFailureRate,
           freeCallsPerAgentPerDay: tool.freeCallsPerAgentPerDay ?? null,
         })),
       };

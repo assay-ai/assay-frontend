@@ -1,3 +1,4 @@
+import { DISPUTE_HOLD_MINUTES } from "@/libs/dispute-deadlines";
 import {
   DEMO_ASSET,
   DEMO_BUYER_ACCOUNT,
@@ -23,9 +24,9 @@ import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
  * were not charged, five of which are still in flight, against a $25 deposit
  * two days ago. The prices are the catalogue's (see {@link TOOLS}), so most
  * calls cost a fraction of a cent and one `deep_research` costs $1.20. Every
- * screen from `/overview` to `/funding/escrow` draws from the tables below, so
+ * screen from `/` to the Funding escrow drawer draws from the tables below, so
  * a figure a viewer reads twice reads the same twice — the held total on
- * `/overview` is the sum of the holds on `/funding`, which is the sum of the
+ * `/` is the sum of the holds on `/funding`, which is the sum of the
  * five in-flight calls in `/tool-calls`, which is the `held` on the
  * `/balances` fixture in `fixtures.ts` (58.7823 available, 1.2177 held, 60.00
  * total; see {@link demoBuyerLedger}) — plus, under a `?debt=` picture with an
@@ -43,7 +44,7 @@ import { advanceFreshStage, freshAtLeast, freshStage } from "./fresh-account";
  *
  *  - the rows in a response always sum to that response's own totals, whatever
  *    the grouping, because both come from the same fold;
- *  - a day, a week and a month are three different answers — the `/overview`
+ *  - a day, a week and a month are three different answers — the `/`
  *    chart draws seven different bars and `/guarantee` prints three different
  *    months;
  *  - `/withheld` for a window equals that window's `withheldTotal`, so the
@@ -135,7 +136,7 @@ interface DemoCall {
  * The next six are today's finished calls and are **the same six calls as
  * today's row in the day model**: one `deep_search` (the owed one, $1.20), one
  * `geocode`, one `ocr_extract`, three `price_quote` — 1.2077 listed, 0.0077
- * charged and 1.20 owed. Counting the rows on `/overview` and reading the
+ * charged and 1.20 owed. Counting the rows on `/` and reading the
  * "Today" tile above them has to give the same answer.
  *
  * The last three are the three that were not charged — 1.20 + 0.0012 + 0.012 =
@@ -396,7 +397,7 @@ const NO_ACTIVITY: DayShape = { counts: {} };
  * head the finished half of {@link CALLS}, and the figure `/spend-policy`'s
  * usage block reports as spent today.
  *
- * Changing a number here moves `/overview`, `/spend`, `/guarantee`,
+ * Changing a number here moves `/`, `/spend`, `/guarantee`,
  * `/statements` and `/limits` together, which is the point of there being one
  * table rather than five.
  */
@@ -642,6 +643,8 @@ function wireFigures(bucket: Bucket) {
     owedCalls: bucket.owedCalls,
     inProgressTotal: minorMoney(0),
     inProgressCalls: 0,
+    // The day-by-day model is paid calls only.
+    freeCalls: 0,
     failRate: bucket.calls === 0 ? null : bucket.refundedCalls / bucket.calls,
   };
 }
@@ -720,24 +723,28 @@ function withheldBody(query: Record<string, unknown>) {
     into.withheld += bucket.withheld;
   }
 
+  // Every bucket, zero-filled and in the API's order. The demo model has no
+  // served-but-never-collected call, so Not collected is always zero here.
   const buckets = [
-    verification.withheld > 0
-      ? {
-          bucket: "FAILED_VERIFICATION",
-          label: "failed verification",
-          calls: verification.refundedCalls,
-          amount: minorMoney(verification.withheld),
-        }
-      : null,
-    platform.withheld > 0
-      ? {
-          bucket: "PROVIDER_OR_PLATFORM_ERROR",
-          label: "provider or platform error",
-          calls: platform.refundedCalls,
-          amount: minorMoney(platform.withheld),
-        }
-      : null,
-  ].filter((row): row is NonNullable<typeof row> => row !== null);
+    {
+      bucket: "FAILED_VERIFICATION",
+      label: "failed verification",
+      calls: verification.refundedCalls,
+      amount: minorMoney(verification.withheld),
+    },
+    {
+      bucket: "PROVIDER_OR_PLATFORM_ERROR",
+      label: "provider or platform error",
+      calls: platform.refundedCalls,
+      amount: minorMoney(platform.withheld),
+    },
+    {
+      bucket: "NOT_COLLECTED",
+      label: "not collected (the charge was cancelled or never taken)",
+      calls: 0,
+      amount: minorMoney(0),
+    },
+  ];
 
   return {
     withheld: [
@@ -785,6 +792,7 @@ function toolCallRow(call: DemoCall) {
     charged: money(call.charged),
     forfeited: false,
     debt: demoCallDebt(call).debt,
+    refundedByReport: false,
     verdict: call.verdict,
     createdAt: minutesAgo(callAge(call)),
   };
@@ -927,6 +935,141 @@ export function demoBuyerLedger(): { balance: number; held: number; available: n
   const inFlightMinor = CALLS.filter(inFlight).reduce((sum, call) => sum + Math.round(Number(listedPrice(call)) * 1e6), 0);
   const held = inFlightMinor + demoDebtHeldMinor();
   return { balance: BALANCE_MINOR, held, available: BALANCE_MINOR - held };
+}
+
+/** The demo's deposits, newest first: 68.70 funded in four settled deposits, one expired. */
+function demoDeposits() {
+  return [
+        {
+          id: "dep_7f2a91c4",
+          status: "SETTLED",
+          statusReason: null,
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("25.00"),
+          settledAmount: money("25.00"),
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef:
+            "0xf20b628bc89d1a3aff88340b307546e0d336e46de2371d76c8220f3c3cfcdd9c",
+          expiresAt: minutesAgo(2878),
+          createdAt: minutesAgo(2880),
+        },
+        {
+          id: "dep_1c08b5de",
+          status: "EXPIRED",
+          statusReason: "no transfer observed before the intent expired",
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("5.00"),
+          settledAmount: null,
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef: null,
+          expiresAt: minutesAgo(7198),
+          createdAt: minutesAgo(7200),
+        },
+        {
+          id: "dep_4b6e2039",
+          status: "SETTLED",
+          statusReason: null,
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("15.00"),
+          settledAmount: money("15.00"),
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef:
+            "0xeb5d904fe5ffc1f642f0dff25a94a2e865b86cfd18c55190be121e376e4691e0",
+          expiresAt: minutesAgo(12958),
+          createdAt: minutesAgo(12960),
+        },
+        {
+          /*
+            The two older deposits are what the earlier months were spent out of
+            — 68.70 funded against the 8.69 charged since August (mostly the
+            odd $1.20 deep_research call) leaves the 60.00 the ledger reports
+            today, give or take a cent.
+          */
+          id: "dep_a3d97f61",
+          status: "SETTLED",
+          statusReason: null,
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("12.00"),
+          settledAmount: money("12.00"),
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef:
+            "0x4c1db62bcbe5d1408fdb6596b0cbe8fc94011c60341e6f14a1cc8514d468a40d",
+          expiresAt: minutesAgo(33118),
+          createdAt: minutesAgo(33120),
+        },
+        {
+          id: "dep_60e4c827",
+          status: "SETTLED",
+          statusReason: null,
+          agentId: PROD_AGENT,
+          agentAccount: DEMO_BUYER_ACCOUNT,
+          requestedAmount: money("16.70"),
+          settledAmount: money("16.70"),
+          chainId: DEMO_CHAIN_ID,
+          chainTxRef:
+            "0x5c38c68d25f54d688ef3980cdc1a944b475793cb15cd470bab412c0efa7c9c0e",
+          expiresAt: minutesAgo(66238),
+          createdAt: minutesAgo(66240),
+        },
+];
+}
+
+/** The demo's withdrawal history: one request, cancelled before it was claimed. */
+function demoWithdrawals() {
+  return [
+    {
+      id: "wdr_5e81c0a2",
+      chainId: DEMO_CHAIN_ID,
+      account: DEMO_BUYER_ACCOUNT,
+      status: "CANCELLED",
+      requested: money("10.00"),
+      received: null,
+      requestedAt: minutesAgo(14_460),
+      claimableAt: minutesAgo(14_400),
+      closedAt: minutesAgo(14_430),
+      requestTransactionHash: "0x8d0e5f7a1c2b3d4e5f60718293a4b5c6d7e8f9011a2b3c4d5e6f708192a3b4c5",
+      closeTransactionHash: "0x1f2e3d4c5b6a79880716253443526170899a8b7c6d5e4f3021e2d3c4b5a69788",
+    },
+  ];
+}
+
+/**
+ * `GET /statements/balance` for one month. The demo's call history is wider
+ * than its deposits, so the balances are walked back from today's escrow
+ * balance (closing at an instant = balance − deposits since + paid since):
+ * every month adds up and the current one matches the escrow.
+ */
+function demoStatementBalance(query: Record<string, unknown>) {
+  const { from, to } = windowOf(query);
+  const now = Date.now();
+  const deposited = (fromMs: number, toMs: number) =>
+    demoDeposits()
+      .filter((d) => d.status === "SETTLED" && Date.parse(d.createdAt) >= fromMs && Date.parse(d.createdAt) < toMs)
+      .reduce((sum, d) => sum + Number(d.settledAmount!.amount), 0);
+  const paid = (fromMs: number, toMs: number) =>
+    fromMs >= toMs
+      ? 0
+      : Number(summaryBody({ from: new Date(fromMs).toISOString(), to: new Date(toMs).toISOString(), groupBy: "tool" }).totals.chargedTotal.amount);
+  const closingAt = (at: number) => BALANCE_MINOR - deposited(at, now) + paid(at, now);
+  const end = Math.min(to, now);
+  const check =
+    to > now
+      ? { escrowBalance: demoMoneyMinor(BALANCE_MINOR), stillSettling: demoMoneyMinor(0), difference: demoMoneyMinor(0), matches: true, observedAt: minutesAgo(1) }
+      : null;
+  return {
+    account: DEMO_BUYER_ACCOUNT,
+    chainId: DEMO_CHAIN_ID,
+    opening: demoMoneyMinor(closingAt(from)),
+    deposits: demoMoneyMinor(deposited(from, end)),
+    withdrawals: demoMoneyMinor(0),
+    paid: demoMoneyMinor(paid(from, end)),
+    closing: demoMoneyMinor(closingAt(end)),
+    check,
+  };
 }
 
 /** Minor units as a wire amount in the demo asset (`money()` takes major ones). */
@@ -1124,7 +1267,47 @@ function receiptBody(call: DemoCall) {
     evaluatedAt: call.verdict ? settled : null,
     settledAt: charged ? settled : null,
     holdReleasedAt: charged ? null : settled,
+    // The dispute hold: a charged call's payment is held for an hour after it settles.
+    collectableAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES) : null,
+    disputeWindowEndsAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES + 1) : null,
+    // "Report a bad result" is accepted for 7 days after the call settled; null when it can't be reported.
+    disputeFilingClosesAt: charged && settled ? minutesAgo(Math.max(callAge(call) - 1, 0) - 7 * 1440) : null,
+    // The backend's own answer: a report now is refunded in full while the hold has more than a minute left.
+    refundableIfReportedNow:
+      charged && settled !== null && Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000 > Date.now(),
+    // When that lapses: the collectable time minus the 60 s guard.
+    refundableIfReportedUntil:
+      charged && settled !== null && Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000 > Date.now()
+        ? new Date(Date.parse(minutesAgo(Math.max(callAge(call) - 1, 0) - HOLD_MINUTES)) - 60_000).toISOString()
+        : null,
   };
+}
+
+/** The dispute hold: how long a charged call's payment stays held after it settles. */
+const HOLD_MINUTES = DISPUTE_HOLD_MINUTES;
+
+/** The catalogue tool id of each tool this account calls (fixtures-explore's ids). */
+export const DEMO_BUYER_TOOL_IDS = Object.fromEntries(TOOL_IDS.map((key) => [key, TOOLS[key].id])) as Record<ToolId, string>;
+export type DemoBuyerTool = ToolId;
+
+/**
+ * A charged, passed call of `tool` that settled `settledMinutesAgo` ago, as
+ * its receipt — for the "Report a bad result" pictures (inside and after the
+ * 1-hour hold) and the calls behind the demo's reports. Not in the calls list:
+ * it would change every total the other screens agree on.
+ */
+export function demoSettledReceipt(intentId: string, tool: ToolId, settledMinutesAgo: number) {
+  return receiptBody({
+    intentId,
+    toolId: tool,
+    minutesAgo: settledMinutesAgo + 1,
+    charged: TOOLS[tool].price,
+    status: "SETTLED",
+    verdict: "PASS",
+    classification: "DATA_RESULT",
+    reasonCode: null,
+    score: 0.91,
+  });
 }
 
 /* ---------------------------------------------------------------- verdicts */
@@ -1219,9 +1402,41 @@ function evidenceBody(call: DemoCall) {
 
 const PROD_AGENT = "9d4c1f80-6b2e-4a57-8c31-7e05b9a2d146";
 const STAGING_AGENT = "b71e05a3-2c48-4d90-9f61-38ca7d0b2e54";
+
+/** Labels renamed on this tab (`PATCH /agents/:id`); a reload starts over. */
+const demoAgentLabels = new Map<string, string>();
+
+/** Forgets the renames (tests). */
+export function resetDemoAgentLabels(): void {
+  demoAgentLabels.clear();
+}
+
+function demoAgents(): { agentId: string; label: string; agentAccount: string; chainId: string; credentialCount: number }[] {
+  const rows = [
+    {
+      agentId: PROD_AGENT,
+      label: "prod",
+      agentAccount: DEMO_BUYER_ACCOUNT,
+      chainId: DEMO_CHAIN_ID,
+      credentialCount: 2,
+    },
+    ...(freshStage()
+      ? []
+      : [
+          {
+            agentId: STAGING_AGENT,
+            label: "staging",
+            agentAccount: `${DEMO_CHAIN_ID}:${STAGING_ADDRESS}`,
+            chainId: DEMO_CHAIN_ID,
+            credentialCount: 1,
+          },
+        ]),
+  ];
+  return rows.map((row) => ({ ...row, label: demoAgentLabels.get(row.agentId) ?? row.label }));
+}
 const STAGING_ADDRESS = "0x2F5d8B17aC93e04f6b1D7c8A05E2f9B34cD61a70";
 /**
- * The prod agent's own payment key (bound with `agent-cli bind`), authorised to
+ * The prod agent's own payment key (made by `npx -y @goassay-ai/mcp@<V> enable-paid`), authorised to
  * pay below. A function, not a constant: `fixtures.ts` imports this file, so
  * `DEMO_CHAIN_ID` is not initialised yet while this module evaluates.
  */
@@ -1263,6 +1478,8 @@ function freshEscrow() {
     windowStartedAt: null,
     windowSeconds: 86400,
     observedAt: minutesAgo(1),
+    // No lifetime line on a first-run escrow.
+    lifetime: null,
   };
 }
 
@@ -1295,6 +1512,7 @@ function debtEscrow() {
     windowStartedAt: readable ? minutesAgo(540) : null,
     windowSeconds: 86400,
     observedAt: readable ? minutesAgo(1) : null,
+    lifetime: null,
     ...(readable ? savedEscrowCaps() : {}),
   };
 }
@@ -1316,8 +1534,10 @@ function freshCredentials(agentId: string) {
       {
         id: "cred_fresh",
         agentId,
-        name: "My agent",
-        prefix: "assay_live_f00d",
+        name: "Key 1",
+        issuedVia: "API_KEY",
+        oauthClient: null,
+        prefix: "assay_sk_live_f00d",
         scopes: ["tools:call"],
         lastUsedAt: stage === "call" ? null : minutesAgo(3),
         expiresAt: null,
@@ -1376,6 +1596,17 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     match: "/tool-calls",
     body: (_path, query) => {
       const { from, to } = windowOf(query);
+      // `refundable=true`: the receipt's own flag, so the list and the receipt agree.
+      if (query.refundable === "true" || query.refundable === true) {
+        return {
+          items: freshStage()
+            ? []
+            : CALLS.map((call) => ({ call, receipt: receiptBody(call) }))
+                .filter(({ receipt }) => receipt.refundableIfReportedNow)
+                .map(({ call, receipt }) => ({ ...toolCallRow(call), refundableIfReportedUntil: receipt.refundableIfReportedUntil })),
+          pageInfo: { nextCursor: null, hasMore: false },
+        };
+      }
       return {
         // A fresh demo account has no calls in its history yet.
         items: freshStage() ? [] : CALLS.filter((call) => withinWindow(call, from, to)).map(toolCallRow),
@@ -1431,87 +1662,25 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/deposits",
-    override: "always",
     body: () => freshDeposits() ?? ({
-      items: [
-        {
-          id: "dep_7f2a91c4",
-          status: "SETTLED",
-          statusReason: null,
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("25.00"),
-          settledAmount: money("25.00"),
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef:
-            "0xf20b628bc89d1a3aff88340b307546e0d336e46de2371d76c8220f3c3cfcdd9c",
-          expiresAt: minutesAgo(2878),
-          createdAt: minutesAgo(2880),
-        },
-        {
-          id: "dep_1c08b5de",
-          status: "EXPIRED",
-          statusReason: "no transfer observed before the intent expired",
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("5.00"),
-          settledAmount: null,
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef: null,
-          expiresAt: minutesAgo(7198),
-          createdAt: minutesAgo(7200),
-        },
-        {
-          id: "dep_4b6e2039",
-          status: "SETTLED",
-          statusReason: null,
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("15.00"),
-          settledAmount: money("15.00"),
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef:
-            "0xeb5d904fe5ffc1f642f0dff25a94a2e865b86cfd18c55190be121e376e4691e0",
-          expiresAt: minutesAgo(12958),
-          createdAt: minutesAgo(12960),
-        },
-        {
-          /*
-            The two older deposits are what the earlier months were spent out of
-            — 68.70 funded against the 8.69 charged since August (mostly the
-            odd $1.20 deep_research call) leaves the 60.00 the ledger reports
-            today, give or take a cent.
-          */
-          id: "dep_a3d97f61",
-          status: "SETTLED",
-          statusReason: null,
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("12.00"),
-          settledAmount: money("12.00"),
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef:
-            "0x4c1db62bcbe5d1408fdb6596b0cbe8fc94011c60341e6f14a1cc8514d468a40d",
-          expiresAt: minutesAgo(33118),
-          createdAt: minutesAgo(33120),
-        },
-        {
-          id: "dep_60e4c827",
-          status: "SETTLED",
-          statusReason: null,
-          agentId: PROD_AGENT,
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          requestedAmount: money("16.70"),
-          settledAmount: money("16.70"),
-          chainId: DEMO_CHAIN_ID,
-          chainTxRef:
-            "0x5c38c68d25f54d688ef3980cdc1a944b475793cb15cd470bab412c0efa7c9c0e",
-          expiresAt: minutesAgo(66238),
-          createdAt: minutesAgo(66240),
-        },
-      ],
+      items: demoDeposits(),
       pageInfo: { nextCursor: null, hasMore: false },
     }),
+  },
+
+  /* ---------------------------------------------------------- withdrawals */
+  {
+    // One request the buyer cancelled: no money moved, so `lifetime.withdrawn` stays 0.
+    method: "GET",
+    match: "/withdrawals",
+    body: () => ({ items: freshStage() ? [] : demoWithdrawals() }),
+  },
+
+  /* ----------------------------------------------------------- statements */
+  {
+    method: "GET",
+    match: "/statements/balance",
+    body: (_path, query) => ({ items: freshStage() ? [] : [demoStatementBalance(query)] }),
   },
 
   /* ----------------------------------------------------------- buyer debt */
@@ -1525,7 +1694,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/escrow",
-    override: "always",
     body: () => freshEscrow() ?? debtEscrow() ?? ({
       exists: true,
       chainReadable: true,
@@ -1552,6 +1720,12 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       windowStartedAt: minutesAgo(540),
       windowSeconds: 86400,
       observedAt: minutesAgo(1),
+      // The chain's lifetime counters: 68.70 deposited (`/deposits`) − 8.70 spent − 0 withdrawn = the balance.
+      lifetime: {
+        deposited: money("68.70"),
+        spent: demoMoneyMinor(68_700_000 - BALANCE_MINOR),
+        withdrawn: money("0"),
+      },
       // A demo account ceiling change shows until reload.
       ...savedEscrowCaps(),
     }),
@@ -1574,7 +1748,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           maxCallsPerHour: 400,
           maxCallsPerMinute: 30,
           maxSpendPerHour: money("2.00"),
-          allowedTools: null,
           requireApprovalAbove: money("1.50"),
           paused: false,
           changedBy: "ops@northwind-labs.example",
@@ -1593,7 +1766,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           maxCallsPerHour: 400,
           maxCallsPerMinute: 30,
           maxSpendPerHour: money("2.00"),
-          allowedTools: null,
           requireApprovalAbove: money("1.50"),
           paused: false,
           changedBy: "ops@northwind-labs.example",
@@ -1612,7 +1784,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           maxCallsPerHour: null,
           maxCallsPerMinute: null,
           maxSpendPerHour: null,
-          allowedTools: null,
           requireApprovalAbove: money("1.50"),
           paused: false,
           changedBy: "ops@northwind-labs.example",
@@ -1631,7 +1802,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           maxCallsPerHour: null,
           maxCallsPerMinute: null,
           maxSpendPerHour: null,
-          allowedTools: null,
           requireApprovalAbove: null,
           paused: false,
           changedBy: "ops@northwind-labs.example",
@@ -1667,7 +1837,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       /*
         The enforcement side's own counters, which the Limits screen prefers
         over `/receipts/summary`. Both are folded out of the SAME day model the
-        summary is, so "spent today" here and today's bar on `/overview` cannot
+        summary is, so "spent today" here and today's bar on `/` cannot
         drift apart: 0.0077 today, 2.5094 this month.
       */
       const todayStart = utcDayStart(Date.now());
@@ -1692,7 +1862,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         maxCallsPerHour: 400,
         maxCallsPerMinute: 30,
         maxSpendPerHour: money("2.00"),
-        allowedTools: null,
         requireApprovalAbove: money("1.50"),
         paused: false,
         changedBy: "ops@northwind-labs.example",
@@ -1713,6 +1882,22 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
 
   /* --------------------------------------------------- agents, credentials */
   {
+    // Rename in place: answers the agent as renamed, and the label is kept
+    // for the tab so the next `GET /agents` (Connect, Overview, Explore) shows
+    // it too.
+    method: "PATCH",
+    match: /^\/agents\/[^/]+$/,
+    body: (path, _query, data) => {
+      const agentId = segment(path);
+      const label = typeof data?.label === "string" ? data.label.trim() : "";
+      const agent = demoAgents().find((row) => row.agentId === agentId);
+      // Like the server: an agent that is not this account's is not found.
+      if (!agent) throw new ApiError("ACCOUNT_AGENT_NOT_FOUND", "Agent not found", 404, path);
+      if (label) demoAgentLabels.set(agentId, label);
+      return { ...agent, label: label || agent.label };
+    },
+  },
+  {
     method: "GET",
     match: "/agents",
     /*
@@ -1721,28 +1906,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       keeps the agent ids stable, which is what the credentials fixture below
       reads back out of its own path.
     */
-    override: "always",
     body: () => ({
-      items: [
-        {
-          agentId: PROD_AGENT,
-          label: "prod",
-          agentAccount: DEMO_BUYER_ACCOUNT,
-          chainId: DEMO_CHAIN_ID,
-          credentialCount: 2,
-        },
-        ...(freshStage()
-          ? []
-          : [
-        {
-          agentId: STAGING_AGENT,
-          label: "staging",
-          agentAccount: `${DEMO_CHAIN_ID}:${STAGING_ADDRESS}`,
-          chainId: DEMO_CHAIN_ID,
-          credentialCount: 1,
-        },
-            ]),
-      ],
+      items: demoAgents(),
       pageInfo: { nextCursor: null, hasMore: false },
     }),
   },
@@ -1762,7 +1927,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
             id: staging ? "cred_9c41" : "cred_2f70",
             agentId,
             name: staging ? "staging runner" : "orchestrator",
-            prefix: staging ? "assay_live_8fd2" : "assay_live_31ac",
+            issuedVia: "API_KEY",
+            oauthClient: null,
+            prefix: staging ? "assay_sk_live_8fd2" : "assay_sk_live_31ac",
             scopes: ["tools:call"],
             lastUsedAt: minutesAgo(staging ? 820 : 2),
             expiresAt: null,
@@ -1779,7 +1946,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
                   id: "cred_0b19",
                   agentId,
                   name: "CI deploy",
-                  prefix: "assay_live_a47e",
+                  issuedVia: "API_KEY",
+                  oauthClient: null,
+                  prefix: "assay_sk_live_a47e",
                   scopes: ["tools:call"],
                   lastUsedAt: minutesAgo(24000),
                   expiresAt: null,
@@ -1800,7 +1969,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     // no payment key yet, so it shows the bind step.
     method: "GET",
     match: "/escrow/delegates",
-    override: "always",
     body: () => (freshStage() ? { account: DEMO_BUYER_ACCOUNT, delegates: [], tightenDelaySeconds: demoTightenDelaySeconds() } : ({
       account: DEMO_BUYER_ACCOUNT,
       // `?tighten=1h` shows an escrow that delays a tightening (D-21); 0 by default.
@@ -1814,6 +1982,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           // Five days left, so the demo shows the "permission ends soon" chip and Renew.
           validUntil: new Date(DEMO_NOW_MS + 5 * 86_400_000 + 3_600_000).toISOString(),
           status: "ACTIVE",
+          // Nothing signed is waiting to be collected; the 24-hour cap holds what was spent.
+          unsettled: { count: 0, amount: money("0"), largest: money("0"), windowNeeds: money(SPENT_IN_WINDOW), redeemableUntil: null },
           // A demo "Sign and save" shows its new limits until reload.
           ...savedDelegateCaps(prodDelegate()),
         },
@@ -1833,9 +2003,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
       return {
         id: "cred_demo_new",
         agentId: segment(path, 1),
-        name: typeof name === "string" && name.trim() ? name.trim() : "My agent",
-        prefix: "assay_live_d3m0",
-        token: "assay_live_d3m0_demo-key-shown-once-not-a-real-secret",
+        name: typeof name === "string" && name.trim() ? name.trim() : "Key 1",
+        prefix: "assay_sk_live_d3m0",
+        token: "assay_sk_live_d3m0_demo-key-shown-once-not-a-real-secret",
         scopes: ["tools:call"],
         createdAt: new Date().toISOString(),
       };
@@ -1844,7 +2014,6 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/escrow/unsettled",
-    override: "always",
     body: () => ({ account: DEMO_BUYER_ACCOUNT, unsettled: null, tightenDelaySeconds: demoTightenDelaySeconds() }),
   },
 
@@ -1862,7 +2031,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           resourceType: "session",
           resourceId: "ses_41d8",
           before: null,
-          after: { credential: "assay_live_31ac" },
+          after: { credential: "assay_sk_live_31ac" },
           createdAt: minutesAgo(1440),
         },
         {
@@ -1951,61 +2120,28 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/notifications/unread-count",
-    body: () => ({ count: freshStage() ? 0 : 2 }),
+    body: () => ({ count: freshStage() ? 0 : demoNotifications().filter((n) => !n.readAt).length }),
   },
   {
     method: "GET",
     match: "/notifications",
-    // A fresh demo account has had no alerts.
-    body: () => (freshStage() ? { items: [], pageInfo: { nextCursor: null, hasMore: false } } : {
-      items: [
-        {
-          id: "ntf_4c17",
-          event: "velocity.anomaly",
-          severity: "WARNING",
-          title: "geocode_place ran at eight times its usual rate for 20 minutes",
-          body: "34 calls between 09:10 and 09:30 UTC against a 7-day median of 4 in that window. Nothing was refused — the per-minute ceiling is 30 and the burst stayed under it.",
-          subjectType: "tool",
-          subjectId: TOOLS.geocode.id,
-          readAt: null,
-          createdAt: minutesAgo(96),
-        },
-        {
-          id: "ntf_2fa9",
-          event: "spend.threshold_crossed",
-          severity: "INFO",
-          title: "This month's spend passed 10% of the monthly spending limit",
-          body: "$2.5094 charged of a $25.00 cap. This is a notice, not a refusal — a limit is what refuses.",
-          subjectType: "spend_policy",
-          subjectId: "sp_northwind",
-          readAt: minutesAgo(1300),
-          createdAt: minutesAgo(1440),
-        },
-        {
-          id: "ntf_8b30",
-          event: "payment_intent.refunded",
-          severity: "INFO",
-          title: "A deep_research call failed our checks — $1.20 was not charged",
-          body: "The result set was empty where the rules require at least two rows. The hold was released; your balance never moved.",
-          subjectType: "payment_intent",
-          subjectId: "b90f2c48-3a71-4e69-85d0-2f4a6c19e7b5",
-          readAt: null,
-          createdAt: minutesAgo(1558),
-        },
-        {
-          id: "ntf_7d65",
-          event: "deposit.credited",
-          severity: "INFO",
-          title: "$25.00 credited",
-          body: "Observed on Robinhood Chain testnet and credited in full. The credited amount is what we observed on chain.",
-          subjectType: "deposit",
-          subjectId: "dep_7f2a91c4",
-          readAt: minutesAgo(2870),
-          createdAt: minutesAgo(2878),
-        },
-      ],
-      pageInfo: { nextCursor: null, hasMore: false },
-    }),
+    // A fresh demo account has had no alerts. `unreadOnly` is honoured, as the server does.
+    body: (_path, query) => {
+      if (freshStage()) return { items: [], pageInfo: { nextCursor: null, hasMore: false } };
+      const unreadOnly = String(query?.unreadOnly) === "true";
+      return { items: demoNotifications().filter((n) => !unreadOnly || !n.readAt), pageInfo: { nextCursor: null, hasMore: false } };
+    },
+  },
+  {
+    method: "PATCH",
+    match: /^\/notifications\/[^/]+\/read$/,
+    body: (path) => {
+      // Any id: the demo feed also carries tool-set and contract notices made elsewhere.
+      const id = path.split("/")[2] ?? "";
+      demoReadIds.add(id);
+      const row = demoNotifications().find((n) => n.id === id);
+      return row ?? { id, readAt: new Date().toISOString() };
+    },
   },
   {
     method: "GET",
@@ -2071,3 +2207,61 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
     ],
   },
 ];
+
+/** Alerts the demo visitor marked read (Dismiss, opening "See all alerts"), for this page load. */
+const demoReadIds = new Set<string>();
+
+/** Test hook: forget what was marked read. */
+export function resetDemoNotificationsRead(): void {
+  demoReadIds.clear();
+}
+
+function demoNotifications(): { id: string; readAt: string | null; [key: string]: unknown }[] {
+  const rows: { id: string; readAt: string | null; [key: string]: unknown }[] = [
+    {
+      id: "ntf_4c17",
+      event: "velocity.anomaly",
+      severity: "WARNING",
+      title: "geocode_place ran at eight times its usual rate for 20 minutes",
+      body: "34 calls between 09:10 and 09:30 UTC against a 7-day median of 4 in that window. Nothing was refused — the per-minute ceiling is 30 and the burst stayed under it.",
+      subjectType: "tool",
+      subjectId: TOOLS.geocode.id,
+      readAt: null,
+      createdAt: minutesAgo(96),
+    },
+    {
+      id: "ntf_2fa9",
+      event: "spend.threshold_crossed",
+      severity: "INFO",
+      title: "This month's spend passed 10% of the monthly spending limit",
+      body: "$2.5094 charged of a $25.00 cap. This is a notice, not a refusal — a limit is what refuses.",
+      subjectType: "spend_policy",
+      subjectId: "sp_northwind",
+      readAt: minutesAgo(1300),
+      createdAt: minutesAgo(1440),
+    },
+    {
+      id: "ntf_8b30",
+      event: "payment_intent.refunded",
+      severity: "INFO",
+      title: "A deep_research call failed our checks — $1.20 was not charged",
+      body: "The result set was empty where the rules require at least two rows. The hold was released; your balance never moved.",
+      subjectType: "payment_intent",
+      subjectId: "b90f2c48-3a71-4e69-85d0-2f4a6c19e7b5",
+      readAt: null,
+      createdAt: minutesAgo(1558),
+    },
+    {
+      id: "ntf_7d65",
+      event: "deposit.credited",
+      severity: "INFO",
+      title: "$25.00 credited",
+      body: "Observed on Robinhood Chain testnet and credited in full. The credited amount is what we observed on chain.",
+      subjectType: "deposit",
+      subjectId: "dep_7f2a91c4",
+      readAt: minutesAgo(2870),
+      createdAt: minutesAgo(2878),
+    },
+  ];
+  return rows.map((row) => (demoReadIds.has(row.id) ? { ...row, readAt: row.readAt ?? new Date().toISOString() } : row));
+}

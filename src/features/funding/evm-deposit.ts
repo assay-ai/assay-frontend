@@ -138,9 +138,9 @@ export async function approveEvmDeposit(input: EvmDepositInput & { nativeWei: bi
   }
   let hash: `0x${string}`;
   if (signer.kind === "external") {
-    hash = (await signer.signAndSend(approve)) as `0x${string}`;
+    hash = (await signer.signAndSend(approve, { showWalletUIs: true })) as `0x${string}`;
   } else {
-    const signedApprove = await signer.signTransaction(approve);
+    const signedApprove = await signer.signTransaction(approve, { showWalletUIs: true });
     if (signedApprove.namespace !== "eip155") {
       throw new Error(`Expected an eip155 signature, got ${signedApprove.namespace}.`);
     }
@@ -173,12 +173,13 @@ export async function sendEvmDepositFor(input: EvmDepositInput & { nativeWei?: b
     );
   }
   if (signer.kind === "external") {
-    const transactionHash = (await signer.signAndSend(deposit)) as `0x${string}`;
+    const transactionHash = (await signer.signAndSend(deposit, { showWalletUIs: true })) as `0x${string}`;
     input.onSubmitted?.(transactionHash);
     await waitForSuccess(chainId, transactionHash);
     return { kind: "broadcast", transactionHash };
   }
-  const signed = await signer.signTransaction(deposit);
+  // The Privy confirmation is always shown for a deposit (spec R-WEB-5).
+  const signed = await signer.signTransaction(deposit, { showWalletUIs: true });
   if (signed.namespace !== "eip155") {
     throw new Error(`Expected an eip155 signature, got ${signed.namespace}.`);
   }

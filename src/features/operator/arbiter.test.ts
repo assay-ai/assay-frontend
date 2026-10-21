@@ -27,7 +27,7 @@ function dispute(n: number, opts: Partial<ArbiterDispute> = {}): ArbiterDispute 
     proposalId: `p-${n}`,
     providerId: "prov",
     chainId: "eip155:46630",
-    caseStatus: "UNDER_REVIEW",
+    caseStatus: "PROPOSED",
     caseChainStatus: "DISPUTED",
     penaltyAmount: "1000000",
     reservedAmount: "1000000",
@@ -228,7 +228,7 @@ describe("approvedArbiterBlocks", () => {
       approvedArbiterBlocks([
         row({}),
         row({ id: "appr-2", status: "PENDING" }),
-        row({ id: "appr-3", action: "slash.suspend" }),
+        row({ id: "appr-3", action: "slash.compensated" }),
         row({ id: "appr-4", payload: { chainId: "eip155:46630" } }),
       ]),
     ).toEqual([

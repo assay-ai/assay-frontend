@@ -15,8 +15,17 @@ export interface ReadinessCredential {
   id: string;
   name: string;
   revokedAt: string | null;
+  /** An OAuth grant's rolling expiry: past it, the credential is signed out. */
+  expiresAt?: string | null;
   lastUsedAt: string | null;
   delegateAccount?: string | null;
+}
+
+/** A live credential with a payment key, and that key's pay permission as the chain lists it. */
+export interface BoundKey {
+  credential: ReadinessCredential;
+  /** `null` when the chain lists no permission for the key (or was not read). */
+  grant: EscrowDelegate | null;
 }
 
 export interface ReadinessEscrow {
@@ -30,8 +39,14 @@ export interface ReadinessEscrow {
 
 export interface ReadinessInput {
   agentAccount?: string | null;
+  /** `undefined` = not read yet: the answer is "loading", never "no key". */
   credentials: readonly ReadinessCredential[] | undefined;
+  /** The keys' read failed (so `credentials` stays `undefined`). */
+  credentialsUnreadable?: boolean;
+  /** `undefined` = not read yet. */
   delegates: readonly EscrowDelegate[] | undefined;
+  /** The pay permissions' read failed. */
+  delegatesUnreadable?: boolean;
   /** `undefined` = not read yet (or the read failed: say so with `escrowUnreadable`). */
   escrow: ReadinessEscrow | null | undefined;
   escrowUnreadable?: boolean;
@@ -61,35 +76,87 @@ export interface AgentReadiness {
   /** Latest `lastUsedAt` over the agent's live keys. */
   lastCallAt: string | null;
   liveCredentials: ReadinessCredential[];
-  /** The live key bound to a payment key, if any. */
+  /**
+   * The live key bound to a payment key that the agent pays through: of every
+   * bound key (one per machine, R-MU-11), the first one allowed to pay with
+   * room left, else the first allowed to pay, else the first bound.
+   */
   boundCredential: ReadinessCredential | null;
   grant: EscrowDelegate | null;
+  /** Every live credential with a payment key, in list order. */
+  boundCredentials: BoundKey[];
   /** The chain serves free calls only: no pay permission, spend or renewal applies. */
   freeOnly: boolean;
+  /**
+   * The keys (or a bound key's pay permission) are not read yet: draw a
+   * skeleton. A card that said "No key" here sent people to make a key they
+   * already had.
+   */
+  loading: boolean;
 }
 
 const RECENT_MS = 24 * 3600 * 1000;
+
+/** The agent card's line while it has no payment key (owner decision D14). */
+export const PAID_BY_INVITATION_SENTENCE = "Free calls work. Paid calls are by invitation during testnet.";
 
 function positive(money: Money | null | undefined): boolean {
   return Boolean(money && BigInt(money.amount || "0") > 0n);
 }
 
 export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()): AgentReadiness {
-  const all = input.credentials ?? [];
-  const live = all.filter((c) => !c.revokedAt);
+  if (input.credentials === undefined) {
+    return {
+      lastCallAt: null,
+      liveCredentials: [],
+      boundCredential: null,
+      grant: null,
+      boundCredentials: [],
+      freeOnly: Boolean(input.freeOnlyChain),
+      loading: !input.credentialsUnreadable,
+      status: "checking",
+      sentence: input.credentialsUnreadable
+        ? "We could not read its keys just now. This does not change what it can call."
+        : "Checking its keys…",
+      next: null,
+    };
+  }
+  const all = input.credentials;
+  const live = all.filter((c) => credentialIsLive(c, nowMs));
   const lastCallAt =
     live
       .map((c) => c.lastUsedAt)
       .filter((v): v is string => Boolean(v))
       .sort()
       .at(-1) ?? null;
-  const bound = live.find((c) => c.delegateAccount) ?? null;
-  const grant = bound?.delegateAccount ? findDelegation(input.delegates, bound.delegateAccount) : null;
-  const base = { lastCallAt, liveCredentials: live, boundCredential: bound, grant, freeOnly: Boolean(input.freeOnlyChain) };
+  const boundCredentials: BoundKey[] = live
+    .filter((c) => c.delegateAccount)
+    .map((credential) => ({ credential, grant: findDelegation(input.delegates, credential.delegateAccount!) }));
+  // "Paid calls are refused" only when no bound key may pay (R-MU-11).
+  const paying = (b: BoundKey) => b.grant?.status === "ACTIVE";
+  const chosen =
+    boundCredentials.find((b) => paying(b) && !capReached(b.grant!)) ?? boundCredentials.find(paying) ?? boundCredentials[0] ?? null;
+  const bound = chosen?.credential ?? null;
+  const grant = chosen?.grant ?? null;
+  const base = {
+    lastCallAt,
+    liveCredentials: live,
+    boundCredential: bound,
+    grant,
+    boundCredentials,
+    freeOnly: Boolean(input.freeOnlyChain),
+    loading: false,
+  };
+
+  // A bound key's permission decides "can it pay": wait for it rather than
+  // flash "Let it pay" at an agent that already can.
+  if (bound && input.delegates === undefined && !input.delegatesUnreadable && supportsDelegation(input.agentAccount) && !input.freeOnlyChain) {
+    return { ...base, loading: true, status: "checking", sentence: "Checking whether it can pay…", next: null };
+  }
 
   if (live.length === 0) {
     return all.length > 0
-      ? { ...base, status: "revoked", sentence: "Every key of this agent is revoked, so it cannot call tools. Create a new key to use it again.", next: "key" }
+      ? { ...base, status: "revoked", sentence: "Every key of this agent is revoked or signed out, so it cannot call tools. Create a new key to use it again.", next: "key" }
       : { ...base, status: "no-key", sentence: "This agent has no key yet, so it cannot call tools. Create one to connect it.", next: "key" };
   }
   if (input.freeOnlyChain) {
@@ -137,7 +204,8 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     return {
       ...base,
       status: "ready",
-      sentence: "Free calls work now. Add funds to let it pay for calls.",
+      // Without a payment key, funds alone do not let it pay (D14).
+      sentence: bound ? "Free calls work now. Add funds to let it pay for calls." : PAID_BY_INVITATION_SENTENCE,
       next: "funds",
     };
   }
@@ -150,10 +218,13 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     };
   }
   if (!bound) {
+    // D14: the payment key needs assay-mcp, which is not published; paying is
+    // by invitation during testnet. Not a warning: nothing here is the
+    // person's to fix.
     return {
       ...base,
-      status: "needs-authorisation",
-      sentence: "Free calls work. To pay, the agent needs its own payment key: run agent-cli bind on its machine.",
+      status: "ready",
+      sentence: PAID_BY_INVITATION_SENTENCE,
       next: "bind",
     };
   }
@@ -167,7 +238,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       next: "authorise",
     };
   }
-  if (positive(grant.maxPerWindow) && BigInt(grant.spentInWindow.amount || "0") >= BigInt(grant.maxPerWindow.amount)) {
+  if (capReached(grant)) {
     return {
       ...base,
       status: "cap-reached",
@@ -184,6 +255,15 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
     };
   }
   return { ...base, status: recent(lastCallAt, nowMs) ? "paying" : "ready", sentence: readySentence(lastCallAt, nowMs), next: null };
+}
+
+/** Not revoked, and not past an OAuth grant's expiry. */
+export function credentialIsLive(credential: Pick<ReadinessCredential, "revokedAt" | "expiresAt">, nowMs: number): boolean {
+  return !credential.revokedAt && (!credential.expiresAt || Date.parse(credential.expiresAt) > nowMs);
+}
+
+function capReached(grant: EscrowDelegate): boolean {
+  return positive(grant.maxPerWindow) && BigInt(grant.spentInWindow.amount || "0") >= BigInt(grant.maxPerWindow.amount);
 }
 
 function recent(lastCallAt: string | null, nowMs: number): boolean {

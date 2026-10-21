@@ -17,16 +17,6 @@ export const CLAIM_TYPE_SENTENCE: Record<SlashDisputeClaimType, string> = {
   OTHER: "Other",
 };
 
-export const CLAIM_TYPE_ORDER: readonly SlashDisputeClaimType[] = [
-  "PLATFORM_MAPPING_CHANGE",
-  "AGENT_GRIEFING",
-  "POLICY_DEFECT",
-  "INSUFFICIENT_SAMPLE",
-  "UPSTREAM_INDUCED",
-  "DECLARED_INCIDENT",
-  "OTHER",
-];
-
 /** True for a value this app knows is one of the seven — narrows a free-form `Dispute.claimType` string. */
 export function isSlashClaimType(value: string): value is SlashDisputeClaimType {
   return Object.prototype.hasOwnProperty.call(CLAIM_TYPE_SENTENCE, value);

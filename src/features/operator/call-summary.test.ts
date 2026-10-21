@@ -27,13 +27,13 @@ describe("callSummary", () => {
       functionName: "setBlocked",
       args: ["0x9F3c1111111111111111111111111111111F36c", true],
       contract: "config",
-      to: "0xCf6592A3a053d9714D16d176A86fA039Fe7B6a43",
+      to: "0xBF2DE8e24254Cf6f2313Ab4B5CeBE8066bBdb0e5",
       chainId: "eip155:46630",
       signer: "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4",
     });
     expect(Object.fromEntries(lines.map((l) => [l.label, l.value]))).toEqual({
       Action: "Block wallet 0x9F3c…F36c on chain",
-      Contract: "Config contract 0xCf65…6a43",
+      Contract: "Config contract 0xBF2D…b0e5",
       Chain: "Robinhood Chain testnet",
       "Signed by": "Arbiter key 0x5B38…ddC4",
       Funds: "None sent. The signer's wallet pays the network fee.",

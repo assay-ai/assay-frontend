@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { publicApi } from "./public-api";
 import { getPublicFeatures } from "./public-features.service";
 
 /**
@@ -84,5 +84,5 @@ export interface PublicReserves {
  */
 export async function getPublicReserves(): Promise<PublicReserves | null> {
   if (!(await getPublicFeatures()).reserves) return null;
-  return api.get<PublicReserves>("/public/reserves");
+  return publicApi.get<PublicReserves>("/public/reserves");
 }

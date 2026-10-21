@@ -6,7 +6,7 @@ import type { Eip1193Like } from "./injected-send";
  * The two EVM pieces of the operator console's wallet sign-in and directory.
  *
  * Here because `src/libs/chains/` is the only place a chain SDK may be
- * imported (`eslint.config.mjs`, `x402/chain-sdk-boundary`).
+ * imported (`eslint.config.mjs`, `assay/chain-sdk-boundary`).
  */
 
 const ADDRESS_SHAPE = /^0x[0-9a-fA-F]{40}$/;

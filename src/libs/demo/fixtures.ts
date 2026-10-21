@@ -1,10 +1,14 @@
 import { demoMinutesAgo } from "./demo-clock";
 import { BUYER_FIXTURES, demoBuyerLedger, demoMoneyMinor } from "./fixtures-buyer";
+import { compositeFixtures } from "./fixtures-composite";
 import { freshAtLeast, freshStage } from "./fresh-account";
 import { EXPLORE_FIXTURES } from "./fixtures-explore";
 import { OPERATOR_FIXTURES } from "./fixtures-operator";
 import { PROVIDER_FIXTURES, providerNotifications } from "./fixtures-provider";
 import { PUBLIC_FIXTURES } from "./fixtures-public";
+import { contractNotices } from "./fixtures-refusals-contracts";
+import { T4_FIXTURES, t4Notifications } from "./fixtures-t4";
+import { DEMO_WEATHER_TOOLSET, demoToolsetNotifications, TOOLSET_FIXTURES } from "./fixtures-toolsets";
 
 /**
  * The stage set — DEMO ONLY. See `demo-api.ts` for the rules these obey.
@@ -20,14 +24,6 @@ export interface DemoFixture {
   readonly match: string | RegExp;
   /** `data` is the request body of a write (empty for a read), so a stand-in can echo it. */
   readonly body: (path: string, query: Record<string, unknown>, data?: Record<string, unknown>) => unknown;
-  /**
-   * Vestigial. It marked the routes whose real answer had to be overridden
-   * rather than merely filled; every fixture now answers before the network
-   * reaches the API at all, so the distinction no longer has anywhere to
-   * apply. Kept because three fixture files set it, and removing it is a
-   * rename across all of them for no behaviour change.
-   */
-  readonly override?: "empty" | "always";
 }
 
 /** The one chain this demo settles on — the same id `demo-chains.ts` serves. */
@@ -71,7 +67,7 @@ export function justNow(): string {
  * Order matters only where two entries could match one path: the first match
  * wins, so a specific path must be listed before a regex that also covers it.
  */
-export const DEMO_FIXTURES: readonly DemoFixture[] = [
+const SINGLE_ROUTE_FIXTURES: readonly DemoFixture[] = [
   {
     /*
       One organization's notifications serve two consoles. The provider Inbox
@@ -83,13 +79,20 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
     match: "/notifications",
     body: (path, query) => {
       const events = ([] as unknown[]).concat(query.event ?? []);
-      if (events.length > 0 && events.every((event) => typeof event === "string" && event.startsWith("provider."))) {
-        return providerNotifications();
+      if (events.length > 0 && events.some((event) => typeof event === "string" && event.startsWith("provider."))) {
+        // T3: the provider's tool_version.* notices ride along (the Inbox asks for them by name).
+        const provider = providerNotifications() as { items: unknown[]; pageInfo: unknown };
+        return { ...provider, items: [...t4Notifications("PROVIDER"), ...contractNotices("PROVIDER"), ...provider.items] };
       }
       const buyer = BUYER_FIXTURES.find((fixture) => fixture.method === "GET" && fixture.match === "/notifications");
-      return buyer ? buyer.body(path, query) : { items: [], pageInfo: { nextCursor: null, hasMore: false } };
+      const feed = (buyer ? buyer.body(path, query) : { items: [], pageInfo: { nextCursor: null, hasMore: false } }) as { items: unknown[]; pageInfo: unknown };
+      // `?connect=update-available`: a tool set "prod" uses has a new version (FR-17).
+      return { ...feed, items: [...demoToolsetNotifications(), ...t4Notifications("BUYER"), ...contractNotices("BUYER", DEMO_WEATHER_TOOLSET), ...feed.items] };
     },
   },
+  // T4 first: it answers a few paths the files below also match (receipts, the public handle, catalogues).
+  ...T4_FIXTURES,
+  ...TOOLSET_FIXTURES,
   ...BUYER_FIXTURES,
   ...EXPLORE_FIXTURES,
   ...PROVIDER_FIXTURES,
@@ -109,7 +112,6 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/balances",
-    override: "always",
     body: () => {
       // A fresh demo account (?fresh=) has nothing until its first deposit
       // (stage "bind" opens a $20 escrow), matching the escrow fixture.
@@ -139,3 +141,14 @@ export const DEMO_FIXTURES: readonly DemoFixture[] = [
     },
   },
 ];
+
+/** One single-route fixture's answer, or `undefined` when none matches (first match wins, as in `demo-api.ts`). */
+function singleRouteAnswer(path: string, query: Record<string, unknown> = {}): unknown {
+  const fixture = SINGLE_ROUTE_FIXTURES.find(
+    (f) => f.method === "GET" && (f.match instanceof RegExp ? f.match.test(path) : f.match === path),
+  );
+  return fixture?.body(path, query);
+}
+
+/** The composite reads first: each is made of the single-route answers below it. */
+export const DEMO_FIXTURES: readonly DemoFixture[] = [...compositeFixtures(singleRouteAnswer), ...SINGLE_ROUTE_FIXTURES];

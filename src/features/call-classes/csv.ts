@@ -21,6 +21,15 @@ import type { Money } from "@/interfaces";
  * decimals` — fixed by the export service and documented on
  * `ProviderCallsExport`. The header line is parsed rather than assumed, so a
  * reordering upstream is a missing column here and not a silently shifted one.
+ *
+ * ## The money columns
+ *
+ * `provider_amount` is `0` on a passed call nothing was collected for
+ * (`PROVIDER_FORFEITED`, `PAID_UNCOLLECTED`), and the forgone share on a
+ * not-credited one (`PAID_UNCREDITED`, a voided buyer debt included), so its
+ * sum per class is the earnings report's `withheldByClass`. `platform_fee` is
+ * `0` on those passed-but-uncollected rows and on a voided debt; a REFUNDED or
+ * VOIDED call still carries its split. Fees are summed over credited rows only.
  */
 
 export interface CallRow {
@@ -230,10 +239,6 @@ export function pendingNote(rows: CallRow[]): string {
 export const PENDING_PAYMENT_NOTE =
   "the payment is still being checked: settled, no credit recorded for you yet · not paid to you yet";
 
-/** PENDING, when the rows are not at hand to say which kind it is. */
-export const PENDING_NOTE =
-  "not resolved yet: the response or its payment is still being checked · not paid to you yet";
-
 // ── Call classes ───────────────────────────────────────────────────────────
 
 /**
@@ -257,7 +262,7 @@ export const PENDING_NOTE =
  * PAID_UNCOLLECTED is one the buyer did not settle within 30 days, written off:
  * not paid and no fee taken. The buyer still owes it (its paid calls stay
  * refused) and the provider is paid if it settles later; the platform never
- * pays providers. A legacy platform absorb lands here too, and nobody owes that.
+ * pays providers.
  * PROVIDER_FORFEITED sits beside them: a rail-B call whose voucher was not
  * collected because the provider's stake was below the minimum or it was
  * blocked. Nobody was charged or credited and no fee was taken; the `reason`
@@ -470,35 +475,6 @@ export function foldNotCredited(rows: CallRow[]): {
 }
 
 // ── Traffic, by day and tool ───────────────────────────────────────────────
-
-export interface DayToolCount {
-  /** `YYYY-MM-DD`, UTC. */
-  day: string;
-  /** Calls per `toolId`. */
-  byTool: Record<string, number>;
-}
-
-/**
- * Call volume per UTC day per tool, for the last `days` days ending on
- * `anchor` — zero-filled, so a quiet day is a gap in the bars and not a
- * missing column.
- */
-export function foldTraffic(rows: CallRow[], anchor: Date, days: number): DayToolCount[] {
-  const end = Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate());
-  const out: DayToolCount[] = [];
-  for (let i = days - 1; i >= 0; i--) {
-    out.push({ day: new Date(end - i * 86_400_000).toISOString().slice(0, 10), byTool: {} });
-  }
-  const index = new Map(out.map((d) => [d.day, d]));
-
-  for (const row of rows) {
-    const day = row.createdAt.slice(0, 10);
-    const bucket = index.get(day);
-    if (!bucket) continue;
-    bucket.byTool[row.toolId] = (bucket.byTool[row.toolId] ?? 0) + 1;
-  }
-  return out;
-}
 
 /** Calls made on one UTC day. */
 export function callsOnDay(rows: CallRow[], day: string): number {

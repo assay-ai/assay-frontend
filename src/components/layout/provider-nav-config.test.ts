@@ -5,7 +5,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   allProviderNavHrefs,
+  PROVIDER_EXPLAINER,
   PROVIDER_NAV_ITEMS,
+  PROVIDER_TOOLS_TABS,
   providerSectionFor,
   providerTitleFor,
 } from "./provider-nav-config";
@@ -32,7 +34,7 @@ describe("provider navigation", () => {
     expect(PROVIDER_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Home",
       "Inbox",
-      "Tools",
+      "Listings",
       "Penalties",
       "Money",
       "Stake",
@@ -53,15 +55,13 @@ describe("provider navigation", () => {
     const outside = consoleRoutes.filter(
       (route) => providerSectionFor(route) === null && !route.startsWith("/provider/setup"),
     );
-    // Retired URLs that only redirect elsewhere have no section; everything else does.
-    const redirectsOnly = ["/provider/view", "/provider/traffic", "/provider/flags", "/provider/listing-path"];
-    expect(outside.filter((route) => !redirectsOnly.includes(route))).toEqual([]);
+    expect(outside).toEqual([]);
   });
 
   it("picks the longest prefix", () => {
     expect(providerSectionFor("/provider")).toBe("home");
     expect(providerSectionFor("/provider/capital")).toBe("stake");
-    expect(providerSectionFor("/provider/capital/penalties")).toBe("penalties");
+    expect(providerSectionFor("/provider/call-disputes/view")).toBe("penalties");
     expect(providerSectionFor("/provider/bindings/view/settings")).toBe("tools");
     expect(providerSectionFor("/provider/policy-changes")).toBe("account");
     expect(providerSectionFor("/providers")).toBeNull();
@@ -70,7 +70,23 @@ describe("provider navigation", () => {
   it("titles pages for the phone bar", () => {
     expect(providerTitleFor("/provider")).toBe("Home");
     expect(providerTitleFor("/provider/bindings/new")).toBe("List a tool");
-    expect(providerTitleFor("/provider/bindings/view/quality")).toBe("Tool");
-    expect(providerTitleFor("/provider/cases/view")).toBe("Penalties");
+    expect(providerTitleFor("/provider/bindings/view/quality")).toBe("Listing");
+    expect(providerTitleFor("/provider/apis")).toBe("Your APIs");
+    expect(providerTitleFor("/provider/call-disputes/view")).toBe("Report");
+  });
+
+  it("uses one word per thing: Listings for bindings, Your APIs for provider tools, never Tools or binding", () => {
+    const labels = [
+      ...PROVIDER_NAV_ITEMS.map((item) => item.label),
+      ...PROVIDER_TOOLS_TABS.map((tab) => tab.label),
+      ...["/provider/bindings", "/provider/bindings/view", "/provider/apis", "/provider/apis/new"].map(providerTitleFor),
+    ];
+    expect(labels).toContain("Listings");
+    expect(labels).toContain("Your APIs");
+    expect(labels.filter((label) => /^Tools$|binding|own API/i.test(label))).toEqual([]);
+  });
+
+  it("links the business explainer to an existing route", () => {
+    expect(routesUnder(APP_DIR)).toContain(PROVIDER_EXPLAINER.href);
   });
 });

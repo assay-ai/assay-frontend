@@ -31,7 +31,8 @@ import { Field } from "@/components/ui/field";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { Select } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { chainDisplayName, durationWords } from "@/features/operator/call-summary";
+import { durationText } from "@/features/operator/arbiter";
+import { chainDisplayName } from "@/features/operator/call-summary";
 import { ContractCallAction } from "@/features/operator/contract-call-action";
 import {
   PARAM_GROUPS,
@@ -136,6 +137,8 @@ function ContractsScreen() {
 
   const refresh = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["operator", "contracts", chainId] });
+    // A new arbiter, a pause or a new slash split changes what the arbiter page reads too.
+    void queryClient.invalidateQueries({ queryKey: ["operator", "arbiter"] });
   }, [queryClient, chainId]);
 
   if (!isAdmin) {
@@ -247,7 +250,7 @@ function ContractsScreen() {
             description="How long a provider has to dispute a penalty before it can be taken."
             action={<Button size="sm" variant="secondary" onClick={() => setSheet("delay")}>Change</Button>}
           >
-            <p className="text-heading-sm tabular-nums text-01">{durationWords(data.slashDelaySeconds)}</p>
+            <p className="text-heading-sm tabular-nums text-01">{durationText(data.slashDelaySeconds)}</p>
           </SettingCard>
 
           <SettingCard
@@ -802,7 +805,7 @@ function ParamsSheet({ open, settings, deployment, onClose, onDone }: SheetProps
           return null;
         }
         return {
-          call: { functionName: "updateConfig", args: [checked.params, "0x0000000000000000000000000000000000000000"] },
+          call: { functionName: "updateConfig", args: [checked.params] },
           changes: changes.map((change) => ({
             label: change.critical ? <span className="text-danger-700">{change.label}</span> : change.label,
             before: change.before,
@@ -811,7 +814,7 @@ function ParamsSheet({ open, settings, deployment, onClose, onDone }: SheetProps
         };
       }}
       confirmation={(prepared) => {
-        const [params] = prepared.call.args as [ContractSettings["params"], string];
+        const [params] = prepared.call.args as [ContractSettings["params"]];
         const moved = (["treasury", "redeemer"] as const).filter((key) => params[key].toLowerCase() !== settings.params[key].toLowerCase());
         return moved.length > 0
           ? { acknowledge: `I checked the new ${moved.join(" and ")} address on a second screen, character by character` }
@@ -846,7 +849,7 @@ function ParamsSheet({ open, settings, deployment, onClose, onDone }: SheetProps
                 inputMode={field.kind === "address" ? "text" : "decimal"}
                 autoComplete="off"
                 spellCheck={false}
-                suffix={field.kind === "percent" ? "%" : field.kind === "money" ? settings.asset.symbol : field.kind === "days" ? "days" : undefined}
+                suffix={field.kind === "percent" ? "%" : field.kind === "money" ? "$" : field.kind === "days" ? "days" : undefined}
                 hint={
                   changed && field.kind !== "address"
                     ? `${field.help} Now ${paramText(field.key, settings.params, settings.asset)}.`
@@ -893,7 +896,7 @@ function DelaySheet({ open, settings, deployment, onClose, onDone }: SheetProps)
         }
         return {
           call: { functionName: "setSlashDelay", args: [BigInt(checked.seconds)] },
-          changes: [{ label: "Dispute window", before: durationWords(settings.slashDelaySeconds), after: durationWords(checked.seconds) }],
+          changes: [{ label: "Dispute window", before: durationText(settings.slashDelaySeconds), after: durationText(checked.seconds) }],
         };
       }}
       signLabel="Sign and save the window"
@@ -910,7 +913,7 @@ function DelaySheet({ open, settings, deployment, onClose, onDone }: SheetProps)
             setError(undefined);
           }}
           inputMode="numeric"
-          hint={`10 minutes to 22 days. Now ${durationWords(settings.slashDelaySeconds)}.`}
+          hint={`10 min to 528 h. Now ${settings.slashDelaySeconds % 3600 === 0 ? `${settings.slashDelaySeconds / 3600} h` : durationText(settings.slashDelaySeconds)}.`}
           error={error}
         />
         <Segmented value={unit} onValueChange={(next) => setUnit(next as DelayUnit)} aria-label="Unit">

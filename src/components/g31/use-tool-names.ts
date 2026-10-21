@@ -20,9 +20,8 @@ import { listTools, type CatalogueTool } from "@/services/tools.service";
  *
  * Every consumer goes through {@link nameOf}, which falls back to the id. So a
  * screen renders immediately with uuids and swaps in names when the catalogue
- * lands; and a catalogue that 500s, times out or is served by an older backend
- * without `GET /tools` leaves every screen exactly as it was before this
- * existed. `retry: false` for the same reason — a failed catalogue is a
+ * lands; and a catalogue that 500s or times out leaves every screen exactly
+ * as it was before this existed. `retry: false` for the same reason — a failed catalogue is a
  * cosmetic loss, not something to hammer the API over.
  *
  * `staleTime: Infinity` because the tool contracts are seeded and change on a

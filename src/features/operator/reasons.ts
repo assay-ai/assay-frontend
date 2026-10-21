@@ -24,13 +24,6 @@ export const UNBLOCK_REASONS: readonly ReasonOption[] = Object.freeze([
   OTHER,
 ]);
 
-export const SUSPEND_REASONS: readonly ReasonOption[] = Object.freeze([
-  { value: "PROPOSED_IN_ERROR", label: "Proposed in error", hint: "The measurement or the window was wrong." },
-  { value: "PLATFORM_DEFECT", label: "Our defect", hint: "Our mapping, checks or routing caused the failures." },
-  { value: "DUPLICATE_PROPOSAL", label: "Duplicate", hint: "Another penalty already covers this window." },
-  OTHER,
-]);
-
 export const OPERATOR_ADD_REASONS: readonly ReasonOption[] = Object.freeze([
   { value: "NEW_HIRE", label: "Joining the team" },
   { value: "ROLE_CHANGE", label: "Role change" },
@@ -52,10 +45,27 @@ export const OPERATOR_REMOVE_REASONS: readonly ReasonOption[] = Object.freeze([
   OTHER,
 ]);
 
+/** Publishing a contract version or making one current (P-10, P-11). */
+export const CONTRACT_REASONS: readonly ReasonOption[] = Object.freeze([
+  { value: "PLANNED_CHANGE", label: "Planned change", hint: "Part of the tool's roadmap." },
+  { value: "PROVIDER_REQUEST", label: "Providers asked", hint: "Providers asked for this field or change." },
+  { value: "BUYER_REQUEST", label: "Buyers asked", hint: "Agents need this field or change." },
+  { value: "FIX_CONTRACT", label: "Fix a mistake", hint: "The published contract was wrong." },
+  OTHER,
+]);
+
+/** Deprecating a contract major (P-12). */
+export const DEPRECATE_REASONS: readonly ReasonOption[] = Object.freeze([
+  { value: "REPLACED_BY_NEWER", label: "Newer version ready", hint: "Enough providers serve the newer version." },
+  { value: "REPLACED_BY_TOOL", label: "Another tool replaces it" },
+  { value: "UNSAFE_CONTRACT", label: "Unsafe to keep", hint: "The old version gives agents wrong or risky answers." },
+  OTHER,
+]);
+
 /** A reason code in words, from any vocabulary above; unknown codes are humanised. */
 export function reasonLabel(code: string | null | undefined): string {
   if (!code) return "";
-  for (const list of [BLOCK_REASONS, UNBLOCK_REASONS, SUSPEND_REASONS, OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS]) {
+  for (const list of [BLOCK_REASONS, UNBLOCK_REASONS, OPERATOR_ADD_REASONS, OPERATOR_CHANGE_REASONS, OPERATOR_REMOVE_REASONS, CONTRACT_REASONS, DEPRECATE_REASONS]) {
     const found = list.find((option) => option.value === code);
     if (found && found.value !== "OTHER") return found.label;
   }

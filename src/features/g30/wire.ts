@@ -80,9 +80,9 @@ export interface Receipt {
   withheld: Money;
   /**
    * SETTLED, but the provider caused the payment to fail and forfeited it: not
-   * charged, nobody paid. Optional: older backends do not send it.
+   * charged, nobody paid.
    */
-  forfeited?: boolean;
+  forfeited: boolean;
   /**
    * Buyer debt. `OUTSTANDING`: the payment could not be collected; the price
    * stays held and is charged once the payer signs a replacement voucher — paid
@@ -105,6 +105,22 @@ export interface Receipt {
   holdReleasedAt?: string | null;
   evaluatedAt?: string | null;
   settledAt?: string | null;
+  /** When the payment may be collected (the dispute hold ends). Null when the call has no hold. */
+  collectableAt?: string | null;
+  /** Report before this and an upheld dispute refunds the call in full; after it, a quality signal. */
+  disputeWindowEndsAt?: string | null;
+  /** "Report a bad result" is accepted until then; null when the call cannot be reported. */
+  disputeFilingClosesAt?: string | null;
+  /**
+   * Whether a report filed now is refunded in full if upheld: the backend's
+   * own filing predicate. The only source of a refund promise on a receipt.
+   */
+  refundableIfReportedNow?: boolean;
+  /**
+   * When `refundableIfReportedNow` lapses (the hold's collectable time minus
+   * the filing guard). Null when it is false or no end is known yet.
+   */
+  refundableIfReportedUntil?: string | null;
 }
 
 /* ------------------------------------------------------------------- summary */
@@ -134,6 +150,8 @@ export interface SummaryFigures {
   /** Calls not finished yet, at their listed price. */
   inProgressTotal: Money;
   inProgressCalls: number;
+  /** Calls listed at zero (free tier), counted in `calls`. */
+  freeCalls: number;
   failRate: number | null;
 }
 

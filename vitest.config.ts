@@ -16,6 +16,17 @@ import { defineConfig } from "vitest/config";
 */
 process.env.TZ = "UTC";
 
+/*
+  The suite tests the real app: the demo data layer stays off even when the
+  build environment turns it on (the demo deploy runs these tests with
+  NEXT_PUBLIC_DEMO_CHAINS set). Demo tests stub the flag themselves.
+*/
+delete process.env.NEXT_PUBLIC_DEMO_CHAINS;
+delete process.env.NEXT_PUBLIC_SHOW_KITCHEN_SINK;
+
+/* The pinned proxy version install commands carry; the app build requires it. */
+process.env.NEXT_PUBLIC_ASSAY_MCP_VERSION = "1.2.3";
+
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {

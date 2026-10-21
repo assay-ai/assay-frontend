@@ -25,14 +25,16 @@ import { routes } from "@/libs/routes";
 
 /** What each queued action does, in plain words. */
 const ACTION_LABEL: Readonly<Record<string, string>> = {
-  "slash.suspend": "Suspend a penalty (cancels it)",
-  "slash.sweep": "Decide every penalty with the same defect",
   "slash.compensated": "Record a pay-back and close the penalty",
+  "slash.record_execution": "Record an execution made on chain while the cancel waited",
+  "slash.repropose": "Propose an upheld penalty on chain again",
   "account.unblock": "Lift an account block",
   "operator.add": "Add an operator",
   "operator.change": "Raise someone's roles or limit, or take their Admin role away",
   "operator.remove": "Remove an operator who is an Admin",
   "arbiter.block": "Block a wallet on chain (the arbiter signs it)",
+  "tool_version.publish": "Publish a new version of a standard tool",
+  "tool.current_version": "Change the version of a tool agents get by default",
 };
 
 export function actionLabel(action: string): string {
@@ -41,14 +43,16 @@ export function actionLabel(action: string): string {
 
 /** The roles a second person must hold, per register code. At least one. */
 export const APPROVER_ROLES: Readonly<Record<string, readonly OperatorRole[]>> = {
-  "S-1": ["ADJ", "ADJL"],
-  "S-11": ["ADJ", "ADJL"],
   "S-5": ["ADJL", "TRE"],
+  "S-16": ["ADJL", "TRE"],
+  "S-17": ["ADJ", "ADJL"],
   "A-10": ["ADJL"],
   "A-12": ["OPS_ADMIN"],
   "A-13": ["OPS_ADMIN"],
   "A-14": ["OPS_ADMIN"],
   "A-11": ["ADJL"],
+  "P-10": ["POLA"],
+  "P-11": ["POLA"],
 };
 
 export function approverRolesFor(code: string): readonly OperatorRole[] | null {
@@ -108,7 +112,7 @@ export function rejectMode(
  * then falls back to the id, shortened.
  */
 export interface ApprovalContext {
-  readonly blocks: ReadonlyMap<string, Pick<AccountBlock, "subjectKind" | "subject" | "active" | "reasonCode" | "blockedBy">>;
+  readonly blocks: ReadonlyMap<string, Pick<AccountBlock, "subjectKind" | "subject" | "active" | "reasonCode" | "blockedBy"> & { subjectName?: string | null }>;
   readonly operators: ReadonlyMap<
     string,
     Pick<OperatorDirectoryEntry, "subject" | "displayName" | "walletAddress" | "roles" | "authorityLimit">
@@ -119,6 +123,25 @@ export interface ApprovalContext {
   readonly penalties?: ReadonlyMap<string, string>;
   /** Penalty id → its provider and amount apart, for the money line of a confirm. */
   readonly penaltyParts?: ReadonlyMap<string, { readonly provider: string; readonly amount: string }>;
+  /** Tool id → its name and versions, for contract requests (`tool:<id>`). */
+  readonly tools?: ReadonlyMap<string, ApprovalToolInfo>;
+}
+
+/** What a contract request names: the tool, its versions by sequence number, and the draft's next number. */
+export interface ApprovalToolInfo {
+  readonly name: string;
+  /** Sequence number → semver, published versions and the draft (as its next semver). */
+  readonly semvers: ReadonlyMap<number, string>;
+  /** The draft's sequence number and computed bump, when there is one. */
+  readonly draft?: { readonly version: number; readonly bump: "PATCH" | "MINOR" | "MAJOR" | null } | null;
+}
+
+/** "get_weather v2.1.0", "get_weather" when the version is not known. */
+function toolVersionName(context: ApprovalContext, toolId: string, version: unknown): string {
+  const tool = context.tools?.get(toolId);
+  const name = tool?.name ?? `tool ${shortId(toolId)}`;
+  const semver = typeof version === "number" ? tool?.semvers.get(version) : undefined;
+  return semver ? `${name} v${semver}` : name;
 }
 
 export const EMPTY_APPROVAL_CONTEXT: ApprovalContext = {
@@ -215,9 +238,9 @@ export function limitText(minor: unknown, asset: ApprovalContext["asset"]): stri
   return amount === "0" ? "$0" : `${amount} minor units`;
 }
 
-/** A block's subject in words: `wallet 0x0000…0abc` or `organization 1b2c3d4e…`. */
-function blockSubject(block: Pick<AccountBlock, "subjectKind" | "subject">): string {
-  if (block.subjectKind === "ORGANIZATION") return `organization ${block.subject}`;
+/** A block's subject in words: `wallet 0x0000…0abc`, the organization's public name, or `unnamed organization 1b2c3d4e…`. */
+function blockSubject(block: Pick<AccountBlock, "subjectKind" | "subject"> & { subjectName?: string | null }): string {
+  if (block.subjectKind === "ORGANIZATION") return block.subjectName ?? `unnamed organization ${shortId(block.subject)}`;
   const parts = block.subject.split(":");
   const address = parts.length >= 3 ? parts.slice(2).join(":") : block.subject;
   const chain = parts.length >= 3 ? `${parts[0]}:${parts[1]}` : "eip155:1";
@@ -365,14 +388,12 @@ export function approvalTitle(
       if (limit) return `Raise ${possessive(who)} limit to ${limit.replace(/\.00$/, "")}`;
       return `Change ${possessive(who)} access`;
     }
-    case "slash.suspend":
-      return `Suspend ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
-    case "slash.sweep": {
-      const defect = text(body.defectKey);
-      return defect ? `Decide every penalty with defect ${defect}` : "Decide every penalty with the same defect";
-    }
     case "slash.compensated":
       return `Pay back ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
+    case "slash.record_execution":
+      return `Record the on-chain execution of ${penaltyName(text(payload.proposalId) ?? targetId, context)}`;
+    case "slash.repropose":
+      return `Propose ${penaltyName(text(payload.proposalId) ?? targetId, context)} on chain again`;
     case "arbiter.block": {
       // The two most dangerous requests name who they are about (operator review 2026-10-16b, P1-6).
       const account = text(payload.account) ?? targetId.split(":").pop() ?? "";
@@ -385,6 +406,10 @@ export function approvalTitle(
       const who = personName(operator, operatorId);
       return operator ? `Remove ${who} (${rolesText(operator.roles)})` : `Remove ${who}`;
     }
+    case "tool_version.publish":
+      return `Publish ${toolVersionName(context, text(payload.toolId) ?? targetId, payload.version)}`;
+    case "tool.current_version":
+      return `Make ${toolVersionName(context, text(payload.toolId) ?? targetId, body.version)} the default for agents`;
     default:
       return actionLabel(approval.action);
   }
@@ -423,12 +448,26 @@ export function approvalOutcome(
       });
       lines.push({ kind: "record", text: "The penalty closes as paid back. It can't be undone" });
       break;
-    case "slash.suspend":
+    case "slash.record_execution":
+      // The money already moved on chain: approving records it, after a fresh read of the record.
       lines.push({
         kind: "money",
-        text: parts ? `The penalty is cancelled: ${parts.provider} keeps its ${parts.amount}` : "The penalty is cancelled: the provider keeps the amount",
+        text: parts
+          ? `Records that the chain took ${possessive(parts.provider)} penalty while the cancel waited; no money moves now`
+          : "Records that the chain took the penalty while the cancel waited; no money moves now",
       });
-      lines.push({ kind: "chain", text: "If it stands on chain, the arbiter must still sign the cancel. It can't be undone" });
+      lines.push({ kind: "chain", text: "The record is read on chain again first; if it no longer reads executed, nothing is written" });
+      lines.push({ kind: "record", text: "It can't be undone. If the penalty was not owed, paying it back is a separate request" });
+      break;
+    case "slash.repropose":
+      lines.push({
+        kind: "money",
+        text: parts
+          ? `Up to ${parts.amount} of ${possessive(parts.provider)} stake is reserved again once it is on chain`
+          : "Up to the decided penalty of the provider's stake is reserved again once it is on chain",
+      });
+      lines.push({ kind: "chain", text: "The old record is read on chain again first; the next proposal pass then puts the new one on chain" });
+      lines.push({ kind: "record", text: "It can't be undone here; the provider can dispute the new record on chain" });
       break;
     case "arbiter.block": {
       const account = text(payload.account);
@@ -447,8 +486,23 @@ export function approvalOutcome(
       lines.push({ kind: "record", text: "It can't be undone: adding them back is a new request" });
       break;
     }
-    case "slash.sweep":
-      lines.push({ kind: "record", text: "Every matching penalty is decided like this one, in the background" });
+    case "tool_version.publish": {
+      const toolId = text(payload.toolId) ?? targetId;
+      const draft = context.tools?.get(toolId)?.draft;
+      const bump = draft && draft.version === payload.version ? draft.bump : null;
+      lines.push({
+        kind: "runs",
+        text:
+          bump === "MAJOR"
+            ? "Providers can serve the new version once they re-map and pass a test for it. Agents keep the current version until it is made the default"
+            : "Agents and providers get the new version at once. Nothing they rely on breaks",
+      });
+      lines.push({ kind: "record", text: "A published version can't be unpublished" });
+      break;
+    }
+    case "tool.current_version":
+      lines.push({ kind: "runs", text: "Agents that don't lock a version move to it at once. Locked URLs keep their version" });
+      lines.push({ kind: "record", text: "It can be moved back with another request" });
       break;
     case "account.unblock": {
       const block = context.blocks.get(text(payload.blockId) ?? targetId);
@@ -618,26 +672,21 @@ function describeLong(
       };
     }
 
-    case "slash.suspend": {
+    case "slash.record_execution": {
       const id = text(payload.proposalId) ?? targetId;
       return {
-        sentence: `Suspend ${penaltyName(id, context)}, which cancels it${because}.`,
+        sentence: `Record that ${penaltyName(id, context)} was executed on chain while its cancel waited${because}.`,
         target: caseTarget(id, context),
         fields: [...commonFields(body), ...extraFields(body)],
       };
     }
 
-    case "slash.sweep": {
+    case "slash.repropose": {
       const id = text(payload.proposalId) ?? targetId;
-      const defect = text(body.defectKey);
-      const hours = text(body.lookbackHours);
-      const fields: { label: string; value: string }[] = [];
-      if (defect) fields.push({ label: "Defect", value: defect });
-      if (hours) fields.push({ label: "Look back", value: `${hours} h` });
       return {
-        sentence: `Sweep every penalty with defect ${defect ?? "?"} over the last ${hours ?? "?"} h, decided like ${penaltyName(id, context)}${because}.`,
+        sentence: `Propose ${penaltyName(id, context)} on chain again under a new record, its earlier one being cancelled${because}.`,
         target: caseTarget(id, context),
-        fields: [...fields, ...commonFields(body), ...extraFields(body)],
+        fields: [...commonFields(body), ...extraFields(body)],
       };
     }
 
@@ -674,16 +723,20 @@ export function statusWord(approval: Pick<OperatorApproval, "status" | "rejected
   return isWithdrawn(approval) ? "withdrawn" : approval.status.toLowerCase();
 }
 
-/** Who decided a row, in words: "Approved by x", "Withdrawn by x", "Rejected by x", "Expired". */
+/**
+ * Who asked and who decided, in one line: "Asked by A · approved by B",
+ * "Asked by A · rejected by B", "Asked and withdrawn by A", "Asked by A ·
+ * expired". `nameOf` turns a subject into the name the console shows.
+ */
 export function decisionText(
   approval: Pick<OperatorApproval, "status" | "approvedBy" | "rejectedBy" | "requestedBy">,
+  nameOf: (subject: string) => string = (subject) => subject,
 ): string {
-  if (approval.approvedBy) return `Approved by ${approval.approvedBy}`;
-  if (approval.rejectedBy) {
-    return isWithdrawn(approval) ? `Withdrawn by ${approval.rejectedBy}` : `Rejected by ${approval.rejectedBy}`;
-  }
-  const word = approval.status.toLowerCase();
-  return word.charAt(0).toUpperCase() + word.slice(1);
+  const asker = nameOf(approval.requestedBy);
+  if (isWithdrawn(approval)) return `Asked and withdrawn by ${asker}`;
+  if (approval.approvedBy) return `Asked by ${asker} · approved by ${nameOf(approval.approvedBy)}`;
+  if (approval.rejectedBy) return `Asked by ${asker} · rejected by ${nameOf(approval.rejectedBy)}`;
+  return `Asked by ${asker} · ${approval.status.toLowerCase()}`;
 }
 
 /**
@@ -694,12 +747,12 @@ export function decisionText(
 export function approvedResultSentence(action: string, result: unknown, target?: string): string {
   const r = (result && typeof result === "object" ? result : {}) as Record<string, unknown>;
   switch (action) {
-    case "slash.sweep":
-      return `Fleet sweep opened: ${String(r.matchedCount ?? "?")} matched, ${String(r.appliedCount ?? "?")} applied.`;
-    case "slash.suspend":
-      return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} suspended` : "Penalty suspended"}. If it stands on chain, its cancel is requested and still needs the arbiter's signature.`;
     case "slash.compensated":
       return `${target ? `${target.charAt(0).toUpperCase()}${target.slice(1)} recorded as paid back` : "Recorded as paid back"} into the provider's stake. Penalty closed.`;
+    case "slash.record_execution":
+      return "Approved. The record read executed on chain, and the execution is recorded on the penalty.";
+    case "slash.repropose":
+      return "Approved. The penalty goes on chain again with the next proposal pass.";
     case "account.unblock": {
       const subject =
         target ??
@@ -716,6 +769,10 @@ export function approvedResultSentence(action: string, result: unknown, target?:
       return `Operator changed${typeof r.subject === "string" ? `: ${r.subject}` : ""}.`;
     case "operator.remove":
       return `Operator removed${typeof r.subject === "string" ? `: ${r.subject}` : ""}. Every session they held has ended.`;
+    case "tool_version.publish":
+      return "Published. Providers and the catalogue see the new version now.";
+    case "tool.current_version":
+      return "Done. Agents that don't lock a version now get the new one.";
     case "arbiter.block":
       // "Below" only when the answer carried the call, which the screen then draws under this line.
       return typeof r.to === "string" && typeof r.data === "string"
@@ -819,12 +876,12 @@ export function approvalChanges(
       }
       return changes;
     }
-    case "slash.suspend":
-      return [{ label: "Penalty", before: "Stands", after: "Cancelled" }];
     case "slash.compensated":
       return [{ label: "Penalty", before: "Executed", after: "Paid back to the provider" }];
-    case "slash.sweep":
-      return [{ label: "Cases with this defect", before: "Open", after: "Decided like this one" }];
+    case "slash.record_execution":
+      return [{ label: "Penalty", before: "Cancel requested", after: "Executed (recorded)" }];
+    case "slash.repropose":
+      return [{ label: "On chain", before: "Cancelled record", after: "Proposed again" }];
     default:
       return [];
   }
@@ -841,7 +898,7 @@ export function approvalTargetId(approval: Pick<OperatorApproval, "target" | "pa
 
 /** The Activity log, filtered to what the request is about. */
 export function approvalActivityHref(approval: Pick<OperatorApproval, "target" | "payload">): string {
-  return `/operator/override-log?targetId=${encodeURIComponent(approvalTargetId(approval))}`;
+  return `/operator/activity?targetId=${encodeURIComponent(approvalTargetId(approval))}`;
 }
 
 /**

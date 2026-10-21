@@ -9,8 +9,6 @@ import { chainLabel } from "@/utils/chain";
  * `slashHolds`). Pure, so the words are tested without React.
  */
 
-export const PENALTIES_ON_CHAIN_HREF = "/provider/capital/penalties";
-
 /** A chain's display name when this build pins it, else its short CAIP-2 label. */
 export function holdChainName(chainId: string): string {
   return stakeDeploymentFor(chainId)?.displayName ?? chainLabel(chainId);

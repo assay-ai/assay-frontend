@@ -59,7 +59,7 @@ import {
 import { ApprovedArbiterBlocks } from "@/features/operator/approved-arbiter-blocks";
 import { callSummary } from "@/features/operator/call-summary";
 import { BLOCK_NOTE_MAX, mayBlock } from "@/features/operator/blocks";
-import { disputeUrgency, sortDisputesByDaysLeft } from "@/features/operator/inbox";
+import { disputeUrgency, lagText, sortDisputesByDaysLeft } from "@/features/operator/inbox";
 import { splitSharesText } from "@/features/operator/penalty-money";
 import { ResultCard } from "@/features/operator/result-card";
 import { useRulingFromLink } from "@/features/operator/ruling-link";
@@ -79,12 +79,13 @@ import { sameEvmAddress } from "@/libs/chains/evm/contract-call";
 import { assertContractCall, formatCallArg, type DecodedCall, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
 import { ROBINHOOD_TESTNET_STAKE, explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { routes } from "@/libs/routes";
-import { createArbiterRulingIntent, getArbiterTerms, getPlatformHealth, listArbiterDisputes } from "@/services/operator.service";
+import { createArbiterRulingIntent } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatClock } from "@/libs/utc-time";
 import { formatMoney } from "@/utils/money";
 
 import { Deadline } from "@/features/operator/deadline";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Arbiter, route `/operator/arbiter` (assay-evm D-19).
@@ -129,7 +130,7 @@ function ArbiterScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  const health = useQuery({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, retry: 0 });
+  const health = useQuery(operatorQueries.health());
   const chainStates: readonly ChainStateHealth[] = React.useMemo(() => health.data?.chainState ?? [], [health.data]);
   const chainIds = React.useMemo(() => {
     const ids = chainStates.map((state) => state.chainId);
@@ -139,8 +140,8 @@ function ArbiterScreen() {
   const chainId = chosenChain && chainIds.includes(chosenChain) ? chosenChain : chainIds[0]!;
   const chainState = chainStates.find((state) => state.chainId === chainId) ?? null;
 
-  const terms = useQuery({ queryKey: ["operator", "arbiter", "terms", chainId], queryFn: () => getArbiterTerms(chainId), retry: 0 });
-  const disputes = useQuery({ queryKey: ["operator", "arbiter", "disputes"], queryFn: listArbiterDisputes, refetchInterval: 60_000, retry: 0 });
+  const terms = useQuery(operatorQueries.arbiterTerms(chainId));
+  const disputes = useQuery({ ...operatorQueries.arbiterDisputes(), refetchInterval: 60_000, retry: 0 });
   const rows = React.useMemo(() => sortDisputesByDaysLeft(disputes.data ?? []), [disputes.data]);
 
   const connected = useConnectedAddresses();
@@ -239,7 +240,7 @@ function ArbiterScreen() {
           title={result.title}
           next="The penalties move once the chain watcher sees the transaction, usually within a minute."
           txUrl={result.hash && stakeDeploymentFor(result.chainId) ? explorerTxLink(stakeDeploymentFor(result.chainId)!, result.hash) : null}
-          activityHref="/operator/override-log?kind=arbiter"
+          activityHref="/operator/activity?kind=arbiter"
           onDismiss={() => setResult(null)}
         />
       ) : null}
@@ -254,7 +255,15 @@ function ArbiterScreen() {
           code={disputes.error instanceof ApiError ? disputes.error.code : null}
         />
       ) : rows.length === 0 ? (
-        <PageState kind="empty" title="Nothing to rule on" description="No penalty is disputed on chain. A new dispute appears here within a minute of the provider filing it." />
+        <PageState
+          kind="empty"
+          title={chainState?.stale ? "Nothing to rule on, as far as the indexer knows" : "Nothing to rule on"}
+          description={
+            chainState?.stale
+              ? `No penalty is disputed on chain in the indexed data, but the indexer is ${chainState.lagSeconds == null ? "not caught up" : `${lagText(chainState.lagSeconds)} behind`}: disputes filed since may not show yet.`
+              : "No penalty is disputed on chain. A new dispute appears here within a minute of the provider filing it."
+          }
+        />
       ) : (
         <ul className="flex w-full flex-col divide-y divide-01 overflow-hidden rounded-xl border border-01 bg-01">
           {rows.map((row) => (
@@ -367,11 +376,11 @@ function ArbiterStatus({
   }
   if (!terms) return <PageState kind="loading" rows={1} label="Reading the chain's terms" />;
 
-  const lagMin = chainState?.lagSeconds != null ? Math.round(chainState.lagSeconds / 60) : null;
+  const lag = chainState?.lagSeconds != null ? lagText(chainState.lagSeconds) : null;
   // Only what is wrong is listed next to the signer; "all fine" stays under details.
   const problems = [
     ...(terms.arbiter === null ? ["No arbiter is appointed, so nobody can rule."] : []),
-    ...(chainState?.stale ? [lagMin === null ? "The indexer has not caught up." : `The indexer is ${lagMin} min behind.`] : []),
+    ...(chainState?.stale ? [lag === null ? "The indexer has not caught up." : `The indexer is ${lag} behind.`] : []),
     ...(terms.paused ? ["The contracts are paused."] : []),
   ];
   const signer =
@@ -416,7 +425,7 @@ function ArbiterStatus({
         </Fact>
         <Fact label="Chain">{stakeDeploymentFor(terms.chainId)?.displayName ?? `Chain ${terms.chainId.split(":")[1] ?? terms.chainId}`}</Fact>
         <Fact label="Indexer">
-          {chainState === null ? "Not reported" : chainState.stale ? (lagMin === null ? "Not caught up" : `${lagMin} min behind`) : "Up to date"}
+          {chainState === null ? "Not reported" : chainState.stale ? (lag === null ? "Not caught up" : `${lag} behind`) : "Up to date"}
         </Fact>
         <Fact label="Contracts">{terms.paused ? "Paused" : "Running"}</Fact>
         {chainState ? (
@@ -649,8 +658,7 @@ function RulingSheet({
   const chainId = chainForSelection ?? FALLBACK_CHAIN;
   // The arbiter of the chain these penalties are on, not of the chain picked in the header.
   const terms = useQuery({
-    queryKey: ["operator", "arbiter", "terms", chainId],
-    queryFn: () => getArbiterTerms(chainId),
+    ...operatorQueries.arbiterTerms(chainId),
     enabled: ruling !== null,
     retry: 0,
   });

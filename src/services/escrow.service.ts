@@ -41,7 +41,6 @@
  */
 
 import type {
-  BuyerDebts,
   BuyerEscrow,
   DebtVoucherIntent,
   SettleDebtBody,
@@ -66,7 +65,7 @@ import { api } from "./api";
  * ## `chainId` is sent and the backend does not read it yet
  *
  * Withdrawal is per chain — two withdrawals, never one — so the
- * screen is `/funding/escrow?chain=<caip2>` and the chain travels on the
+ * escrow drawer is opened per chain (`?chain=<caip2>`) and the chain travels on the
  * request. **The controller takes the account from the session and accepts no
  * account or chain field**, and it answers for the session's single account
  * until the backend supports several accounts per session. An unknown query
@@ -90,14 +89,18 @@ export function getEscrow(chainId: string | null): Promise<BuyerEscrow> {
 }
 
 /**
- * `GET /escrow`, revalidated past the browser's HTTP cache — for the reads
- * right after a write that changed the escrow. The route is served
- * `private, max-age=10, stale-while-revalidate=3600`, so a plain refetch in
- * the next ten seconds is answered with the pre-write body without ever
- * reaching the API.
+ * `GET /escrow` for the reads right after a write that changed the escrow.
+ *
+ * A plain GET: the API answers every GET that does not opt in with
+ * `@CacheHeader` as `private, no-cache` (BUG-SYS-01), so the browser
+ * revalidates each read with `If-None-Match` and never serves the pre-write
+ * body. This used to send a `Cache-Control: no-cache` request header as well,
+ * from when the route was served `max-age=10, stale-while-revalidate=3600`;
+ * the response policy made it redundant. Should `/escrow` ever opt in to a
+ * freshness window, this read needs a way past the HTTP cache again.
  */
 export function revalidateEscrow(chainId: string | null): Promise<BuyerEscrow> {
-  return api.getRevalidated<BuyerEscrow>("/escrow", chainId === null ? undefined : { chainId });
+  return api.get<BuyerEscrow>("/escrow", chainId === null ? undefined : { chainId });
 }
 
 /**
@@ -173,19 +176,6 @@ export function submitEscrowWithdrawRequest(
   body: SubmitRequestWithdrawBody,
 ): Promise<RelayedEscrowIntent> {
   return api.post<RelayedEscrowIntent>("/escrow/withdrawals/request", body);
-}
-
-/**
- * `GET /escrow/debts` — the payer's BUYER DEBTS: served paid calls whose
- * payment could not be collected, in every state (`OPEN`, `REPLACING`,
- * `WRITTEN_OFF`). Paid calls are refused (`PAYMENT_DEBT_OUTSTANDING`) until
- * each is collected; free calls work. Lists
- * the session account's debts and the organization's, so a console sees every
- * debt that blocks its agents — but only the session account's own can be
- * settled from here (`account` on the answer).
- */
-export function getBuyerDebts(): Promise<BuyerDebts> {
-  return api.get<BuyerDebts>("/escrow/debts");
 }
 
 /**

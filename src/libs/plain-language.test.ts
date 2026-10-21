@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   humanize,
+  knowsError,
   plain,
   plainAuditAction,
   plainDecision,
@@ -56,6 +57,59 @@ describe("errors", () => {
     expect(plainError("OPERATOR_AUTHORITY_EXCEEDED")).toMatch(/above your approval limit/);
   });
 
+  it("knows the credential and mapping hardening codes", () => {
+    expect(plainError("PROVIDER_RESERVED_MAPPING_HEADER")).toBe(
+      "Headers starting with x-assay- are set by Assay. Remove this header from your mapping.",
+    );
+    expect(plainError("PROVIDER_CREDENTIAL_ORIGIN_LIVE")).toBe(
+      "Your live tool uses these headers. Publish a new address first, then remove them.",
+    );
+  });
+
+  it.each([
+    "CREDENTIAL_IN_QUERY",
+    "SECRET_IN_MAPPING",
+    "INVALID_CREDENTIAL_HEADERS",
+    "CREDENTIAL_ORIGIN_MISMATCH",
+    "CREDENTIAL_VAULT_UNAVAILABLE",
+    "ENDPOINT_PORT_NOT_SUPPORTED",
+    "RESERVED_MAPPING_HEADER",
+    "CREDENTIAL_ORIGIN_LIVE",
+    "CREDENTIALS_REQUIRED_FOR_AUTH_MODE",
+    "CREDENTIAL_VAULT_NOT_CONFIGURED",
+  ])("gives %s its own sentence, bare and PROVIDER_-prefixed", (code) => {
+    const generic = plainError("NOT_A_REAL_CODE_XYZ");
+    expect(knowsError(code)).toBe(true);
+    expect(plainError(code)).not.toBe(generic);
+    expect(plainError(`PROVIDER_${code}`)).toBe(plainError(code));
+  });
+
+  it("knows the credentials-required-for-auth-mode code", () => {
+    expect(plainError("PROVIDER_CREDENTIALS_REQUIRED_FOR_AUTH_MODE")).toBe(
+      "Add your API key headers for the live address first, then switch to API key.",
+    );
+  });
+
+  it("says a vault that is not set up is a storage problem, and that nothing was stored", () => {
+    expect(plainError("PROVIDER_CREDENTIAL_VAULT_NOT_CONFIGURED", 503)).toBe(
+      "Key storage isn't set up on this server, so headers can't be saved. Nothing was stored. Tell Assay support.",
+    );
+  });
+
+  it("gives an unknown 5xx a status-aware sentence instead of the generic one", () => {
+    const generic = plainError("SOMETHING_NOBODY_KNOWS");
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 503)).toBe(
+      "This part of Assay is unavailable right now (HTTP 503). Try again in a few minutes; if it keeps happening, tell Assay support.",
+    );
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 500)).toMatch(/^Something failed on Assay's side \(HTTP 500\)/);
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 502)).toMatch(/HTTP 502/);
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 500)).not.toBe(generic);
+    // A known code keeps its own sentence; a 4xx keeps the generic one.
+    expect(plainError("PROVIDER_CREDENTIAL_VAULT_UNAVAILABLE", 503)).toBe(plainError("CREDENTIAL_VAULT_UNAVAILABLE"));
+    expect(plainError("SOMETHING_NOBODY_KNOWS", 400)).toBe(generic);
+    expect(plainError(null, 503)).toMatch(/HTTP 503/);
+  });
+
   it("never shows an unknown code as the sentence", () => {
     const sentence = plainError("SOMETHING_NOBODY_KNOWS");
     expect(sentence).not.toContain("SOMETHING");
@@ -66,6 +120,7 @@ describe("errors", () => {
 describe("actions and events", () => {
   it("reads audit actions as phrases", () => {
     expect(plainAuditAction("credential.revoked")).toBe("Agent key revoked");
+    expect(plainAuditAction("agent.renamed")).toBe("Agent renamed");
     expect(plainAuditAction("brand.new_thing")).toBe("Brand new thing");
   });
 

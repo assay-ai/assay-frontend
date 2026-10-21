@@ -1,4 +1,4 @@
-import { Check, CircleCheck, Info, Lock, ScanSearch, Split, Terminal } from "lucide-react";
+import { ArrowRight, Bot, Check, CircleCheck, Info, Lock, Plug, ScanSearch, Split, Terminal } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -7,6 +7,7 @@ import * as React from "react";
 import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { Term } from "@/components/patterns/term";
 import { MoneyPair } from "@/components/ui/money-pair";
+import { GLOSSARY } from "@/libs/glossary";
 import {
   Panel,
   PanelBody,
@@ -57,7 +58,7 @@ import { HeroCtas } from "./demo-cta";
 export const metadata: Metadata = {
   title: "How it works",
   description:
-    "Your agent calls a tool, we hold the price, check the result, and charge only if it passes. Free calls need no deposit.",
+    "A marketplace where AI agents pay per call for MCP tools, only when the result passes the check. Free calls need no deposit.",
 };
 
 interface FlowStep {
@@ -84,7 +85,8 @@ const FLOW: FlowStep[] = [
     title: "We hold, not charge",
     detail: (
       <>
-        The amount is <Term k="hold">held</Term> from your balance. Nothing has left it yet.
+        The amount is <Term k="hold">held</Term> from your balance, which sits in{" "}
+        <Term k="escrow">escrow</Term>: money you set aside on chain for your agents. Nothing has left it yet.
       </>
     ),
     note: "$0.0100 held",
@@ -126,6 +128,64 @@ const CHECKS = [
   "200 responses carrying an error envelope",
 ];
 
+/** The product in one line: what it is, for whom, and on what terms. */
+const DEFINITION =
+  "Assay is a marketplace and payment layer where AI agents pay per call for MCP tools, only when the result passes the check. Buyers connect their agent with one MCP URL. Providers list their APIs, put up a stake, and get paid per call.";
+
+const FORK = [
+  {
+    id: "agent",
+    icon: Bot,
+    title: "I have an agent",
+    detail: "Find tools, see what a call costs, and connect your agent. Free calls need no deposit.",
+    href: "/catalogue",
+    action: "Find tools",
+  },
+  {
+    id: "api",
+    icon: Plug,
+    title: "I have an API",
+    detail: "List it, set your price, and get paid on chain for every call that passes.",
+    href: "/why-list-here",
+    action: "Earn per call",
+  },
+] as const;
+
+/**
+ * The two ways in, side by side: a buyer with an agent and a provider with an
+ * API. Under the hero and again at the bottom of the page, so neither side has
+ * to scroll back up to find its path.
+ */
+function Fork({ id, showHeading = false }: { id: string; showHeading?: boolean }) {
+  return (
+    <nav aria-labelledby={id} className="grid w-full max-w-[720px] grid-cols-1 gap-3 tablet:grid-cols-2">
+      <h2 id={id} className={showHeading ? "text-center text-heading-sm text-01 tablet:col-span-2" : "sr-only"}>
+        Where to start
+      </h2>
+      {FORK.map((path) => {
+        const Icon = path.icon;
+        return (
+          <Link
+            key={path.id}
+            href={path.href}
+            className="group flex flex-col gap-2 rounded-xl border border-01 bg-01 p-4 text-left shadow-hair hover:border-primary-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+          >
+            <span className="flex items-center gap-2">
+              <Icon aria-hidden="true" className="size-4 shrink-0 text-primary-500" />
+              <span className="text-label-md text-01">{path.title}</span>
+            </span>
+            <span className="text-body-13 text-02">{path.detail}</span>
+            <span className="inline-flex items-center gap-1 text-label-13 text-primary-600">
+              {path.action}
+              <ArrowRight aria-hidden="true" className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+            </span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+
 export default function HowItWorksPage() {
   return (
     <>
@@ -134,10 +194,15 @@ export default function HowItWorksPage() {
         <h1 className="max-w-[940px] text-center text-display-lg text-01">
           {"You don't pay for results you can't use."}
         </h1>
+        <p className="max-w-[760px] text-center text-body-md text-01" data-testid="product-definition">
+          {DEFINITION}
+        </p>
         <p className="max-w-[720px] text-center text-body-md text-02">
           Your agent calls a tool. We check the result before the money moves. If the result is
           unusable, the charge never happens — and we show you the amount we did not take.
         </p>
+
+        <Fork id="fork-top" />
 
         {/* CTAs: the demo leads only where it is configured; otherwise the tools do. */}
         <HeroCtas />
@@ -250,13 +315,17 @@ export default function HowItWorksPage() {
               <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-[15px]">
                 <Info aria-hidden="true" className="h-[15px] w-[15px] shrink-0 text-03" />
                 <p className="min-w-0 flex-1 text-body-13 text-02">
-                  Providers put up a <Term k="stake">stake</Term>. One that fails more often than it
-                  promised gets a <Term k="slash">penalty</Term>, and part of it goes to the buyers it
-                  served badly.
+                  Providers put up a <Term k="stake">stake</Term>, and a <Term k="slash">penalty</Term> can take
+                  part of it. {GLOSSARY["stake-rule"].definition}
                 </p>
               </div>
             </PanelBody>
           </Panel>
+        </div>
+
+        {/* The same two ways in, so the page does not end at the footer. */}
+        <div className="flex w-full justify-center pt-4">
+          <Fork id="fork-bottom" showHeading />
         </div>
       </div>
     </>
