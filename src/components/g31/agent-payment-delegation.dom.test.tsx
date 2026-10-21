@@ -10,7 +10,7 @@ vi.mock("@/hooks/useSigner", () => ({
   isUserRejection: () => false,
 }));
 
-import { AgentPaymentDelegation, PayerDelegationsPanel } from "./agent-payment-delegation";
+import { PayerDelegationsPanel } from "./agent-payment-delegation";
 
 const EVM = "eip155:46630";
 const ASSET = `${EVM}/erc20:0xDbbC`;
@@ -34,13 +34,15 @@ const CHAINS: Chain[] = [
 function client(escrowMaxVoucher: string): QueryClient {
   const c = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   c.setQueryData(["chains"], { chains: CHAINS });
-  c.setQueryData(["escrow", EVM], {
+  // The session's escrow, on the payer's chain: the panel reads it rather than asking for that chain again.
+  c.setQueryData(["escrow", null], {
+    account: PAYER,
     escrowPda: `${EVM}:0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f`,
     serverTime: "2026-10-12T12:00:00.000Z",
     maxVoucherAmount: usdg(escrowMaxVoucher),
     maxPerWindow: usdg("10000000"),
   });
-  c.setQueryData(["escrow-delegates", 0], {
+  c.setQueryData(["escrow-delegates"], {
     account: PAYER,
     delegates: [
       {
@@ -82,7 +84,7 @@ describe("PayerDelegationsPanel", () => {
   // revoke and a new grant (two signatures, no authority in between).
   it("offers Change spending limits beside Stop it paying on a standing grant", () => {
     const html = render(
-      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+      <PayerDelegationsPanel account={PAYER} bindings={[]} onChanged={() => {}} />,
     );
     expect(html).toContain('data-testid="edit-delegate"');
     expect(html).toContain("Change spending limits");
@@ -93,14 +95,14 @@ describe("PayerDelegationsPanel", () => {
   // "up to 0.500000 USDG a payment" and nothing said payments above 0.05 fail.
   it("warns when the escrow's own limit is now below the grant's cap", () => {
     const lowered = render(
-      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+      <PayerDelegationsPanel account={PAYER} bindings={[]} onChanged={() => {}} />,
       "50000",
     );
     expect(lowered).toContain('data-testid="delegate-above-escrow-limits"');
     expect(lowered).toContain("$0.05 a payment");
 
     const fine = render(
-      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+      <PayerDelegationsPanel account={PAYER} bindings={[]} onChanged={() => {}} />,
     );
     expect(fine).not.toContain("delegate-above-escrow-limits");
   });
@@ -109,41 +111,9 @@ describe("PayerDelegationsPanel", () => {
 describe("PayerDelegationsPanel — payments still being settled (BUG-D1-07)", () => {
   it("lists them on the grant they will be redeemed under", () => {
     const html = render(
-      <PayerDelegationsPanel account={PAYER} bindings={[]} version={0} onChanged={() => {}} />,
+      <PayerDelegationsPanel account={PAYER} bindings={[]} onChanged={() => {}} />,
     );
     expect(html).toContain('data-testid="delegate-unsettled"');
     expect(html).toContain("1 payment ($0.10) still being settled");
-  });
-});
-
-describe("AgentPaymentDelegation", () => {
-  it("offers Change spending limits on a key that can pay", () => {
-    const html = render(
-      <AgentPaymentDelegation
-        agentAccount={PAYER}
-        credentials={[credential]}
-        version={0}
-        onChanged={() => {}}
-      />,
-    );
-    expect(html).toContain("CAN PAY");
-    expect(html).toContain('data-testid="edit-agent-delegate"');
-  });
-});
-
-// Paid rails A and B are off on Solana: nothing to authorise, and the agent is told why.
-describe("AgentPaymentDelegation — a Solana agent (free calls only)", () => {
-  it("says the chain serves free calls only and offers nothing to sign", () => {
-    const html = render(
-      <AgentPaymentDelegation
-        agentAccount="solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1:AgentAccount1111111111111111111111111111111"
-        credentials={[]}
-        version={0}
-        onChanged={() => {}}
-      />,
-    );
-    expect(html).toContain('data-testid="agent-payment-free-only"');
-    expect(html).toContain("currently serves free calls only");
-    expect(html).not.toContain("Authorize agent to pay");
   });
 });

@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import type { SentAs } from "@/libs/ApiClient";
 import { loginHref } from "@/libs/login-redirect";
 
 import { settleCacheForIdentity } from "./identity-cache";
@@ -28,6 +29,11 @@ export interface BuyerSessionEffects {
   getAccessToken: () => Promise<string | null>;
   setSessionToken: (token: string) => void;
   startWalletLink: () => void;
+  /**
+   * Who this page load's requests went out as, against `identity`
+   * (`sessionRequestsSentAs`). Absent = `"unknown"`.
+   */
+  sentAs?: (identity: string) => SentAs;
 }
 
 export interface IdentityChange {
@@ -38,6 +44,43 @@ export interface IdentityChange {
   identity: string | null;
   /** `undefined` = this page load has not reacted to an identity yet. */
   previous: string | null | undefined;
+}
+
+/**
+ * The identity of a session Privy reports signed in before its `user` has
+ * loaded. It names nobody, so no token's subject ever matches it.
+ */
+export const UNRESOLVED_IDENTITY = "authenticated";
+
+/**
+ * What the cache does for an identity change (`settleCacheForIdentity`).
+ *
+ * A change after the first is a switch. The first identity of the page load
+ * is checked against who the requests so far went out as: all with its token,
+ * the cache is already its data (`"served"`); any with another identity's
+ * token, that data is someone else's and is dropped like a switch; anything
+ * else, refetched in place (`"boot"`).
+ *
+ * `UNRESOLVED_IDENTITY` is not checked against the requests — it would always
+ * count as someone else — and the identity that replaces it gets the same
+ * check as a first one, except that only `"only"` spares the reset: the
+ * placeholder proved nothing about who the earlier requests were for.
+ */
+export function cacheChangeFor(
+  identity: string | null,
+  previous: string | null | undefined,
+  sentAs: ((identity: string) => SentAs) | undefined,
+): "boot" | "served" | "switch" {
+  if (identity === UNRESOLVED_IDENTITY) return previous === undefined ? "boot" : "switch";
+  if (previous === UNRESOLVED_IDENTITY && identity !== null) {
+    return sentAs?.(identity) === "only" ? "served" : "switch";
+  }
+  if (previous !== undefined) return "switch";
+  if (identity === null) return "boot";
+  const sent = sentAs?.(identity) ?? "unknown";
+  if (sent === "only") return "served";
+  if (sent === "other") return "switch";
+  return "boot";
 }
 
 /**
@@ -62,7 +105,7 @@ export function applyIdentityChange(
   // A signed-out page load is not a change: nothing to reset or clear.
   if (identity === (previous ?? null)) return { reacted: identity, cancel: noop };
 
-  settleCacheForIdentity(effects.queryClient, previous === undefined ? "boot" : "switch");
+  settleCacheForIdentity(effects.queryClient, cacheChangeFor(identity, previous, effects.sentAs));
   // Whose wallet was being linked is part of who was signed in.
   effects.resetWalletLink();
 
@@ -87,6 +130,24 @@ export function applyIdentityChange(
       cancelled = true;
     },
   };
+}
+
+/**
+ * Whether a signed-in buyer still needs an embedded EVM wallet created.
+ *
+ * `createOnLogin: "users-without-wallets"` is not enough on its own: Privy
+ * left new accounts with only their email (seen on the local stack for every
+ * account made through the agent connect link), and the API links the
+ * account's EVM wallet as its spending account, so such an account is refused
+ * with AUTH_WALLET_NOT_LINKED everywhere and has no way out. An account that
+ * signed in with an external wallet still gets an embedded one, as on login.
+ */
+export function needsEmbeddedEvmWallet(
+  linkedAccounts: readonly { type: string; walletClientType?: string; chainType?: string }[],
+): boolean {
+  return !linkedAccounts.some(
+    (account) => account.type === "wallet" && account.walletClientType === "privy" && account.chainType === "ethereum",
+  );
 }
 
 /**

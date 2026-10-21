@@ -27,8 +27,6 @@ import {
   editDelegationForm,
   errorsAfterEdit,
   escrowCanDelegate,
-  findDelegation,
-  keyFingerprint,
   parseDelegationForm,
   serverNowSeconds,
   supportsDelegation,
@@ -53,19 +51,22 @@ import {
   editedToast,
 } from "@/features/delegation/unsettled";
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
+import { assayMcpRun } from "@/features/buyer-money/mcp-config";
 import { useChains } from "@/hooks/useChains";
-import { isRailNotOffered, railNotOfferedText, servesPaidCalls } from "@/libs/chains/paid-rails";
+import { isRailNotOffered, railNotOfferedText } from "@/libs/chains/paid-rails";
 import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
 import type { BuyerEscrow, DelegateIntent, EscrowDelegate } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { rememberDemoDelegateCaps } from "@/libs/demo/demo-stage";
-import { chainDisplayName, settlementSymbol } from "@/services/chains.service";
+import { useEscrowQuery } from "@/components/buyer-money/use-buyer-money";
+import { useDelegatesQuery } from "@/components/buyer-money/use-delegates";
+import { escrowKeys } from "@/features/escrow/query-keys";
+import { settlementSymbol } from "@/services/chains.service";
 import {
   createDelegateIntent,
   createRevokeDelegateIntent,
-  listDelegates,
   submitDelegate,
   submitRevokeDelegate,
 } from "@/services/delegation.service";
@@ -112,7 +113,7 @@ export interface DelegationCredential {
  */
 
 /** Everything both pieces need to read and sign, for one payer account. */
-function useDelegationContext(account: string | undefined, version: number) {
+function useDelegationContext(account: string | undefined) {
   const chainId = chainIdOfAccount(account);
   const enabled = supportsDelegation(account);
   const signerState = useSigner({
@@ -122,18 +123,19 @@ function useDelegationContext(account: string | undefined, version: number) {
   const { chains } = useChains();
   const unit = (chainId && settlementSymbol(chains, chainId)) || "";
 
-  const escrowQuery = useQuery({
-    queryKey: ["escrow", chainId],
-    enabled,
+  // The session's escrow (`GET /escrow`, the key every money screen and the
+  // limits write share) when the payer is on its chain — the usual case — and
+  // the payer's chain read only otherwise, so the page does not ask twice.
+  const sessionEscrow = useEscrowQuery({ enabled });
+  const sameChain = chainId !== null && chainIdOfAccount(sessionEscrow.data?.account) === chainId;
+  const chainEscrow = useQuery({
+    queryKey: escrowKeys.escrow(chainId),
+    enabled: enabled && sessionEscrow.isFetched && !sameChain,
     retry: 0,
     queryFn: () => getEscrow(chainId),
   });
-  const delegatesQuery = useQuery({
-    queryKey: ["escrow-delegates", version],
-    enabled,
-    retry: 0,
-    queryFn: () => listDelegates(version),
-  });
+  const escrowQuery = sameChain || !sessionEscrow.isFetched ? sessionEscrow : chainEscrow;
+  const delegatesQuery = useDelegatesQuery({ enabled });
 
   const signer = (): Signer => {
     if (signerState.status === "ready") return signerState.signer;
@@ -189,6 +191,72 @@ function explain(error: unknown, fallback: string): string {
   return fallback;
 }
 
+/** A failure of the on-chain stop, in words (declined, relay refusal, signed out). */
+export function explainStopFailure(error: unknown): string {
+  return explain(error, "Its payment key could not be stopped on chain.");
+}
+
+/**
+ * Stops a payment key on chain: `revoke-intent`, then one `RevokeDelegate`
+ * signature with the payer's wallet (Privy's confirmation shown, checked
+ * against this app's escrow domain before the wallet is asked), then
+ * `revoke`, which relays it. Throws when any step fails; nothing is relayed
+ * unless the wallet signed.
+ */
+export async function stopPaymentKeyOnChain(
+  delegateAccount: string,
+  signer: Signer,
+  domain: ExpectedDomain,
+): Promise<void> {
+  const intent = await createRevokeDelegateIntent(addressOfAccount(delegateAccount));
+  await submitRelayedDelegation(intent, signer, { domain, delegate: delegateAccount }, submitRevokeDelegate);
+}
+
+/**
+ * {@link stopPaymentKeyOnChain} for the payer `account`, with its wallet and
+ * escrow: what the Revoke dialog's "Also stop its payment key on chain" runs.
+ */
+export function useStopPaymentKey(account: string | undefined): (delegateAccount: string) => Promise<void> {
+  const ctx = useDelegationContext(account);
+  const { signer, domain, escrowQuery } = ctx;
+  return async (delegateAccount: string) => {
+    await stopPaymentKeyOnChain(delegateAccount, signer(), domain(escrowQuery.data));
+  };
+}
+
+/**
+ * "Stop it" on a revoked or expired credential whose payment key is still
+ * active on chain (spec F3 step 5): the same sheet as "Stop it paying", with
+ * its check for payments still being settled, and the same calls.
+ */
+export function StopPaymentKeySheet({
+  account,
+  target,
+  onClose,
+  onFinished,
+}: {
+  account: string | undefined;
+  /** The key, and its permission when the page's chain read listed it (null: not known yet). */
+  target: { delegateAccount: string; delegation: EscrowDelegate | null } | null;
+  onClose: () => void;
+  onFinished: () => void;
+}) {
+  const ctx = useDelegationContext(account);
+  return (
+    <RevokeSheet
+      target={target?.delegation ?? null}
+      pendingDelegate={target && !target.delegation ? target.delegateAccount : null}
+      escrow={ctx.escrowQuery.data}
+      unit={ctx.unit}
+      tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
+      onClose={onClose}
+      onFinished={onFinished}
+      signer={ctx.signer}
+      domain={ctx.domain}
+    />
+  );
+}
+
 /** Who the authorise / edit sheet is for. `current` set means editing that standing grant. */
 interface SheetTarget {
   delegateAccount: string;
@@ -238,18 +306,16 @@ function exact(
 export function PayerDelegationsPanel({
   account,
   bindings,
-  version,
   onChanged,
   onlyUnbound = false,
 }: {
   account: string | undefined;
   bindings: readonly DelegateBinding[];
-  version: number;
   onChanged: () => void;
   /** Only keys not bound to a live credential (the per-agent cards show the rest). Hidden when there are none. */
   onlyUnbound?: boolean;
 }) {
-  const ctx = useDelegationContext(account, version);
+  const ctx = useDelegationContext(account);
   const [revoking, setRevoking] = React.useState<EscrowDelegate | null>(null);
   const [editing, setEditing] = React.useState<SheetTarget | null>(null);
   if (!ctx.enabled) return null;
@@ -403,7 +469,7 @@ export function PayerDelegationsPanel({
  * The delegate's grant as the chain shows it NOW, for a sheet about to change
  * it (BUG-D1-07, BUG-D1-08): the list is read again, past the browser's cache,
  * every time the sheet opens — the page's list can predate a payment made
- * since — and on every `refresh` while waiting. One query key per delegate, so
+ * since — and on every `refresh` while waiting. The app's one delegates key, so
  * polling adds no cache entries, and a refetch already in flight is joined
  * rather than restarted (review finding 10). See `liveDelegation`.
  */
@@ -412,14 +478,7 @@ function useLiveDelegation(
   opened: EscrowDelegate | null,
   open: boolean,
 ) {
-  const read = useQuery({
-    queryKey: ["escrow-delegates-live", delegate],
-    enabled: open && delegate !== "",
-    retry: 0,
-    staleTime: 0,
-    refetchOnMount: "always",
-    queryFn: () => listDelegates(Date.now()),
-  });
+  const read = useDelegatesQuery({ enabled: open && delegate !== "", fresh: true });
   // What the cache held when this opening began: only a read answered after it
   // counts (a previous opening's read can predate a payment made since).
   const [opening, setOpening] = React.useState({ open: false, baseline: 0 });
@@ -429,17 +488,19 @@ function useLiveDelegation(
     void refetch({ cancelRefetch: false });
   }, [refetch]);
   const openedAt = opening.open ? opening.baseline : read.dataUpdatedAt;
+  // Only this opening's failure: an earlier one says nothing about now.
+  const failed = read.isError && read.errorUpdatedAt > openedAt;
   const state = liveDelegation({
     opened,
     delegate,
     list: read.data?.delegates,
     readAt: read.dataUpdatedAt,
     openedAt,
-    // Only this opening's failure: an earlier one says nothing about now.
-    failed: read.isError && read.errorUpdatedAt > openedAt,
+    failed,
   });
   return {
     ...state,
+    failed,
     readAt: read.dataUpdatedAt,
     refresh,
     tightenDelaySeconds: read.data?.tightenDelaySeconds,
@@ -488,6 +549,7 @@ function LiveReadNote({ ready, gone }: { ready: boolean; gone: boolean }) {
  */
 function RevokeSheet({
   target,
+  pendingDelegate = null,
   agentName,
   escrow,
   unit,
@@ -498,6 +560,13 @@ function RevokeSheet({
   domain,
 }: {
   target: EscrowDelegate | null;
+  /**
+   * A key whose permission is not known yet (the page's chain read was
+   * pending or failed): the sheet opens on it and signs only once its own
+   * fresh read finds the permission, so the check for payments still being
+   * settled always runs on what the chain says now.
+   */
+  pendingDelegate?: string | null;
   /** Whose permission this is, for the title; unbound keys have none. */
   agentName?: string;
   escrow: BuyerEscrow | undefined;
@@ -509,10 +578,20 @@ function RevokeSheet({
   signer: () => Signer;
   domain: (escrow: BuyerEscrow | undefined) => ExpectedDomain;
 }) {
-  const open = target !== null;
-  const delegate = target?.delegate ?? "";
-  const { live, ready, gone, readAt, refresh, tightenDelaySeconds: liveDelay } =
-    useLiveDelegation(delegate, target, open);
+  const open = target !== null || Boolean(pendingDelegate);
+  const delegate = target?.delegate ?? pendingDelegate ?? "";
+  const {
+    live,
+    ready: readDone,
+    gone,
+    failed,
+    readAt,
+    refresh,
+    tightenDelaySeconds: liveDelay,
+  } = useLiveDelegation(delegate, target, open);
+  // Opened on an unknown permission: only a fresh read that found it may sign.
+  const ready = readDone && (target !== null || live !== null);
+  const unreadable = target === null && failed && live === null;
   const delay = liveDelay ?? listedDelay;
   const delayNote = revokeDelayNote(delay);
   const unsettled = live?.unsettled;
@@ -535,17 +614,11 @@ function RevokeSheet({
   }, [open]);
 
   const revoke = async () => {
-    if (!target) return;
+    if (!delegate || !ready) return;
     setBusy(true);
     setRevokeNote(null);
     try {
-      const intent = await createRevokeDelegateIntent(addressOfAccount(target.delegate));
-      await submitRelayedDelegation(
-        intent,
-        signer(),
-        { domain: domain(escrow), delegate: target.delegate },
-        submitRevokeDelegate,
-      );
+      await stopPaymentKeyOnChain(delegate, signer(), domain(escrow));
       toast.success(
         `${agentName ?? "That key"} can no longer pay. ${agentName ? "Its API key still works for free calls." : ""}`.trim(),
       );
@@ -578,7 +651,18 @@ function RevokeSheet({
           <p className="rounded-lg bg-02 px-3 py-2 text-body-13 text-02" data-testid="revoke-debt-note">
             Calls already made are still settled and paid for.
           </p>
-          <LiveReadNote ready={ready} gone={gone} />
+          {unreadable ? (
+            <div className="flex flex-wrap items-center gap-2" data-testid="delegate-unreadable">
+              <p className="text-body-13 text-warning-700">
+                The chain could not be read, so its payment key may still be active and nothing can be signed yet.
+              </p>
+              <Button size="sm" variant="secondary" type="button" onClick={refresh}>
+                Read again
+              </Button>
+            </div>
+          ) : (
+            <LiveReadNote ready={ready} gone={gone} />
+          )}
           {delayNote ? (
             <p className="text-body-13 text-02" data-testid="revoke-tighten-delay">
               {delayNote}
@@ -615,154 +699,6 @@ function RevokeSheet({
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-/** Per agent: its credentials' bound keys, and "Authorize agent to pay" for those not yet authorised. */
-export function AgentPaymentDelegation({
-  agentAccount,
-  credentials,
-  version,
-  onChanged,
-}: {
-  agentAccount: string | undefined;
-  credentials: readonly DelegationCredential[];
-  version: number;
-  onChanged: () => void;
-}) {
-  const ctx = useDelegationContext(agentAccount, version);
-  const [authorizing, setAuthorizing] = React.useState<SheetTarget | null>(null);
-  if (!ctx.enabled) {
-    // Solana serves free calls only (paid rails A and B are off): say so, offer nothing to sign.
-    if (ctx.chainId && !servesPaidCalls(ctx.chainId)) {
-      return (
-        <div className="flex w-full flex-col gap-2.5 pt-2" data-testid="agent-payment-free-only">
-          <MicroLabel>AGENT PAYMENTS</MicroLabel>
-          <p className="text-body-13 text-02">
-            {chainDisplayName(ctx.chains, ctx.chainId)} currently serves free calls only, so this
-            agent makes free calls there and pays for none. Paid calls are not offered on it.
-          </p>
-        </div>
-      );
-    }
-    return null;
-  }
-
-  const bound = credentials.filter((c) => !c.revokedAt && c.delegateAccount);
-  const delegates = ctx.delegatesQuery.data?.delegates;
-
-  return (
-    <div
-      className="flex w-full flex-col gap-2.5 pt-2"
-      data-testid="agent-payment-delegation"
-    >
-      <MicroLabel>AGENT PAYMENTS</MicroLabel>
-      {bound.length === 0 ? (
-        <p className="text-body-13 text-02">
-          No key of this agent has a payment key yet. Paid calls are by
-          invitation during testnet: an invited agent makes its payment key
-          and proves it holds it with its API key (
-          <span className="font-mono">agent-cli keygen</span>, then{" "}
-          <span className="font-mono">agent-cli bind</span>); the payment key
-          then appears here to authorise.
-        </p>
-      ) : (
-        bound.map((credential) => {
-          const delegation = findDelegation(
-            delegates,
-            credential.delegateAccount as string,
-          );
-          return (
-            <div
-              key={credential.id}
-              data-testid="delegate-row"
-              className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-02 p-3.5 tablet:flex-row tablet:items-center"
-            >
-              <Wallet aria-hidden="true" className="size-4 shrink-0 text-02" />
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="break-all font-mono text-mono-xs text-01">
-                  {addressOfAccount(credential.delegateAccount)}
-                </span>
-                <span className="text-body-xs text-03">
-                  {credential.name} · key …
-                  {keyFingerprint(credential.delegateAccount)}
-                  {credential.delegateBoundAt
-                    ? ` · bound ${relativeTime(credential.delegateBoundAt)}`
-                    : ""}{" "}
-                  ·{" "}
-                  {delegation
-                    ? delegation.status === "EXPIRED"
-                      ? "authorisation expired"
-                      : "authorised to pay"
-                    : ctx.delegatesQuery.isPending
-                      ? "reading the chain…"
-                      : "not authorised to pay"}
-                </span>
-              </div>
-              {!delegation || delegation.status === "EXPIRED" ? (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  type="button"
-                  data-testid="authorize-delegate"
-                  disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
-                  onClick={() =>
-                    setAuthorizing({
-                      delegateAccount: credential.delegateAccount as string,
-                      boundAt: credential.delegateBoundAt ?? null,
-                    })
-                  }
-                >
-                  Authorize agent to pay
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <StatusPill label="CAN PAY" tone="teal" />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    type="button"
-                    data-testid="edit-agent-delegate"
-                    disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
-                    onClick={() =>
-                      setAuthorizing({
-                        delegateAccount: credential.delegateAccount as string,
-                        boundAt: credential.delegateBoundAt ?? null,
-                        current: delegation,
-                      })
-                    }
-                  >
-                    Change spending limits
-                  </Button>
-                </div>
-              )}
-            </div>
-          );
-        })
-      )}
-      {bound.length > 0 &&
-      ctx.escrowQuery.data &&
-      !escrowCanDelegate(ctx.escrowQuery.data) ? (
-        <p className="text-body-xs text-03">
-          Set your account ceiling first — an agent’s spending limits sit under it.
-        </p>
-      ) : null}
-
-      <AuthorizeSheet
-        target={authorizing}
-        escrow={ctx.escrowQuery.data}
-        escrowReceivedAt={ctx.escrowQuery.dataUpdatedAt}
-        unit={ctx.unit}
-        tightenDelaySeconds={ctx.delegatesQuery.data?.tightenDelaySeconds}
-        onClose={() => setAuthorizing(null)}
-        onFinished={() => {
-          setAuthorizing(null);
-          onChanged();
-        }}
-        signer={ctx.signer}
-        domain={ctx.domain}
-      />
-    </div>
   );
 }
 
@@ -1155,7 +1091,7 @@ function AuthorizeSheet({
                   label="Last 4 characters of the agent’s key"
                   id="delegate-confirm-key"
                   value={confirm}
-                  hint="As `agent-cli address` prints it on the agent’s machine. This is what proves the key is yours."
+                  hint={`As \`${assayMcpRun()} status\` prints it on the agent’s machine. This is what proves the key is yours.`}
                   error={
                     confirm.length >= 4 && !confirmsDelegateKey(confirm, delegate)
                       ? "That is not this key."
@@ -1276,7 +1212,7 @@ export function GrantActions({
   /** False on a free-calls-only chain: limits count no call there, so there is nothing to change. */
   showChange?: boolean;
 }) {
-  const ctx = useDelegationContext(account, 0);
+  const ctx = useDelegationContext(account);
   const [editing, setEditing] = React.useState<SheetTarget | null>(null);
   const [revoking, setRevoking] = React.useState<EscrowDelegate | null>(null);
   const draft = useBudgetDraft({

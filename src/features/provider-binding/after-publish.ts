@@ -8,25 +8,26 @@ import type {
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
-import { revalidateProviderStake } from "@/services/provider-stake.service";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * What a successful publish has to do to the cache, in one place.
  *
  * ## Why seeding and not invalidating
  *
- * Provider GETs are served `private, max-age=10, stale-while-revalidate=3600`,
- * so invalidating a key right after the write refetches the PRE-write body out
+ * Provider GETs were served `private, max-age=10, stale-while-revalidate=3600`
+ * until BUG-SYS-01, so invalidating a key right after the write refetches the PRE-write body out
  * of the browser's HTTP cache. That is how BUG-J-PROV-02 looked: the binding
  * was ACTIVE on the server while the publish screen, the rail and Home's
- * headroom all still described the draft. So:
+ * headroom all still described the draft. Seeding still saves the refetches.
+So:
  *
  * - the binding detail is seeded from the publish response, which IS the
  *   binding (`PublishedToolBinding extends ToolBindingDetail`);
  * - the rail's list gets that one row patched from the same response;
  * - the stake cannot be derived locally — publishing adds the binding to the
- *   itemised requirement and moves `headroom` — so it is re-read with
- *   `Cache-Control: no-cache`;
+ *   itemised requirement and moves `headroom` — so it is re-read (the route
+ *   is now served `private, no-cache`, so that read reaches the API);
  * - the publish check is only marked stale; the screen leaves it anyway.
  */
 export async function applyPublished(
@@ -57,7 +58,7 @@ export async function applyPublished(
     refetchType: "none",
   });
   await queryClient
-    .fetchQuery({ queryKey: ["provider", "stake"], queryFn: revalidateProviderStake, staleTime: 0 })
+    .fetchQuery({ ...providerQueries.stake(), staleTime: 0 })
     .catch(() => undefined);
 }
 

@@ -33,9 +33,11 @@ import { useOrgHandle } from "@/components/toolsets/use-toolsets";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
+import { credentialLabel, type CredentialLike } from "@/features/buyer-money/mcp-config";
 import { termsVersionLabel } from "@/features/m41/terms";
-import { createCredential, listAgents, listCredentials } from "@/services/account.service";
-import { getProviderRegistration } from "@/services/provider-registration.service";
+import { useAgentList } from "@/features/agents/agent-list";
+import { createCredential, listCredentials } from "@/services/account.service";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Account, seats and credentials.
@@ -113,11 +115,10 @@ import { getProviderRegistration } from "@/services/provider-registration.servic
  */
 
 
-interface Credential {
+interface Credential extends CredentialLike {
   id: string;
   agentId: string;
   name: string;
-  prefix: string;
   scopes: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;
@@ -148,9 +149,12 @@ interface TokenRow {
   lastUsed: string;
 }
 
-/** "••••8f3a": enough to tell two keys apart, never the key's raw prefix. */
-function maskedKey(prefix: string): string {
-  return `••••${prefix.slice(-4)}`;
+/**
+ * "••••8f3a": enough to tell two keys apart, never the key's raw prefix. An
+ * OAuth grant has no key: it is named as the app sign-in it is.
+ */
+function maskedKey(credential: CredentialLike): string {
+  return credential.prefix ? `••••${credential.prefix.slice(-4)}` : credentialLabel(credential);
 }
 
 /** Terms versions are dated ("2026-06-15"); said exactly as Setup says them ("Apr 1, 2026 version"). */
@@ -266,17 +270,9 @@ export default function ProviderAccountPage() {
   const [cacheEpoch] = React.useState(() => Date.now() % 86_400_000);
   const [writeCount, setWriteCount] = React.useState(0);
 
-  const registration = useQuery({
-    queryKey: ["provider", "registration"],
-    queryFn: getProviderRegistration,
-    retry: false,
-  });
+  const registration = useQuery(providerQueries.registration());
 
-  const agents = useQuery({
-    queryKey: ["agents"],
-    retry: false,
-    queryFn: () => listAgents({ limit: 50 }),
-  });
+  const agents = useAgentList();
 
   const agentIds = React.useMemo(
     () => (agents.data?.items ?? []).map((agent) => agent.agentId),
@@ -333,7 +329,7 @@ export default function ProviderAccountPage() {
   const tokenRows: TokenRow[] = (credentials.data ?? []).map((credential) => ({
     id: credential.id,
     name: credential.name,
-    token: maskedKey(credential.prefix),
+    token: maskedKey(credential),
     // A revoked credential is kept, not deleted, so its row stays readable —
     // and the cell says which it is rather than showing a stale "last used".
     lastUsed: credential.revokedAt
@@ -636,7 +632,7 @@ export default function ProviderAccountPage() {
           <SheetHeader>
             <SheetTitle>Your new API key</SheetTitle>
             <SheetDescription>
-              {created ? `${created.name} · ${maskedKey(created.prefix)}` : null}
+              {created ? `${created.name} · ${maskedKey(created)}` : null}
             </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-5 px-[18px] pb-8 pt-5">

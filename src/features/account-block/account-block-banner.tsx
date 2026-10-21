@@ -17,7 +17,7 @@ export const REFUSED_DESCRIPTION =
 /**
  * The blocked-account banner, mounted once per signed-in shell.
  *
- * Reads `GET /account/block-status` (cached) and the latest blocked refusal.
+ * Reads the block status (`GET /me/status`, cached) and the latest blocked refusal.
  * A confirmed block is persistent — no dismiss — because every write will keep
  * being refused until an operator lifts it. A refusal that may be about
  * another party can be dismissed.

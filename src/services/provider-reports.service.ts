@@ -13,6 +13,7 @@ import { demoEnabled } from "@/libs/demo/demo-api";
 import { demoCallsCsv } from "@/libs/demo/fixtures-provider-calls";
 
 import { api } from "./api";
+import { sharedRead } from "./shared-reads";
 import { getChains } from "./chains.service";
 import { pickDisplayAsset, storedDisplayAsset } from "./display-asset";
 
@@ -49,7 +50,7 @@ export async function getProviderEarnings(query: ProviderEarningsQuery): Promise
     // with an error page.
     const multiple = error instanceof ApiError && error.code === "PROVIDER_MULTIPLE_ASSETS";
     if (!multiple || asset) throw error;
-    const { chains } = await getChains();
+    const { chains } = await sharedRead(["chains"], getChains, 60_000);
     const fallback = pickDisplayAsset(
       chains.map((chain) => chain.settlementAsset),
       storedDisplayAsset()
@@ -67,19 +68,26 @@ let earningAssets: { at: number; value: Promise<string[]> } | null = null;
  * one, else `[]` (one asset, nothing to choose).
  *
  * Each settlement asset is asked about by name, because the unnamed question
- * is the one the API refuses. Memoised for a few seconds: one screen fires
- * several earnings requests at once and they must all name the same asset.
+ * is the one the API refuses: one request per settlement asset. Kept a minute
+ * in the app's query cache (`sharedRead`), so moving between the provider
+ * screens does not ask again; without the app's cache, a few seconds here.
+ * The window ends on the minute, so reads within it are the same request.
  */
 export function providerEarningAssets(): Promise<string[]> {
+  return sharedRead(["provider", "earning-assets"], memoisedEarningAssets, 60_000);
+}
+
+function memoisedEarningAssets(): Promise<string[]> {
   const now = Date.now();
   if (!earningAssets || now - earningAssets.at > 10_000) {
-    earningAssets = { at: now, value: lookUpEarningAssets(new Date(now)).catch(() => []) };
+    const minute = new Date(Math.floor(now / 60_000) * 60_000);
+    earningAssets = { at: now, value: lookUpEarningAssets(minute).catch(() => []) };
   }
   return earningAssets.value;
 }
 
 async function lookUpEarningAssets(now: Date): Promise<string[]> {
-  const { chains } = await getChains();
+  const { chains } = await sharedRead(["chains"], getChains, 60_000);
   const candidates = [...new Set(chains.map((chain) => chain.settlementAsset))];
   if (candidates.length < 2) return [];
   const window = {

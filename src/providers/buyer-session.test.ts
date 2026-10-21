@@ -6,8 +6,11 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   applyIdentityChange,
+  cacheChangeFor,
   handleUnauthorized,
+  UNRESOLVED_IDENTITY,
   isOperatorConsolePath,
+  needsEmbeddedEvmWallet,
   isPublicPath,
   markPublicShell,
   onPublicShell,
@@ -33,6 +36,21 @@ function effects() {
 }
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("needsEmbeddedEvmWallet", () => {
+  it("an email-only account needs one", () => {
+    expect(needsEmbeddedEvmWallet([{ type: "email" }])).toBe(true);
+  });
+  it("an account with only an embedded Solana wallet or an external EVM wallet still needs one", () => {
+    expect(needsEmbeddedEvmWallet([{ type: "wallet", walletClientType: "privy", chainType: "solana" }])).toBe(true);
+    expect(needsEmbeddedEvmWallet([{ type: "wallet", walletClientType: "metamask", chainType: "ethereum" }])).toBe(true);
+  });
+  it("an account with an embedded EVM wallet does not", () => {
+    expect(
+      needsEmbeddedEvmWallet([{ type: "email" }, { type: "wallet", walletClientType: "privy", chainType: "ethereum" }]),
+    ).toBe(false);
+  });
+});
 
 describe("isOperatorConsolePath", () => {
   it("matches the console and every page under it", () => {
@@ -110,6 +128,60 @@ describe("applyIdentityChange", () => {
     );
     await flush();
     expect(fx.startWalletLink).toHaveBeenCalledTimes(1);
+  });
+
+  /* F3: a reload whose early requests all carried this identity's token. */
+  it("on the first identity of a page load, refetches only failures when every request already carried its token", async () => {
+    const fx = { ...effects(), sentAs: vi.fn((identity: string) => (identity === "did:privy:buyer" ? ("only" as const) : ("other" as const))) };
+    applyIdentityChange(
+      { onOperatorConsole: false, authenticated: true, identity: "did:privy:buyer", previous: undefined },
+      fx,
+    );
+    await flush();
+
+    expect(fx.sentAs).toHaveBeenCalledWith("did:privy:buyer");
+    // Only the failed queries are refetched (see identity-cache.test.ts).
+    expect(fx.queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(fx.queryClient.invalidateQueries).toHaveBeenCalledWith({ predicate: expect.any(Function) });
+    expect(fx.queryClient.resetQueries).not.toHaveBeenCalled();
+    // The rest of the login path still runs.
+    expect(fx.resetWalletLink).toHaveBeenCalledTimes(1);
+    expect(fx.startWalletLink).toHaveBeenCalledTimes(1);
+  });
+
+  it("on the first identity of a page load, refetches when some request did not carry its token", () => {
+    const fx = { ...effects(), sentAs: vi.fn(() => "unknown" as const) };
+    applyIdentityChange(
+      { onOperatorConsole: false, authenticated: true, identity: "did:privy:buyer", previous: undefined },
+      fx,
+    );
+    expect(fx.queryClient.invalidateQueries).toHaveBeenCalledTimes(1);
+    expect(fx.queryClient.invalidateQueries).toHaveBeenCalledWith();
+  });
+
+  it("always resets on a switch of identity, whatever the requests carried", () => {
+    const fx = { ...effects(), sentAs: vi.fn(() => "only" as const) };
+    applyIdentityChange(
+      { onOperatorConsole: false, authenticated: true, identity: "did:privy:b", previous: "did:privy:a" },
+      fx,
+    );
+    applyIdentityChange(
+      { onOperatorConsole: false, authenticated: false, identity: null, previous: "did:privy:b" },
+      fx,
+    );
+    expect(fx.sentAs).not.toHaveBeenCalled();
+    expect(fx.queryClient.resetQueries).toHaveBeenCalledTimes(2);
+    expect(fx.queryClient.invalidateQueries).not.toHaveBeenCalled();
+  });
+
+  it("drops the cache when the first identity's early requests went out as someone else", () => {
+    const fx = { ...effects(), sentAs: vi.fn(() => "other" as const) };
+    applyIdentityChange(
+      { onOperatorConsole: false, authenticated: true, identity: "did:privy:buyer", previous: undefined },
+      fx,
+    );
+    expect(fx.queryClient.resetQueries).toHaveBeenCalledTimes(1);
+    expect(fx.queryClient.invalidateQueries).not.toHaveBeenCalled();
   });
 
   it("skips an unchanged identity and a cancelled token read", async () => {
@@ -315,5 +387,40 @@ describe("signedOutLanding", () => {
     expect(signedOutLanding({ ready: true, authenticated: true, pathname: "/", demo: false })).toBeNull();
     expect(signedOutLanding({ ready: true, authenticated: false, pathname: "/funding", demo: false })).toBeNull();
     expect(signedOutLanding({ ready: true, authenticated: false, pathname: "/", demo: true })).toBeNull();
+  });
+});
+
+describe("cacheChangeFor", () => {
+  const only = () => "only" as const;
+  const other = () => "other" as const;
+  const unknown = () => "unknown" as const;
+
+  it("a later change is always a switch", () => {
+    expect(cacheChangeFor("did:privy:b", "did:privy:a", only)).toBe("switch");
+    expect(cacheChangeFor(null, "did:privy:a", only)).toBe("switch");
+    expect(cacheChangeFor("did:privy:a", null, only)).toBe("switch");
+  });
+
+  it("the first identity: served, switch or boot by who the requests went out as", () => {
+    expect(cacheChangeFor("did:privy:a", undefined, only)).toBe("served");
+    expect(cacheChangeFor("did:privy:a", undefined, other)).toBe("switch");
+    expect(cacheChangeFor("did:privy:a", undefined, unknown)).toBe("boot");
+    expect(cacheChangeFor("did:privy:a", undefined, undefined)).toBe("boot");
+  });
+
+  /* Review minor 6: Privy signed in, its `user` not loaded yet. */
+  it("a signed-in session whose user has not loaded is never taken for someone else", () => {
+    const sentAs = vi.fn(other);
+    expect(cacheChangeFor(UNRESOLVED_IDENTITY, undefined, sentAs)).toBe("boot");
+    expect(sentAs).not.toHaveBeenCalled();
+    expect(cacheChangeFor(UNRESOLVED_IDENTITY, "did:privy:a", only)).toBe("switch");
+  });
+
+  it("the identity that replaces it: served only when every request carried its token, otherwise reset", () => {
+    expect(cacheChangeFor("did:privy:a", UNRESOLVED_IDENTITY, only)).toBe("served");
+    expect(cacheChangeFor("did:privy:a", UNRESOLVED_IDENTITY, other)).toBe("switch");
+    expect(cacheChangeFor("did:privy:a", UNRESOLVED_IDENTITY, unknown)).toBe("switch");
+    expect(cacheChangeFor("did:privy:a", UNRESOLVED_IDENTITY, undefined)).toBe("switch");
+    expect(cacheChangeFor(null, UNRESOLVED_IDENTITY, only)).toBe("switch");
   });
 });

@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { publicApi } from "./public-api";
 import type { Figure } from "./toolsets.service";
 
 /**
@@ -166,21 +166,21 @@ export interface ListPublicToolsetsQuery {
 export function listPublicToolsets(query: ListPublicToolsetsQuery = {}): Promise<PublicToolsetList> {
   const params: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(query)) if (value !== undefined && value !== "") params[key] = value;
-  return api.get<PublicToolsetList>("/public/toolsets", params);
+  return publicApi.get<PublicToolsetList>("/public/toolsets", params);
 }
 
 /** PUBLIC and LISTED only; anything else is the same 404. */
 export function getPublicToolset(handle: string, slug: string): Promise<PublicToolsetPage> {
-  return api.get<PublicToolsetPage>(`/public/toolsets/@${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`);
+  return publicApi.get<PublicToolsetPage>(`/public/toolsets/@${encodeURIComponent(handle)}/${encodeURIComponent(slug)}`);
 }
 
 export function listPublicToolsetVersions(handle: string, slug: string): Promise<{ versions: PublicToolsetVersion[] }> {
-  return api.get<{ versions: PublicToolsetVersion[] }>(`/public/toolsets/@${encodeURIComponent(handle)}/${encodeURIComponent(slug)}/versions`);
+  return publicApi.get<{ versions: PublicToolsetVersion[] }>(`/public/toolsets/@${encodeURIComponent(handle)}/${encodeURIComponent(slug)}/versions`);
 }
 
 /** One version and, with `diffFrom`, what changed since that version ("Update available"). */
 export function getPublicToolsetVersion(handle: string, slug: string, v: number, diffFrom?: number | null): Promise<PublicToolsetVersionDetail> {
-  return api.get<PublicToolsetVersionDetail>(
+  return publicApi.get<PublicToolsetVersionDetail>(
     `/public/toolsets/@${encodeURIComponent(handle)}/${encodeURIComponent(slug)}/versions/${v}`,
     diffFrom ? { diffFrom } : {},
   );
@@ -188,13 +188,13 @@ export function getPublicToolsetVersion(handle: string, slug: string, v: number,
 
 /** A link-only tool set's page. The token travels in the body, never in a URL. `diffFrom` adds the diff. */
 export function getToolsetByToken(token: string, v?: number | null, diffFrom?: number | null): Promise<PublicToolsetPage> {
-  return api.post<PublicToolsetPage>("/public/toolsets/by-token", { token, ...(v ? { v } : {}), ...(diffFrom ? { diffFrom } : {}) });
+  return publicApi.post<PublicToolsetPage>("/public/toolsets/by-token", { token, ...(v ? { v } : {}), ...(diffFrom ? { diffFrom } : {}) });
 }
 
 export function getPublicHandle(handle: string): Promise<PublicHandleProfile> {
-  return api.get<PublicHandleProfile>(`/public/handles/${encodeURIComponent(handle)}`);
+  return publicApi.get<PublicHandleProfile>(`/public/handles/${encodeURIComponent(handle)}`);
 }
 
 export function listPublicCategories(): Promise<{ categories: PublicCategory[] }> {
-  return api.get<{ categories: PublicCategory[] }>("/public/categories");
+  return publicApi.get<{ categories: PublicCategory[] }>("/public/categories");
 }

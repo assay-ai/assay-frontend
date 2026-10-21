@@ -53,5 +53,6 @@ export async function runEscrowIntent(
   intent: SignableIntent,
   signer: Signer,
 ): Promise<{ signature: string }> {
-  return { signature: await signer.signAndSend(intent.transaction) };
+  // The Privy confirmation is always shown for an escrow call (spec R-WEB-5).
+  return { signature: await signer.signAndSend(intent.transaction, { showWalletUIs: true }) };
 }

@@ -235,7 +235,7 @@ describe("Servers in use", () => {
   it("one row per URL — name, tools, tokens, last call — a waiting row, and the over-budget warning", () => {
     const out = text(render(<ServersInUse agentId="a1" agentName="research-bot" />, (c) => c.setQueryData(toolsetKeys.servers("a1"), SERVERS)));
     expect(out).toContain("Name Tools Tokens (est.) Last call Change");
-    expect(out).toContain("Read-only: to change one, make a new URL");
+    expect(out).toContain("Change makes a new URL for a server; replace the old one in your app.");
     expect(out).toContain("Research kit");
     expect(out).toContain("22");
     expect(out).toContain("~5.1k");
@@ -262,6 +262,9 @@ describe("Servers in use", () => {
     expect(html).toMatch(/class="hidden w-full rounded-lg border border-01 tablet:block"/);
     expect(html).not.toContain("min-w-[520px]");
     expect(text(html)).toContain("Change makes a new URL for a server");
+    // Said once, in the intro, not again above the phone cards.
+    expect(text(html).split("Change makes a new URL").length - 1).toBe(1);
+    expect(text(html)).not.toContain("Read-only: to change one");
     expect(text(html)).toContain("Change…");
   });
 
@@ -296,18 +299,20 @@ describe("Servers in use", () => {
 });
 
 describe("the client tabs", () => {
-  it("has the four clients, Claude Code first with its one-liner and the full key at creation", () => {
-    const html = render(<McpConfigTabs token="assay_live_full_key" url="https://mcp.example.com/" />);
+  it("has the ten clients, Claude Code first with the pinned proxy install and no key", () => {
+    const html = render(<McpConfigTabs token="assay_sk_live_full_key" url="https://mcp.example.com/" />);
     const out = text(html);
-    expect(out).toContain("Claude Code Claude Desktop Cursor Other");
-    // Phone: the tab row wraps rather than clipping "Other".
+    expect(out).toContain("Claude Code Codex Cursor VS Code Windsurf Gemini CLI Claude Desktop claude.ai ChatGPT My own code");
+    // Phone: the tab row wraps rather than clipping the last tab.
     expect(html).toContain("flex-wrap");
-    expect(out).toContain('claude mcp add --transport http assay https://mcp.example.com/ --header "Authorization: Bearer assay_live_full_key"');
+    expect(out).toContain("claude mcp add --scope user assay -- npx -y @goassay-ai/mcp@1.2.3 --name assay");
+    expect(out).not.toContain("assay_sk_live_full_key");
+    expect(out).not.toContain("mcp-remote");
   });
 
-  it("without the key, names it by its prefix", () => {
-    const out = text(render(<McpConfigTabs token={null} keyPrefix="assay_live_ab12" url="https://mcp.example.com/" />));
-    expect(out).toContain("assay_live_ab12…REST_OF_YOUR_KEY");
+  it("My own code, without the key, names it by its prefix", () => {
+    const out = text(render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />));
+    expect(out).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
   });
 
   it("snippets wrap on a phone, so the URL and the header stay visible (review F, 390px)", () => {

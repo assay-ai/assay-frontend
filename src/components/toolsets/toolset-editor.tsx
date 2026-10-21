@@ -115,6 +115,7 @@ export function ToolsetPage({ id, slug, free, version }: { id: string | null; sl
       <ConnectPanel
         compact
         copyable
+        connectLabel="Use this tool set"
         url={buildMcpUrl({ kind: "toolset", slug: set.slug, version: version ?? null }, { free: Boolean(free) })}
         title={`Connect ${set.name}`}
         detail={version ? `Locked to v${version}: only these tools, with these provider rules.` : "Its own MCP server: only these tools, with these provider rules."}

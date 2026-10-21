@@ -266,7 +266,8 @@ export async function submitRelayedEscrowIntent(
     RELAYED_SUBMISSION_REFUSED,
   );
 
-  const signature = await signer.signTypedData(transaction);
+  // SetLimits and every other relayed escrow request: Privy's confirmation is always shown (spec R-WEB-5).
+  const signature = await signer.signTypedData(transaction, { showWalletUIs: true });
   return submit(relayedSubmitBody(transaction, signature));
 }
 

@@ -304,7 +304,7 @@ function CompensateForm({ brief, proposalId, me }: { brief: OperatorCaseBrief; p
     return (
       <>
         <p className="text-body-13 text-02">
-          First the deposit is prepared: {formatMoney(penalty)} from the treasury into the provider&rsquo;s stake. Preparing it moves
+          First the deposit is prepared: {formatMoney(penalty)}{" "}from the treasury into the provider&rsquo;s stake. Preparing it moves
           nothing; the treasury&rsquo;s signers pay it.
         </p>
         <Failure error={build.error} />

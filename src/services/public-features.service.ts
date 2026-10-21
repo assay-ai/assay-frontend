@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { publicApi } from "./public-api";
 
 /** Which optional public pages this deployment serves. */
 export interface PublicFeatures {
@@ -12,5 +12,5 @@ export interface PublicFeatures {
  * calling them fired a failing request on every load.
  */
 export function getPublicFeatures(): Promise<PublicFeatures> {
-  return api.get<PublicFeatures>("/public/features");
+  return publicApi.get<PublicFeatures>("/public/features");
 }

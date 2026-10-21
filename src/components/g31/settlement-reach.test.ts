@@ -39,6 +39,12 @@ describe("settlementReach", () => {
     expect(settlementReach([], [SOLANA])).toEqual({ kind: "unknown" });
   });
 
+  it("is unknown — and does not throw — when the catalogue sends null (BUG-M1-01)", () => {
+    // `GET /catalogue/tools` sends `settlementChains: null` for a tool with
+    // nothing routable: "not known", never "settles nowhere".
+    expect(settlementReach(null, [SOLANA])).toEqual({ kind: "unknown" });
+  });
+
   it("is unknown when the BUYER's chains are not known, rather than accusing them", () => {
     // A buyer with no balances yet, or a failed /balances read, is not a buyer
     // who cannot pay. Marking every tool unreachable on a transient error is a

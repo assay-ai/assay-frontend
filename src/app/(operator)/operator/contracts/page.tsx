@@ -137,6 +137,8 @@ function ContractsScreen() {
 
   const refresh = React.useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: ["operator", "contracts", chainId] });
+    // A new arbiter, a pause or a new slash split changes what the arbiter page reads too.
+    void queryClient.invalidateQueries({ queryKey: ["operator", "arbiter"] });
   }, [queryClient, chainId]);
 
   if (!isAdmin) {

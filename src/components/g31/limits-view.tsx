@@ -17,6 +17,7 @@ import { AgentAccessCard } from "@/components/toolsets/agent-access-card";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { plainActor } from "@/features/buyer-money/budget-form";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { listSpendPolicyHistory } from "@/services/limits.service";
@@ -46,6 +47,8 @@ export function LimitsView() {
     ctx.refetchKeys();
     ctx.refetchDelegates();
     void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+    // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+    void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
     void queryClient.invalidateQueries({ queryKey: ["escrow-delegates"] });
   };
 

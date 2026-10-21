@@ -1,6 +1,6 @@
 import { ApiError } from "@/libs/ApiClient";
 
-import { api } from "./api";
+import { publicApi } from "./public-api";
 import { getPublicFeatures } from "./public-features.service";
 
 /**
@@ -78,7 +78,7 @@ export interface DemoCompensation {
 /** `null` when this deployment has no demo configured, so the route 404s. */
 export async function runDemo(side: "pass" | "fail", query: string): Promise<DemoRunResult | null> {
   try {
-    return await api.post<DemoRunResult>("/public/demo/run", { side, query });
+    return await publicApi.post<DemoRunResult>("/public/demo/run", { side, query });
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
@@ -86,7 +86,7 @@ export async function runDemo(side: "pass" | "fail", query: string): Promise<Dem
 }
 
 export async function pollDemoVerdict(intentId: string): Promise<DemoVerdict> {
-  return api.get<DemoVerdict>(`/public/demo/verdict/${intentId}`);
+  return publicApi.get<DemoVerdict>(`/public/demo/verdict/${intentId}`);
 }
 
 /**
@@ -103,7 +103,7 @@ export async function getDemoStatus(): Promise<{
   compensation: DemoCompensation | null;
 }> {
   if (!(await getPublicFeatures()).demo) return { configured: false, compensation: null };
-  const compensation = await api.get<DemoCompensation | null>("/public/demo/compensation");
+  const compensation = await publicApi.get<DemoCompensation | null>("/public/demo/compensation");
   return { configured: true, compensation: compensation ?? null };
 }
 

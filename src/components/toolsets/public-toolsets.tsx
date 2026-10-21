@@ -334,7 +334,8 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
   const [reporting, setReporting] = React.useState(false);
   const shownVersion = v ?? page.version;
   const latestUrl = page.mcpUrls.latest;
-  const url = v ? `${latestUrl}@${v}` : page.mcpUrls.recommended;
+  // Another person's set is always handed out pinned (spec 9.3), also an Official one.
+  const url = v ? `${latestUrl}@${v}` : page.mcpUrls.pinned;
   const official = page.badge === "OFFICIAL";
   // Link-only: "Start free" comes back without the token in any URL; it waits in this tab.
   const nextPath = token ? "/toolsets/view?resume=1" : undefined;
@@ -425,12 +426,9 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
           publicPage
           url={url}
           nextPath={nextPath}
+          connectLabel="Use this tool set"
           title={`Connect ${page.name}`}
-          detail={
-            official && !v
-              ? "Always the latest version: Assay keeps its Official sets up to date."
-              : `Locked to v${shownVersion}, so it never changes under your agent. You choose when to update.`
-          }
+          detail={`Locked to v${shownVersion}, so it never changes under your agent. You choose when to update.`}
         />
       </div>
 

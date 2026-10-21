@@ -10,8 +10,9 @@ vi.mock("next/navigation", () => ({
 
 import { AlertRowActions, AlertsView } from "./alerts-view";
 
-function render(): string {
+function render(providerMe?: unknown): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (providerMe) client.setQueryData(["provider", "me"], providerMe);
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <AlertsView />
@@ -44,5 +45,15 @@ describe("See all alerts: Mark read on a row (R1-M1)", () => {
   it("offers no Mark read once the row is read", () => {
     expect(html(false, { label: "Top up", href: "/funding?action=deposit" })).not.toContain("alert-mark-read");
     expect(html(false)).toBe("");
+  });
+});
+
+describe("Customise: provider-side events only for a provider (review m9)", () => {
+  it("a buyer-only organization sees none; a provider sees them", () => {
+    const buyer = render();
+    expect(buyer).toContain("Customise: every alert");
+    expect(buyer).toContain("App stopped: sign-in used twice");
+    expect(buyer).not.toContain("Penalty decided");
+    expect(render({ id: "org-1" })).toContain("Penalty decided");
   });
 });

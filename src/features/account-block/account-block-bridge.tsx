@@ -7,7 +7,7 @@ import * as React from "react";
 import { onAccountBlocked, registerWriteGuard } from "@/libs/ApiClient";
 
 import { blockedWriteGuard, getAccountBlockSnapshot, reportBlockedRefusal, resetAccountBlock } from "./state";
-import { ACCOUNT_BLOCK_STATUS_KEY } from "./use-account-block";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 
 /**
  * Connects `ApiClient` to the blocked-account banner. Pure side effect.
@@ -27,7 +27,7 @@ export function AccountBlockBridge({ children }: { children: React.ReactNode }) 
   React.useEffect(() => {
     onAccountBlocked((error) => {
       reportBlockedRefusal(error);
-      void queryClient.invalidateQueries({ queryKey: ACCOUNT_BLOCK_STATUS_KEY });
+      void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
     });
     registerWriteGuard((method, url) =>
       blockedWriteGuard(getAccountBlockSnapshot().confirmed, method, url),

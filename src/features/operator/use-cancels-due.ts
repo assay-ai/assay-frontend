@@ -4,10 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import type { OperatorCaseListRow } from "@/interfaces/operator";
-import { listOperatorToolRequests, type OperatorToolRequestRow } from "@/services/operator-contracts.service";
+import { type OperatorToolRequestRow } from "@/services/operator-contracts.service";
 import { listOperatorCases } from "@/services/operator.service";
 
 import { cancelsDue, overdueToolRequests } from "./inbox";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Penalties waiting for the arbiter's cancel signature (`CANCEL_REQUESTED`),
@@ -61,8 +62,7 @@ export function useToolRequestsDue(enabled: boolean): {
   dataUpdatedAt: number;
 } {
   const query = useQuery({
-    queryKey: ["operator", "tool-requests"],
-    queryFn: () => listOperatorToolRequests(),
+    ...operatorQueries.toolRequests(),
     enabled,
     refetchInterval: 60_000,
     retry: 0,

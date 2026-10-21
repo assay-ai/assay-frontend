@@ -38,10 +38,19 @@ export interface CallsExportWindow {
   to: string;
 }
 
-export function useCallsExport(window: CallsExportWindow) {
+/**
+ * `enabled`: the export is up to 50 000 rows and the API allows a few a minute
+ * per organisation, one at a time, so a screen asks for it only when the
+ * person does (a download, a list of calls opened), never on load. Once read it
+ * is kept for the window: a second download re-uses the bytes.
+ */
+export function useCallsExport(window: CallsExportWindow, options: { enabled?: boolean } = {}) {
   const query = useQuery({
     queryKey: ["provider", "calls-export", window.from, window.to],
     queryFn: () => exportProviderCalls(window),
+    enabled: options.enabled ?? false,
+    staleTime: Infinity,
+    retry: 0,
   });
 
   const rows: CallRow[] = useMemo(

@@ -44,6 +44,9 @@ const UNLINKED: Record<string, string> = {
   "/settings/close": "linked from Settings",
   "/funding/auto-top-up": "says there is no auto top-up and points at the alerts",
   "/connect/preview": "where the MCP host sends a browser that opens a filtered MCP URL",
+  "/connect/authorize": "the OAuth consent page; the MCP host sends a browser there for one sign-in",
+  "/connect/authorize-error": "where the MCP host sends a browser when an app's sign-in cannot start",
+  "/agents/enable-paid": "the enable-paid page; assay-mcp opens it with the payment key in the fragment",
 };
 
 describe("buyer navigation", () => {

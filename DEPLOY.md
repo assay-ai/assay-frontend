@@ -54,7 +54,8 @@ In the repository settings, create two environments, `develop` and
 | Variable | `NEXT_PUBLIC_BASE_URL`     | the app's public URL, e.g. `https://app.example.com` |
 | Variable | `NEXT_PUBLIC_API_BASE_URL` | the backend API, e.g. `https://api.example.com/api/v1` |
 | Variable | `NEXT_PUBLIC_PRIVY_APP_ID` | the Privy app id (25 characters)                |
-| Variable | `NEXT_PUBLIC_MCP_URL`      | optional: the MCP host root, e.g. `https://mcp.assay.ai/` |
+| Variable | `NEXT_PUBLIC_MCP_URL`      | the MCP host root, e.g. `https://mcp.goassay.ai/`; required: without it the Connect page shows no command |
+| Variable | `NEXT_PUBLIC_ASSAY_MCP_VERSION` | the exact `@goassay-ai/mcp` version install commands pin (no range, no tag); the build fails without it |
 | Variable | `NEXT_PUBLIC_DEMO_CHAINS`  | `demo` environment only: `robinhood`. Leave it unset in the others; the workflow refuses it there |
 | Variable | `NEXT_PUBLIC_SHOW_KITCHEN_SINK` | optional: `1` keeps `/kitchen-sink` in the build |
 | Variable | `CLOUDFLARE_PAGES_PROJECT` | this environment's Pages project name           |
@@ -69,7 +70,15 @@ next deploy, not before: re-run the workflow (it has a manual
 `workflow_dispatch` trigger) after editing them.
 
 Optionally, protect `production` with required reviewers so a push to `main`
-waits for approval before it deploys.
+waits for approval before it deploys. The workflow has two jobs bound to the
+environment, `build` (reads the `NEXT_PUBLIC_*` values, never the Cloudflare
+credentials) and `deploy` (the only job that reads `CLOUDFLARE_API_TOKEN`), so
+a reviewer approves each of them in turn.
+
+`deploy` runs the wrangler pinned in `deploy/wrangler` (`package.json` and
+`package-lock.json`, installed with `npm ci --ignore-scripts`). To bump it,
+change the version there and regenerate the lockfile with
+`npm install --package-lock-only --ignore-scripts` in that folder.
 
 ### 4. Privy allowed origins
 

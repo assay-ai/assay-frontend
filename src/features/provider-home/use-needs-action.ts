@@ -5,23 +5,18 @@ import { useQuery } from "@tanstack/react-query";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { usePenaltySummary } from "@/features/provider-penalties/use-penalty-summary";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
-import { listProviderCallDisputes } from "@/services/call-disputes.service";
 import { listSlaWindows } from "@/services/provider-sla-windows.service";
 
 import { needsActionItems, slaWatchItems } from "./needs-action";
 import { useProviderBindings } from "./use-listing-progress";
+import { providerQueries } from "./queries";
 
 /**
  * Open bad-result reports on the provider's calls, read once for Home, the
  * Inbox and the nav badge (same query key).
  */
 export function useOpenReports() {
-  return useQuery({
-    queryKey: ["provider", "call-disputes", "open"],
-    queryFn: () => listProviderCallDisputes({ state: ["OPEN"], limit: 50 }),
-    refetchInterval: 60_000,
-    retry: false,
-  });
+  return useQuery({ ...providerQueries.openReports(), refetchInterval: 60_000 });
 }
 
 /** Reports the provider can still reply to; the badge and "Needs action" count these. */

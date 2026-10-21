@@ -24,24 +24,18 @@ export function handleOperatorUnauthorized(_error: ApiError, url: string): void 
  *  2. `triggerGlobalUnauthorized: false` keeps a 401 here from firing the
  *     app-wide handler, which clears the Privy session and redirects to
  *     `/login`. An operator session going stale must not sign a buyer out.
+ *
+ * It sends no `Cache-Control` request header. It used to send `no-cache` on
+ * every request, from when operator GETs came back `private, max-age=10,
+ * stale-while-revalidate=3600` and the refetch after an action was served the
+ * pre-action body out of the browser's HTTP cache. Every `/operator/*` GET is
+ * now answered `private, no-cache` (BUG-SYS-01; no operator route opts in with
+ * `@CacheHeader`), so the browser revalidates each read with `If-None-Match`
+ * before using it and an unchanged body costs a 304. The request header added
+ * nothing to that.
  */
 export const operatorApi = new ApiClient(process.env.NEXT_PUBLIC_API_BASE_URL, {
   getToken: () => getOperatorToken(),
   triggerGlobalUnauthorized: false,
   onUnauthorized: handleOperatorUnauthorized,
 });
-
-/*
-  Always revalidate. This is not a preference — without it the console lies.
-
-  Every operator GET comes back `Cache-Control: private, max-age=10,
-  stale-while-revalidate=3600`. React Query invalidates correctly after an
-  action, but the refetch is served out of the BROWSER's HTTP cache: for ten
-  seconds from the copy it already has, and under stale-while-revalidate it
-  keeps painting the stale body first for up to an hour while it revalidates
-  behind the scenes.
-
-  `no-cache` means revalidate before serving, not "do not cache" — and the
-  responses carry an ETag, so an unchanged one costs a 304 rather than a body.
-*/
-operatorApi.raw().defaults.headers.common["Cache-Control"] = "no-cache";

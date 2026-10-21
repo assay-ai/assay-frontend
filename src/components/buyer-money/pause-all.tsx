@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CirclePause, CirclePlay } from "lucide-react";
 import * as React from "react";
 
@@ -8,10 +8,9 @@ import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { debtBlocksPaidCalls, resumeSheetCopy } from "@/features/buyer-debt/debt-summary";
-import type { BuyerDebts } from "@/interfaces/buyer-debt";
+import { useMeStatusPart } from "@/features/me-status/use-me-status";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
-import { getBuyerDebts } from "@/services/escrow.service";
 import { updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
@@ -34,11 +33,11 @@ import { useFreeOnlyChain } from "./use-buyer-money";
  */
 /**
  * Whether a debt still blocks paid calls, read from the debts list the buyer
- * shell already keeps (`BUYER_DEBTS_KEY` in the settle sheet). It only
- * subscribes: the banner's query does the fetching.
+ * shell already keeps (`GET /me/status`'s `debts`, `useBuyerDebtsQuery`). It
+ * only subscribes: the banner's query does the fetching.
  */
 function useDebtBlocksPaidCalls(): boolean {
-  const debts = useQuery<BuyerDebts>({ queryKey: ["escrow", "debts"], queryFn: getBuyerDebts, enabled: false });
+  const debts = useMeStatusPart("debts", { enabled: false });
   return debtBlocksPaidCalls(debts.data);
 }
 

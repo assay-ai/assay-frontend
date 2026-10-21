@@ -20,6 +20,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { discardToolBinding, listToolBindings } from "@/services/provider-tool-bindings.service";
+import { PROVIDER_BINDINGS_PAGE, providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Listings — every catalogue tool you serve, by name, live first, with its
@@ -29,7 +30,6 @@ import { discardToolBinding, listToolBindings } from "@/services/provider-tool-b
  * kind; the address is in the listing's Settings → Connection.
  */
 
-const LIST_LIMIT = 25;
 
 /** What discarding says when the API refuses: the listing went past the draft meanwhile. */
 function discardError(error: unknown): string {
@@ -44,7 +44,11 @@ export default function ProviderToolsPage() {
   const listQuery = useInfiniteQuery({
     queryKey: ["provider", "tool-bindings", "list"],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => listToolBindings({ limit: LIST_LIMIT, cursor: pageParam }),
+    // The first page is the console's own read of the bindings (the sidebar's), not a second one.
+    queryFn: ({ pageParam, client }) =>
+      pageParam === undefined
+        ? client.fetchQuery(providerQueries.bindings())
+        : listToolBindings({ limit: PROVIDER_BINDINGS_PAGE, cursor: pageParam }),
     getNextPageParam: (last) => (last.pageInfo.hasMore ? (last.pageInfo.nextCursor ?? undefined) : undefined),
     retry: 0,
   });

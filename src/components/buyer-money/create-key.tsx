@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 import { TriangleAlert } from "lucide-react";
 import * as React from "react";
 
@@ -53,6 +53,15 @@ export function createKeyErrorText(error: unknown): string {
 }
 
 /**
+ * After a key is made or revoked: every read of the agents and their keys
+ * (they all sit under `["agents"]`, the key names included). A read already on
+ * its way (a Retry, a poll) is kept rather than sent twice.
+ */
+export function invalidateAfterKeyWrite(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: ["agents"] }, { cancelRefetch: false });
+}
+
+/**
  * Create a key on a click and hand it back, kept in memory only (never stored
  * or put in a URL): the one moment the full key exists on screen. Named "Key
  * N" by default, counting every key the agent has had.
@@ -63,9 +72,7 @@ export function useCreateKey(agentId: string | null, keyCount: number, onCreated
     mutationFn: () => createCredential(agentId!, { name: nextKeyName(keyCount), scopes: ["tools:call"] }) as Promise<CreatedKey>,
     onSuccess: (key) => {
       onCreated(key);
-      void queryClient.invalidateQueries({ queryKey: ["agent-keys"] });
-      void queryClient.invalidateQueries({ queryKey: ["credentials"] });
-      void queryClient.invalidateQueries({ queryKey: ["agents"] });
+      invalidateAfterKeyWrite(queryClient);
     },
   });
 }
@@ -94,9 +101,7 @@ export function CreateKeyForm({
     onSuccess: (key) => {
       setCreated(key);
       onCreated?.(key);
-      void queryClient.invalidateQueries({ queryKey: ["agent-keys"] });
-      void queryClient.invalidateQueries({ queryKey: ["credentials"] });
-      void queryClient.invalidateQueries({ queryKey: ["agents"] });
+      invalidateAfterKeyWrite(queryClient);
     },
   });
 

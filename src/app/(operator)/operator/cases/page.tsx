@@ -37,10 +37,11 @@ import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
-import { listApprovals, listOperatorCases } from "@/services/operator.service";
+import { listOperatorCases } from "@/services/operator.service";
 import { cn } from "@/utils";
 
 import { PenaltyTable } from "./_components/penalty-table";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Penalties, route `/operator/cases`.
@@ -102,8 +103,7 @@ export default function PenaltiesPage() {
 
   // A two-person request waiting on a penalty is what happens next to it.
   const pending = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });

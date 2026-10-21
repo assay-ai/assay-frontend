@@ -24,6 +24,9 @@ process.env.TZ = "UTC";
 delete process.env.NEXT_PUBLIC_DEMO_CHAINS;
 delete process.env.NEXT_PUBLIC_SHOW_KITCHEN_SINK;
 
+/* The pinned proxy version install commands carry; the app build requires it. */
+process.env.NEXT_PUBLIC_ASSAY_MCP_VERSION = "1.2.3";
+
 export default defineConfig({
   plugins: [tsconfigPaths()],
   test: {

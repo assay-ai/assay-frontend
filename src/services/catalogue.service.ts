@@ -178,19 +178,18 @@ export interface CatalogueTool extends CatalogueToolVersionFields {
   paidBindings: number;
   unroutableReason: string | null;
   /**
-   * CAIP-2, the chains any ACTIVE binding for this tool settles on.
+   * CAIP-2, the chains a call placed now would settle on.
    *
-   * **Optional because nothing serves it yet.** The backend publishes
-   * `assay/settlementChains` on the MCP `tools/list` annotations; the buyer
-   * catalogue DTO has no such field, so every row arrives without one today
-   * and every row renders exactly as it always has. The seam is one field on
-   * the backend's `CatalogueToolDto`.
+   * `null` means NOT KNOWN (nothing is routable right now) and is never an
+   * empty array, which would read as "settles nowhere". Optional because an
+   * older API omits it.
    *
-   * Do not default it to `[]` anywhere between here and the screen. `[]` and
-   * `undefined` mean the same thing to `settlementReach`, but an `[]` written
-   * by this layer would be this file claiming knowledge it does not have.
+   * Do not default it to `[]` anywhere between here and the screen. `[]`,
+   * `null` and `undefined` mean the same thing to `settlementReach`, but an
+   * `[]` written by this layer would be this file claiming knowledge it does
+   * not have.
    */
-  settlementChains?: string[];
+  settlementChains?: string[] | null;
   /** The price per chain, with the provider setting it; a chain that cannot be quoted now is left out. */
   prices?: CatalogueChainPrice[];
 }

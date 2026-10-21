@@ -17,10 +17,8 @@ import { formatMoney } from "@/utils/money";
 
 import { debtStateOf, splitDebts } from "./debt-copy";
 import { debtBannerSummary } from "./debt-summary";
-import { BUYER_DEBTS_KEY, useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
+import { useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
 import { useReplaceableNow } from "./use-replaceable-now";
-
-export { BUYER_DEBTS_KEY };
 
 /** One Details row: amount · tool · cause, then its state and whose wallet. */
 function DebtRowText({
