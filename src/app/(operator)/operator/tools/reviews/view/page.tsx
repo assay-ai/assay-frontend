@@ -166,7 +166,7 @@ function ReviewScreen() {
 
       <Checklist rows={checklistRows(review.checklist)} checks={checks} onCheck={canDecide ? (item, value) => setChecks((c) => ({ ...c, [item]: value })) : undefined} />
 
-      <section aria-labelledby="gate-title" className="flex w-full flex-col gap-2">
+      <section aria-labelledby="gate-title" className="flex w-full min-w-0 flex-col gap-2">
         <h2 id="gate-title" className="text-label-md text-01">
           Publish checks, now
         </h2>
@@ -254,7 +254,7 @@ function GateList({ rows }: { rows: ReturnType<typeof gateRows> }) {
 
 function Checklist({ rows, checks, onCheck }: { rows: ChecklistRow[]; checks: Record<string, ManualCheck>; onCheck?: (item: string, value: ManualCheck) => void }) {
   return (
-    <section aria-labelledby="checklist-title" className="flex w-full flex-col gap-2">
+    <section aria-labelledby="checklist-title" className="flex w-full min-w-0 flex-col gap-2">
       <h2 id="checklist-title" className="text-label-md text-01">
         Review checklist
       </h2>
