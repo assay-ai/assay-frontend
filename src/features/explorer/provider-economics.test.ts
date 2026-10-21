@@ -48,6 +48,10 @@ describe("coverTimeText", () => {
   it("reads in days, years, or a cap", () => {
     expect(coverTimeText("1.7")).toBe("≈ 1.7 days of earnings");
     expect(coverTimeText("1200")).toBe("≈ 3.3 years of earnings");
+    expect(coverTimeText("365")).toBe("≈ 365 days of earnings");
+    expect(coverTimeText("366")).toBe("≈ 1 year of earnings");
+    expect(coverTimeText("3650")).toBe("≈ 10 years of earnings");
+    expect(coverTimeText("3651")).toBe("more than 10 years of earnings");
     expect(coverTimeText("1666666.7")).toBe("more than 10 years of earnings");
   });
 });
