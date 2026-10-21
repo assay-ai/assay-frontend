@@ -2,6 +2,7 @@ import type { StageCheck, StageCheckStatus } from "@/components/ui/stage-list";
 import { formatDateTime } from "@/libs/utc-time";
 import { formatMoney, toDecimal } from "@/utils/money";
 import { presentVerdict } from "@/utils/verdict";
+import { isRefundedByReport } from "./receipt-collection";
 import { refundPromiseLive } from "./refund-promise";
 
 import type { Receipt, ReceiptStage, WireStageName, WireStageStatus } from "./wire";
@@ -462,6 +463,9 @@ const OUTCOME_STEP: Record<Exclude<ReceiptState, "CHECKING" | "CHARGED">, { labe
   FORFEITED: { label: "Provider forfeited", tone: "neutral" },
 };
 
+/** A served call whose upheld report refunded it (`voided:DISPUTE_UPHELD`). */
+const REPORT_REFUND_STEP: { label: string; tone: ReceiptFlowNode["tone"] } = { label: "Report accepted, refunded", tone: "neutral" };
+
 /**
  * Where this call's money went, as the receipt's strip draws it:
  * Held $0.10 → Check failed → Released $0.10, or Held → Check passed → Charged.
@@ -475,7 +479,8 @@ export function receiptFlow(receipt: Receipt, state: ReceiptState): ReceiptFlowN
   }
   // Voided or forfeited: not charged, the whole hold went back (withheld is zero here).
   if (state === "DEBT_VOIDED" || state === "FORFEITED") {
-    return [held, OUTCOME_STEP[state], { label: "Released to you", amount: price(receipt), tone: "teal" }];
+    const step = state === "DEBT_VOIDED" && isRefundedByReport(receipt.chargeNote) ? REPORT_REFUND_STEP : OUTCOME_STEP[state];
+    return [held, step, { label: "Released to you", amount: price(receipt), tone: "teal" }];
   }
   const chargedSomething = receipt.chargedPrice.amount !== "0";
   const step =
