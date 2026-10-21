@@ -39,8 +39,10 @@ export function priceRangeText(tools: readonly Pick<PublicTool, "fromPrice" | "p
 
 export interface TrustFacts {
   priceRange: string | null;
-  /** Tools only one provider runs: if it is down, the call fails. */
+  /** Tools with no provider or only one: if it is down, the call fails. */
   noBackup: string[];
+  /** True only when every tool is known to have two or more providers. */
+  allBackedUp: boolean;
   /** One maker's own tools, not reviewed by Assay (the server's `notReviewed`). */
   notReviewed: string[];
   /** Tools no longer served. */
@@ -58,18 +60,25 @@ export function trustFacts(
   const nameOf = (id: string) => card.entries?.find((e) => e.toolId === id)?.toolName ?? byId.get(id)?.name ?? id;
   const entryOf = (id: string) => card.entries?.find((e) => e.toolId === id);
   const removed = (card.entries ?? []).filter((e) => e.removed).map((e) => e.toolName);
-  const noBackup = card.toolIds.filter((id) => {
+  // How many providers serve each tool; a tool missing from the catalogue is
+  // read from the set's own entry, and counts as 0 when nothing says otherwise.
+  const providersOf = (id: string): number | null => {
     const tool = byId.get(id);
     const entry = entryOf(id);
-    if (!tool || entry?.removed) return false;
+    // Removed tools and a maker's own API have their own lines.
+    if (entry?.removed || entry?.notReviewed) return null;
+    if (!tool) return entry ? entry.providerCount : null;
     // An "Only these" rule with one provider leaves no backup either.
-    const providers = entry && entry.providerMode === "ONLY" ? Math.min(entry.providerCount, tool.providerCount) : tool.providerCount;
-    return providers === 1;
-  });
+    return entry && entry.providerMode === "ONLY" ? Math.min(entry.providerCount, tool.providerCount) : tool.providerCount;
+  };
+  const counts = card.toolIds.map((id) => ({ id, providers: providersOf(id) }));
+  const noBackup = counts.filter((c) => c.providers !== null && c.providers <= 1).map((c) => c.id);
+  const allBackedUp = counts.length > 0 && counts.every((c) => c.providers !== null && c.providers >= 2);
   const notReviewed = (card.entries ?? []).filter((e) => e.notReviewed && !e.removed).map((e) => e.toolId);
   return {
     priceRange: priceRangeText(tools),
     noBackup: noBackup.map(nameOf),
+    allBackedUp,
     notReviewed: notReviewed.map(nameOf),
     removed,
     routesToPublisher: Boolean(card.routesToPublisher),

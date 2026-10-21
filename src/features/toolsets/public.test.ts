@@ -64,6 +64,16 @@ describe("public cards: prices joined from the catalogue", () => {
     expect(facts.routesToPublisher).toBe(true);
   });
 
+  it("does not claim a backup for tools nobody serves (BUG-PUB-01)", () => {
+    const entry = (toolId: string, providerCount: number) => ({ toolId, toolName: toolId, providerMode: "BEST" as const, providerCount, minTier: null, onEmpty: "FAIL" as const, removed: false, notReviewed: false });
+    const none = trustFacts({ toolIds: ["a", "b"], entries: [entry("a", 0), entry("b", 0)] }, []);
+    expect(none.noBackup).toEqual(["a", "b"]);
+    expect(none.allBackedUp).toBe(false);
+    const ok = trustFacts({ toolIds: ["t1"], entries: [entry("t1", 2)] }, [tool("t1", { providerCount: 2 })]);
+    expect(ok.noBackup).toEqual([]);
+    expect(ok.allBackedUp).toBe(true);
+  });
+
   it("names the badge and the users", () => {
     expect(badgeLabel("OFFICIAL")).toBe("Official");
     expect(badgeLabel("PROVIDER")).toBe("Provider");
