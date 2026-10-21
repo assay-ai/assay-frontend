@@ -28,6 +28,7 @@ import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import type { PublicHandleTool, PublicToolsetCard, PublicToolsetPage } from "@/services/public-toolsets.service";
 import type { PublicTool } from "@/services/public-explorer.service";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
@@ -294,6 +295,7 @@ export function PublicToolsetView() {
   const byName = usePublicToolset(params?.token ? null : params?.handle ?? null, params?.token ? null : params?.slug ?? null);
   const byToken = useToolsetByToken(params?.token ?? null, params?.v ?? null, params?.from ?? null);
   const query = params?.token ? byToken : byName;
+  useDocumentTitle(query.data ? `${query.data.name} — Assay` : query.isError ? "Tool set not found — Assay" : null);
 
   const frame = (children: React.ReactNode) => <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">{children}</div>;
   if (!params || ((params.token || (params.handle && params.slug)) && query.isPending)) {
@@ -301,7 +303,7 @@ export function PublicToolsetView() {
   }
   if (!params.token && !(params.handle && params.slug)) {
     return frame(
-      <PageState kind="empty" title="Not found" description="This link does not name a tool set. Check it with whoever sent it." action={{ label: "See all tool sets", href: "/catalogue?view=toolsets" }} />,
+      <PageState kind="empty" titleAsH1 title="Not found" description="This link does not name a tool set. Check it with whoever sent it." action={{ label: "See all tool sets", href: "/catalogue?view=toolsets" }} />,
     );
   }
   if (query.isError || !query.data) {
@@ -309,6 +311,7 @@ export function PublicToolsetView() {
     return frame(
       <PageState
         kind={missing ? "empty" : "error"}
+        titleAsH1
         title={missing ? "Not found" : "This tool set could not be loaded"}
         description={
           missing
@@ -400,11 +403,11 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
           {facts.noBackup.length > 0 ? (
             <li className="flex items-start gap-1.5 text-warning-700">
               <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              No backup provider for {facts.noBackup.join(", ")}: if its one provider is down, the call fails.
+              No backup provider for {facts.noBackup.join(", ")}: a call fails if the tool has no provider, or its one provider is down.
             </li>
-          ) : (
+          ) : facts.allBackedUp ? (
             <li className="text-02">Every tool has a backup provider.</li>
-          )}
+          ) : null}
           {facts.notReviewed.length > 0 ? (
             <li className="flex items-start gap-1.5 text-warning-700">
               <ShieldAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
@@ -571,6 +574,7 @@ export function PublicHandleView() {
   const signedIn = useSignedIn() || demoEnabled();
   const [reporting, setReporting] = React.useState(false);
   const frame = (children: React.ReactNode) => <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">{children}</div>;
+  useDocumentTitle(profile.data ? `@${profile.data.handle} — Assay` : handle === null || profile.isError ? "Not found — Assay" : null);
 
   if (handle === undefined || (handle && profile.isPending)) return frame(<PageState kind="loading" rows={3} label="Loading" />);
   if (!handle || profile.isError || !profile.data) {
@@ -578,6 +582,7 @@ export function PublicHandleView() {
     return frame(
       <PageState
         kind={missing ? "empty" : "error"}
+        titleAsH1
         title="Not found"
         description={missing ? "No one uses this public name." : plainError(profile.error instanceof ApiError ? profile.error.code : "ERR_NETWORK")}
         {...(missing ? { action: { label: "See all tool sets", href: "/catalogue?view=toolsets" } } : { onRetry: () => void profile.refetch() })}
