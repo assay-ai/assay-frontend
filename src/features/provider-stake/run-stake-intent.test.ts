@@ -292,11 +292,11 @@ describe("runStakeIntent on eip155", () => {
 
     expect(signer.signTransaction).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ showWalletUIs: true, title: "Approve the stake contract", description: expect.stringContaining("50000000") }),
+      expect.objectContaining({ showWalletUIs: true, title: "Approve the stake contract", description: expect.stringContaining("$50.00") }),
     );
     expect(signer.signAndSend).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ showWalletUIs: true, title: "Stake", description: expect.stringContaining("50000000") }),
+      expect.objectContaining({ showWalletUIs: true, title: "Stake $50.00", description: expect.stringContaining("$50.00") }),
     );
   });
 

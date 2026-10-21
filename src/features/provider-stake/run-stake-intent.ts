@@ -27,6 +27,7 @@
  * its own.
  */
 
+import { formatMoney } from "@/utils/money";
 import type { Signer } from "@/hooks/useSigner";
 import type { Eip155UnsignedTransaction } from "@/interfaces/chain-transaction";
 import type { StakeIntent, StakeIntentKind } from "@/interfaces/provider-stake";
@@ -119,16 +120,16 @@ const KIND_VERB: Partial<Record<StakeIntentKind, string>> = {
 /** Text of Privy's confirmation screen for the stake call, naming the amount. */
 function stakePrompt(intent: StakeIntent): { title: string; description?: string } {
   const verb = KIND_VERB[intent.kind] ?? "Confirm stake change";
-  const amount = intent.amount?.amount;
-  return amount ? { title: verb, description: `${verb} ${amount} (atomic units of the stake asset).` } : { title: verb };
+  const amount = intent.amount ? formatMoney(intent.amount) : null;
+  return amount ? { title: `${verb} ${amount}`, description: `${verb} ${amount} of stake.` } : { title: verb };
 }
 
 /** Text of Privy's confirmation screen for the approval before a stake deposit. */
 function approvePrompt(intent: StakeIntent): { title: string; description?: string } {
-  const amount = intent.amount?.amount;
+  const amount = intent.amount ? formatMoney(intent.amount) : null;
   return {
     title: "Approve the stake contract",
-    ...(amount ? { description: `Let the stake contract move ${amount} (atomic units) from your wallet.` } : {}),
+    ...(amount ? { description: `Let the stake contract move ${amount} from your wallet.` } : {}),
   };
 }
 
