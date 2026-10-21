@@ -20,6 +20,13 @@ const PRIVY_FRAMES = [
   "https://challenges.cloudflare.com",
 ];
 
+/**
+ * Script origins the strict pages allow besides their own: Cloudflare Turnstile,
+ * which the Privy SDK loads on every page once the app has its captcha on.
+ * challenges.cloudflare.com serves only Cloudflare's own scripts.
+ */
+const STRICT_SCRIPT_ORIGINS = ["https://challenges.cloudflare.com"];
+
 /** Origins the app fetches from besides its own API: Privy, WalletConnect, and the chains' RPCs. */
 const CONNECT_ORIGINS = [
   "https://auth.privy.io",
@@ -41,7 +48,7 @@ const STRICT_PATHS = ["/connect/*", "/agents/enable-paid"];
 
 /**
  * The strict policy of spec R-WEB-2 for `/connect/*` and `/agents/enable-paid`:
- * `default-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'none';
+ * `default-src 'self'; script-src 'self' https://challenges.cloudflare.com; frame-ancestors 'none'; base-uri 'none';
  * form-action 'self'`, plus only the Privy and RPC origins in `connect-src` and
  * `frame-src`.
  *
@@ -58,7 +65,7 @@ const STRICT_PATHS = ["/connect/*", "/agents/enable-paid"];
 function strictPolicy({ scriptHashes = [], connectOrigins = [] } = {}) {
   return [
     "default-src 'self'",
-    ["script-src 'self'", ...scriptHashes.map((hash) => `'sha256-${hash}'`)].join(" "),
+    ["script-src 'self'", ...STRICT_SCRIPT_ORIGINS, ...scriptHashes.map((hash) => `'sha256-${hash}'`)].join(" "),
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
@@ -87,7 +94,7 @@ function strictPolicy({ scriptHashes = [], connectOrigins = [] } = {}) {
  */
 function fallbackPolicy({ scriptHashes = [] } = {}) {
   return [
-    ["script-src 'self'", ...scriptHashes.map((hash) => `'sha256-${hash}'`)].join(" "),
+    ["script-src 'self'", ...STRICT_SCRIPT_ORIGINS, ...scriptHashes.map((hash) => `'sha256-${hash}'`)].join(" "),
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
@@ -100,4 +107,4 @@ function fallbackPolicy({ scriptHashes = [] } = {}) {
   ].join("; ");
 }
 
-module.exports = { PRIVY_FRAMES, CONNECT_ORIGINS, STRICT_RPC_ORIGINS, STRICT_PATHS, strictPolicy, fallbackPolicy };
+module.exports = { PRIVY_FRAMES, CONNECT_ORIGINS, STRICT_SCRIPT_ORIGINS, STRICT_RPC_ORIGINS, STRICT_PATHS, strictPolicy, fallbackPolicy };

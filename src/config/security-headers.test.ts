@@ -76,6 +76,7 @@ describe("security headers", () => {
 const csp = require("../../scripts/csp-policy.js") as {
   PRIVY_FRAMES: string[];
   CONNECT_ORIGINS: string[];
+  STRICT_SCRIPT_ORIGINS: string[];
   STRICT_PATHS: string[];
   strictPolicy: (options?: { scriptHashes?: string[]; connectOrigins?: string[] }) => string;
   fallbackPolicy: (options?: { scriptHashes?: string[] }) => string;
@@ -124,7 +125,7 @@ describe("strict pages: /connect/* and /agents/enable-paid", () => {
       const policy = directives(headers["Content-Security-Policy"]);
       expect(policy["frame-ancestors"]).toBe("'none'");
       expect(policy["default-src"]).toBe("'self'");
-      expect(policy["script-src"]).toBe("'self'");
+      expect(policy["script-src"]).toBe(["'self'", ...csp.STRICT_SCRIPT_ORIGINS].join(" "));
       expect(policy["base-uri"]).toBe("'none'");
       expect(policy["form-action"]).toBe("'self'");
       expect(policy["object-src"]).toBe("'none'");
@@ -189,7 +190,7 @@ describe("scripts/connect-csp.js", () => {
     expect(fallback["object-src"]).toBe("'none'");
     expect(fallback["base-uri"]).toBe("'none'");
     expect(fallback["form-action"]).toBe("'self'");
-    expect(fallback["script-src"]).toBe(["'self'", ...[sha("one()"), sha("two()")].sort().map((h) => `'sha256-${h}'`)].join(" "));
+    expect(fallback["script-src"]).toBe(["'self'", ...csp.STRICT_SCRIPT_ORIGINS, ...[sha("one()"), sha("two()")].sort().map((h) => `'sha256-${h}'`)].join(" "));
     // No default-src there: it would fall back onto connect-src and refuse the API on every page.
     expect(fallback["default-src"]).toBeUndefined();
     expect(block(out, "/connect/authorize")["Content-Security-Policy"]).toBe(
@@ -272,7 +273,7 @@ describe("scripts/connect-csp.js", () => {
   it("refuses a policy that is not strictPolicy(), and a line over Cloudflare's limit", async () => {
     const text = await headersFile();
     expect(() =>
-      connectCsp.completeHeaders(text.replace("script-src 'self';", "script-src 'self' 'unsafe-inline';"), {}, []),
+      connectCsp.completeHeaders(text.replace("script-src 'self' https://challenges.cloudflare.com;", "script-src 'self' https://challenges.cloudflare.com 'unsafe-inline';"), {}, []),
     ).toThrow(/not strictPolicy/);
     const many = Array.from({ length: 40 }, (_, i) => `s${i}()`);
     expect(() =>
