@@ -68,7 +68,7 @@ export const MobileTopBar = React.forwardRef<HTMLElement, MobileTopBarProps>(
         {...props}
       >
         <div className="flex min-w-0 flex-1 flex-col gap-px">
-          <h1 className="truncate text-label-md text-01">{title}</h1>
+          <p className="truncate text-label-md text-01">{title}</p>
           {subtitle ? (
             <p className="truncate font-mono text-mono-xs text-03">
               {subtitle}

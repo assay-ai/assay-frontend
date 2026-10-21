@@ -49,6 +49,7 @@ function ProviderPage() {
     return (
       <PageState
         kind="empty"
+        titleAsH1
         title="This provider is not listed"
         description="They may have paused or left the platform."
         action={{ label: "See all tools", href: "/catalogue" }}
@@ -60,6 +61,7 @@ function ProviderPage() {
     return (
       <PageState
         kind="error"
+        titleAsH1
         title="This provider could not be loaded"
         description={publicErrorText(query.error, "this provider")}
         onRetry={() => void query.refetch()}

@@ -55,10 +55,20 @@ import { HeroCtas } from "./demo-cta";
  * left for the other at 834.
  */
 
+const DESC =
+  "A marketplace where AI agents pay per call for MCP tools, only when the result passes the check. Free calls need no deposit.";
+
 export const metadata: Metadata = {
   title: "How it works",
-  description:
-    "A marketplace where AI agents pay per call for MCP tools, only when the result passes the check. Free calls need no deposit.",
+  description: DESC,
+  openGraph: {
+    type: "website",
+    siteName: "Assay",
+    title: "How it works — Assay",
+    description: DESC,
+    url: "/how-it-works",
+    images: [{ url: "/thumbnail.png", width: 1200, height: 630, alt: "How it works — Assay" }],
+  },
 };
 
 interface FlowStep {
