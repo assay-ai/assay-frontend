@@ -211,8 +211,8 @@ export default function PenaltiesPage() {
 
       {caseParam && !requested && !penalties.isLoading && !penalties.isError ? (
         <p role="status" className="w-full rounded-lg border border-01 bg-01 px-4 py-3 text-body-13 text-02">
-          We cannot open that penalty yet: it is not on your stake on the chain, which is where this page reads penalties
-          from. A newly proposed penalty can take a moment to appear there.{" "}
+          We cannot open that penalty: it is not on your stake on the chain, which is where this page reads penalties
+          from. If it was proposed just now, it can take a moment to appear there.{" "}
           <button type="button" className="text-primary-600 underline-offset-2 hover:underline" onClick={() => setQuery({ case: null })}>
             Dismiss
           </button>
