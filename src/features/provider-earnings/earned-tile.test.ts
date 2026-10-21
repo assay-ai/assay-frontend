@@ -266,7 +266,7 @@ describe("heldInWindowLine", () => {
     expect(heldInWindowLine(totals({ pendingInWindow: usdg("2500000"), pendingInWindowCalls: 3 }), format)).toEqual({
       amount: "$2.50",
       calls: 3,
-      text: "3 calls passed and are held while a buyer can still dispute them. Paid to your wallet when the window closes; not if a dispute is upheld.",
+      text: "3 calls passed and are held while a buyer can still dispute them. Paid out when the window closes; not if a dispute is upheld.",
     });
   });
 

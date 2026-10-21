@@ -127,6 +127,8 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
       skip: !evm,
       // No prompt at all when the allowance already covers the amount.
       mayNotPrompt: true,
+      // Privy's details row wants a short action; the amount is in the description.
+      promptTitle: `Approve ${symbol}`,
       promptDescription: parsed.value
         ? `Lets the Assay escrow take ${formatDecimal(parsed.value)} ${symbol} from your wallet for the deposit that follows. You pay the network fee.`
         : undefined,

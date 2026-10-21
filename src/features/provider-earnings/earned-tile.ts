@@ -46,7 +46,7 @@ export function heldInWindowLine(
   return {
     amount: format(held),
     calls: count,
-    text: `${calls(count)} passed and ${count === 1 ? "is" : "are"} held while a buyer can still dispute ${count === 1 ? "it" : "them"}. Paid to your wallet when the window closes; not if a dispute is upheld.`,
+    text: `${calls(count)} passed and ${count === 1 ? "is" : "are"} held while a buyer can still dispute ${count === 1 ? "it" : "them"}. Paid out when the window closes; not if a dispute is upheld.`,
   };
 }
 
