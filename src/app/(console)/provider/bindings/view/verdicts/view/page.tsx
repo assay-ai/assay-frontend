@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { isRecordMissing } from "@/libs/record-missing";
 import { ArrowLeft, CircleCheck, CircleX, FileSearch, FlaskConical, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
@@ -94,7 +95,7 @@ export default function ProviderVerdictDetailPage() {
 
   if (query.isPending) return <PageState kind="loading" rows={5} label="Loading this call" />;
   if (query.isError || !detail) {
-    const notFound = query.error instanceof ApiError && query.error.status === 404;
+    const notFound = isRecordMissing(query.error);
     return (
       <>
         {back}
