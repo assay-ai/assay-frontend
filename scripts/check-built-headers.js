@@ -28,7 +28,7 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 
-const { STRICT_PATHS, strictPolicy, fallbackPolicy } = require("./csp-policy");
+const { STRICT_PATHS, STRICT_SCRIPT_ORIGINS, strictPolicy, fallbackPolicy } = require("./csp-policy");
 const { integrityOf, attr } = require("./add-sri");
 const { pagesFor, urlPathOf, inlineScriptHashes } = require("./connect-csp");
 
@@ -109,8 +109,9 @@ function checkPolicy(page, block, html) {
   }
   for (const name of Object.keys(got)) if (!want[name]) problems.push(`${where}: unexpected directive ${name}`);
   const script = got["script-src"] ?? [];
-  if (script[0] !== "'self'") problems.push(`${where}: script-src must start with 'self'`);
-  const extras = script.slice(1);
+  const sources = ["'self'", ...STRICT_SCRIPT_ORIGINS];
+  if (JSON.stringify(script.slice(0, sources.length)) !== JSON.stringify(sources)) problems.push(`${where}: script-src must start with ${sources.join(" ")}`);
+  const extras = script.slice(sources.length);
   for (const token of extras) {
     if (!/^'sha256-[A-Za-z0-9+/=]+'$/.test(token)) problems.push(`${where}: script-src widened with ${token}`);
   }
