@@ -115,8 +115,24 @@ describe("stakeSummary", () => {
   it("names the minimum when the floor wins, and the shortfall", () => {
     const summary = stakeSummary({ needed: usd("50"), total: usd("50"), have: usd("20"), price: usd("0.01"), rule });
     expect(summary.perTool).toBe("This tool alone needs $50.00 (the minimum for any paid tool).");
-    expect(summary.total).toBe("That is all the stake you need; you have $20.00, $30.00 short.");
+    expect(summary.total).toBe("Your stake is $30.00 short; you have $20.00.");
     expect(summary.tone).toBe("short");
+  });
+});
+
+describe("stakeSummary wording", () => {
+  const rule = { floor: new Decimal(50), multiplier: new Decimal(1000), fromServer: true };
+  const sum = (have: ReturnType<typeof usd> | null) =>
+    stakeSummary({ needed: usd("300"), total: usd("300"), have, price: usd("0.30"), rule }).total;
+
+  it("never says 'all the stake you need' next to a shortfall", () => {
+    expect(sum(usd("260"))).toBe("Your stake is $40.00 short; you have $260.00.");
+    expect(sum(usd("0"))).toBe("Your stake is $300.00 short; you have none yet.");
+  });
+
+  it("keeps the met and unknown sentences", () => {
+    expect(sum(usd("300"))).toBe("That is all the stake you need; you have $300.00 ✓.");
+    expect(sum(null)).toBe("That is all the stake you need; we could not read your stake yet.");
   });
 });
 
