@@ -25,6 +25,7 @@ import {
   needsYouCount,
   needsYouWork,
   calmStateBlocker,
+  reconciliationIssues,
   oldestCallDisputeDue,
   sortDisputesByDaysLeft,
   staleChainData,
@@ -249,7 +250,11 @@ export default function OperatorHome() {
   const work: ToolWork = needsYouWork(toolWork.work, cancelsDue.count, requestsDue.overdue.length);
   const stale = staleChainData(health.data);
   // D16: stale chain data, or freshness that could not be read, never reads as a calm Home.
-  const calmBlocker = calmStateBlocker({ stale, unreadable: health.isError });
+  const calmBlocker = calmStateBlocker({
+    stale,
+    unreadable: health.isError,
+    reconciliation: reconciliationIssues(reconciliation.data, { unreadable: reconciliation.isError }),
+  });
   // Only the calm empty state needs the health read: the inbox sections render without it.
   const calmUnknown = health.isLoading;
   const lastChecked = Math.max(pending.dataUpdatedAt, disputes.dataUpdatedAt, health.dataUpdatedAt, toolWork.dataUpdatedAt, cancelsDue.dataUpdatedAt);

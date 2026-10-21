@@ -288,8 +288,14 @@ export function reconciliationIssues(
     } else if (row.severity !== "OK") {
       issues.push({ id: `recon:warn:${row.asset}`, text: `Reconciliation warning on ${name(row.asset)}` });
     }
-    if (row.ageSeconds > RECONCILIATION_STALE_SECONDS) {
-      issues.push({ id: `recon:stale:${row.asset}`, text: `Reconciliation on ${name(row.asset)} last ran ${lagText(row.ageSeconds)} ago` });
+    // Fails safe: a missing or non-numeric age is never "fresh" (review M1).
+    if (!(typeof row.ageSeconds === "number" && row.ageSeconds <= RECONCILIATION_STALE_SECONDS)) {
+      issues.push({
+        id: `recon:stale:${row.asset}`,
+        text: Number.isFinite(row.ageSeconds)
+          ? `Reconciliation on ${name(row.asset)} last ran ${lagText(row.ageSeconds)} ago`
+          : `Reconciliation on ${name(row.asset)}: when it last ran is unknown`,
+      });
     }
   }
   return issues;
@@ -365,9 +371,16 @@ export function needsYouWork(base: ToolWork, cancels: number, toolRequestsOverdu
  * Why Home may not show a calm "Nothing needs you" (D16): stale chain data,
  * or chain freshness that could not be read at all. Null when it may. Pure.
  */
-export function calmStateBlocker(health: { stale: { lagSeconds: number | null } | null; unreadable: boolean }): string | null {
+export function calmStateBlocker(health: {
+  stale: { lagSeconds: number | null } | null;
+  unreadable: boolean;
+  /** `reconciliationIssues(...)`: a CRITICAL asset or an unreadable answer is never a calm Home (review M2). */
+  reconciliation?: readonly HealthIssue[];
+}): string | null {
   if (health.stale) return staleChainSentence(health.stale);
   if (health.unreadable) return "Can't confirm: chain data freshness could not be read (disputes and rulings may be missing)";
+  const recon = health.reconciliation?.find((issue) => issue.id.startsWith("recon:critical:") || issue.id === "recon:unreadable");
+  if (recon) return recon.text;
   return null;
 }
 
