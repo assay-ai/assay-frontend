@@ -18,7 +18,7 @@ import {
 import type { CursorPage } from "@/interfaces/api";
 import type { ToolRequest } from "@/interfaces/provider-tool-requests";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { createToolRequest } from "@/services/provider-tool-requests.service";
 
 import { parseMonthlyCalls } from "./state";
@@ -83,7 +83,7 @@ export function ToolRequestSheet({
       );
       setFiled(created);
     },
-    onError: (e) => setError(e instanceof ApiError ? plainError(e.code) : "The request could not be sent. Try again."),
+    onError: (e) => setError(e instanceof ApiError ? plainApiError(e) : "The request could not be sent. Try again."),
   });
 
   const clearFieldError = (key: "name" | "returns" | "url" | "volume") =>

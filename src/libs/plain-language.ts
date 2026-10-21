@@ -1,3 +1,4 @@
+import { tooManyRequestsSentence } from "@/libs/ApiClient";
 import { NOTIFICATION_EVENT_LABEL } from "@/components/g31/notification-catalogue";
 
 /**
@@ -455,6 +456,16 @@ export function plainError(code: string | null | undefined, status?: number): st
   if (status !== undefined && status >= 500) return serverErrorSentence(status);
   if (!code) return "Something went wrong. Try again.";
   return "Something went wrong. Try again, and if it keeps happening, contact support.";
+}
+
+/**
+ * `plainError` for an error object. A 429 carries the wait the server named
+ * (`retryAfterSeconds`), so the sentence says it; every other code is
+ * `plainError(code, status)`.
+ */
+export function plainApiError(error: { code?: string | null; status?: number; retryAfterSeconds?: number | null }): string {
+  if (error.code === "TOO_MANY_REQUESTS") return tooManyRequestsSentence(error.retryAfterSeconds);
+  return plainError(error.code, error.status);
 }
 
 /** An unknown 5xx: Assay's side, and what to do. */

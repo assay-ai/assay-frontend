@@ -44,7 +44,7 @@ import { useChains } from "@/hooks/useChains";
 import type { Chain } from "@/interfaces/chain";
 import { ApiError } from "@/libs/ApiClient";
 import { freeOnlyExploreText } from "@/libs/chains/paid-rails";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getBalances } from "@/services";
 import { getCatalogueProvider, type CatalogueProviderDetail } from "@/services/catalogue.service";
@@ -376,7 +376,7 @@ function ToolsList() {
         <PageState
           kind="error"
           title="Tools could not be loaded"
-          description={plainError(error instanceof ApiError ? error.code : "ERR_NETWORK")}
+          description={error instanceof ApiError ? plainApiError(error) : plainError("ERR_NETWORK")}
           code={error instanceof ApiError ? error.code : null}
           onRetry={() => window.location.reload()}
         />

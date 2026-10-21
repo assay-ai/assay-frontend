@@ -43,7 +43,7 @@ import { contractNoticeText, isContractNoticeEvent, readContractNotice } from "@
 import { ContractNoticeFix } from "@/components/toolsets/contract-notice-fix";
 import { readUpdateNotice, updateNoticeText } from "@/features/toolsets/sharing";
 import { useSearchParam } from "@/hooks/useSearchParam";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { ApiError } from "@/libs/ApiClient";
 import { listNotifications } from "@/services/account.service";
 import {
@@ -328,7 +328,7 @@ export function AlertsView() {
       setConfiguringChannel(null);
     },
     onError: (error) => {
-      toast.error(error instanceof ApiError ? plainError(error.code) : "The channel could not be saved");
+      toast.error(error instanceof ApiError ? plainApiError(error) : "The channel could not be saved");
     },
   });
 
@@ -340,7 +340,7 @@ export function AlertsView() {
       toast.success(vars.message);
     },
     onError: (error) => {
-      toast.error(error instanceof ApiError ? plainError(error.code) : "The change could not be saved");
+      toast.error(error instanceof ApiError ? plainApiError(error) : "The change could not be saved");
     },
   });
 

@@ -50,7 +50,7 @@ import { failRateShort, formatCallPrice } from "@/features/explorer/explorer-tex
 import { useChainName } from "@/hooks/useChainName";
 import { getCatalogueProvider } from "@/services/catalogue.service";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import {
   deleteToolset,
   replaceToolsetEntries,
@@ -113,7 +113,7 @@ export function ToolsetPage({ id, slug, free, version }: { id: string | null; sl
       <PageState
         kind={notFound ? "empty" : "error"}
         title={notFound ? "Not found" : "This tool set could not be loaded"}
-        description={notFound ? "No tool set of yours has this address." : plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+        description={notFound ? "No tool set of yours has this address." : query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
         {...(notFound ? { action: { label: "Your tool sets", href: "/toolsets/mine" } } : { onRetry: () => void query.refetch() })}
       />,
     );

@@ -5,7 +5,7 @@ import { EvmDepositRefused } from "@/features/funding/evm-deposit";
 import { ApiError } from "@/libs/ApiClient";
 import { debtRefusalSentence } from "@/libs/buyer-debt";
 import { isRailNotOffered, railNotOfferedText } from "@/libs/chains/paid-rails";
-import { knowsError, plainError } from "@/libs/plain-language";
+import { knowsError, plainApiError, plainError } from "@/libs/plain-language";
 
 /**
  * One sentence for a failed money action (deposit, caps, withdraw, claim,
@@ -45,7 +45,7 @@ export function describeMoneyError(error: unknown): string {
   if (debt) return debt;
   if (error instanceof ApiError) {
     if (ESCROW_REFUSALS[error.code]) return ESCROW_REFUSALS[error.code]!;
-    return knowsError(error.code) ? plainError(error.code) : "That did not go through. Nothing was signed. Try again.";
+    return knowsError(error.code) ? plainApiError(error) : "That did not go through. Nothing was signed. Try again.";
   }
   return "That did not go through. You can try again.";
 }

@@ -1,5 +1,5 @@
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import type { ProviderToolTryResult, TryProviderToolBody } from "@/services/provider-tools.service";
 
 /**
@@ -64,7 +64,7 @@ export function tryErrorView(error: unknown): TryErrorView {
     case "PROVIDER_EGRESS_RATE_LIMITED":
       return { text: "Too many test runs in a short time. Wait a minute and try again.", problems: [], operations: [] };
     default:
-      return { text: plainError(error.code), problems: raw.map(sentence), operations: [] };
+      return { text: plainApiError(error), problems: raw.map(sentence), operations: [] };
   }
 }
 

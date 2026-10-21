@@ -32,7 +32,7 @@ import { PROVIDER_EXPLAINER } from "@/components/layout/provider-nav-config";
 import { useOrgHandle } from "@/components/toolsets/use-toolsets";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { credentialLabel, type CredentialLike } from "@/features/buyer-money/mcp-config";
 import { termsVersionLabel } from "@/features/m41/terms";
 import { useAgentList } from "@/features/agents/agent-list";
@@ -409,7 +409,7 @@ export default function ProviderAccountPage() {
           description={
             registrationError.code === "PROVIDER_NOT_FOUND"
               ? "Finish setup to add your contacts and accept the terms."
-              : plainError(registrationError.code)
+              : plainApiError(registrationError)
           }
         />
       ) : null}
@@ -615,7 +615,7 @@ export default function ProviderAccountPage() {
               <Banner
                 tone="danger"
                 title="The API key could not be created"
-                description={plainError(createMutation.error.code, createMutation.error.status)}
+                description={plainApiError(createMutation.error)}
               />
             ) : null}
             <Button

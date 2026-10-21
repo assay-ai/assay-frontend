@@ -15,7 +15,7 @@ import { refusalText } from "@/features/toolsets/labels";
 import { entryAfterFix, entryAlreadyFixed, isEntryFix, refusedCallView, viaText, type EntryFix, type RefusalFix } from "@/features/toolsets/refused";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getRefusedCall, getToolset, listRefusedCalls, replaceToolsetEntries, type RefusedCall, type ToolsetEntry, type ToolsetEntryInput, type UpdateAgentAccessBody } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
@@ -57,7 +57,7 @@ export function RefusedCallsList({ agentId, openCallId }: { agentId?: string | n
       <PageState
         kind="error"
         title="Refused calls could not be loaded"
-        description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+        description={query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
         code={query.error instanceof ApiError ? query.error.code : null}
         onRetry={() => void query.refetch()}
       />
@@ -130,7 +130,7 @@ export function RefusedCallPanel({ callId, onClose }: { callId: string; onClose?
       <PageState
         kind="error"
         title={notFound ? "This refused call was not found" : "The refused call could not be loaded"}
-        description={notFound ? "It may belong to another account, or the link is incomplete." : plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+        description={notFound ? "It may belong to another account, or the link is incomplete." : query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
         onRetry={notFound ? undefined : () => void query.refetch()}
       />
     );

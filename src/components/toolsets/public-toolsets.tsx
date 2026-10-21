@@ -24,7 +24,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { loginHref } from "@/libs/login-redirect";
 import { formatDate } from "@/libs/utc-time";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import type { PublicHandleTool, PublicToolsetCard, PublicToolsetPage } from "@/services/public-toolsets.service";
 import type { PublicTool } from "@/services/public-explorer.service";
@@ -175,7 +175,7 @@ export function ToolsetCatalogue({ query, onClearQuery }: { query: string; onCle
         <PageState
           kind="error"
           title="The tool sets could not be loaded"
-          description={plainError(list.error instanceof ApiError ? list.error.code : "ERR_NETWORK")}
+          description={list.error instanceof ApiError ? plainApiError(list.error) : plainError("ERR_NETWORK")}
           onRetry={() => void list.refetch()}
         />
       ) : cards.length === 0 ? (
@@ -327,7 +327,7 @@ export function PublicToolsetView() {
             ? params.token
               ? "This link no longer works: its owner stopped sharing it, or made a new link."
               : "No listed tool set has this name. It may have stopped being shared."
-            : plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")
+            : query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")
         }
         {...(missing ? { action: { label: "See all tool sets", href: "/catalogue?view=toolsets" } } : { onRetry: () => void query.refetch() })}
       />,
@@ -599,7 +599,7 @@ export function PublicHandleView() {
         kind={missing ? "empty" : "error"}
         titleAsH1
         title="Not found"
-        description={missing ? "No one uses this public name." : plainError(profile.error instanceof ApiError ? profile.error.code : "ERR_NETWORK")}
+        description={missing ? "No one uses this public name." : profile.error instanceof ApiError ? plainApiError(profile.error) : plainError("ERR_NETWORK")}
         {...(missing ? { action: { label: "See all tool sets", href: "/catalogue?view=toolsets" } } : { onRetry: () => void profile.refetch() })}
       />,
     );

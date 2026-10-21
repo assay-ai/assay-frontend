@@ -8,7 +8,7 @@ import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import type { Money, ProviderStake, ToolBindingDetail } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { formatMoney, toDecimal } from "@/utils/money";
 
 import { percentText, stakeNeededFor, stakeRuleOf, totalStakeWith } from "./go-live";
@@ -86,7 +86,7 @@ export function ResumeSheet({
       description={`Agents can be sent to it again at once, at the terms below. From then on its calls count towards your promise in each window (${WINDOW_WORDS}).`}
       confirmLabel="Resume listing"
       onConfirm={onConfirm}
-      describeError={(error) => (error instanceof ApiError ? plainError(error.code, error.status) : "It could not be resumed. Try again.")}
+      describeError={(error) => (error instanceof ApiError ? plainApiError(error) : "It could not be resumed. Try again.")}
     >
       <dl className="flex w-full flex-col overflow-hidden rounded-lg border border-01" data-testid="resume-facts">
         {facts.rows.map((row) => (

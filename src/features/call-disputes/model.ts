@@ -1,7 +1,7 @@
 import type { StatusTimelineStep } from "@/components/patterns/status-timeline";
 import type { Money } from "@/interfaces/api";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import type { CallDispute, CallDisputeReason } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { formatClock, formatDate } from "@/libs/utc-time";
@@ -516,6 +516,6 @@ export function disputeErrorText(error: unknown): string {
     case "DISPUTE_NOT_FOUND":
       return "This report could not be found.";
     default:
-      return plainError(error.code);
+      return plainApiError(error);
   }
 }

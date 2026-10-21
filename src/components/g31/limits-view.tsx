@@ -19,7 +19,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { plainActor } from "@/features/buyer-money/budget-form";
 import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { listSpendPolicyHistory } from "@/services/limits.service";
 
 import { relativeTime } from "./format";
@@ -83,7 +83,7 @@ export function LimitsView() {
           {ctx.policyQuery.isError ? (
             <p role="alert" className="text-body-13 text-warning-700">
               Your monthly limits could not be read just now (
-              {ctx.policyQuery.error instanceof ApiError ? plainError(ctx.policyQuery.error.code) : "try again in a moment"}
+              {ctx.policyQuery.error instanceof ApiError ? plainApiError(ctx.policyQuery.error) : "try again in a moment"}
               ). They still apply.
             </p>
           ) : null}

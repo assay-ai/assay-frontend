@@ -18,7 +18,7 @@ import { defaultEntry, slugFrom } from "@/features/toolsets/entry-rules";
 import { freeSlugAmong, usedTools } from "@/features/toolsets/start-from-used";
 import { shareStatus } from "@/features/toolsets/sharing";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { createToolset, type ToolsetSummary } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
@@ -188,7 +188,7 @@ export function ToolsetsView() {
         <PageState
           kind="error"
           title="Your tool sets could not be loaded"
-          description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+          description={query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
           code={query.error instanceof ApiError ? query.error.code : null}
           onRetry={() => void query.refetch()}
         />

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { CredentialHeaderInput } from "@/interfaces/provider-bindings";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { putBindingCredentials } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 
@@ -77,7 +77,7 @@ export function CredentialHeadersForm({
       setRows([{ key: nextKey.current++, name: "", value: "" }]);
       onSaved();
     } catch (caught) {
-      setError(caught instanceof ApiError ? plainError(caught.code, caught.status) : "The headers could not be saved. Try again.");
+      setError(caught instanceof ApiError ? plainApiError(caught) : "The headers could not be saved. Try again.");
     } finally {
       setSaving(false);
     }

@@ -23,7 +23,7 @@ import type { Money } from "@/interfaces";
 import { useChains } from "@/hooks/useChains";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { getWithheld } from "@/services/balances.service";
 import { chainDisplayName } from "@/services/chains.service";
 import { getStatementBalance, type StatementBalance } from "@/services/funding.service";
@@ -248,7 +248,7 @@ function StatementsContent() {
         <PageState
           kind="error"
           title={`The ${period.label} statement could not be loaded`}
-          description={plainError(summary.error.code)}
+          description={plainApiError(summary.error)}
           onRetry={() => void summary.refetch()}
           code={summary.error.code}
           details={summary.error.message}

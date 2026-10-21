@@ -8,7 +8,7 @@ import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { useAgentAccess, useUpdateAccess } from "@/components/toolsets/use-toolsets";
 import { accessSummary, blockSwitchesToList, nextAccessBody, toolAccess } from "@/features/explorer/tool-access";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { useAgentList } from "@/features/agents/agent-list";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
@@ -143,7 +143,7 @@ export function ToolAccessControl({ toolId, toolName, className }: { toolId: str
         ]}
         confirmLabel={`Block ${toolName}`}
         onConfirm={() => save(false)}
-        describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "The change could not be saved")}
+        describeError={(error) => (error instanceof ApiError ? plainApiError(error) : "The change could not be saved")}
       />
     </>
   );

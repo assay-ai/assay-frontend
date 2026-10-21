@@ -33,7 +33,7 @@ import type { Money } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
 import { freeCallsOnlyText, freeOnlyCeilingText, servesPaidCalls } from "@/libs/chains/paid-rails";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { getHolds } from "@/services/balances.service";
 import { assetName, chainDisplayName, findChain } from "@/services/chains.service";
 import { listDeposits, type Deposit } from "@/services/funding.service";
@@ -185,7 +185,7 @@ export function FundingView() {
           <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-warning-600" />
           <p className="min-w-0 flex-1 text-body-13 text-warning-700">
             {escrowQuery.isError
-              ? plainError(escrowQuery.error?.code)
+              ? (escrowQuery.error ? plainApiError(escrowQuery.error) : plainError(undefined))
               : `We couldn't read ${money.chainName ?? "the chain"} just now, so on-chain figures are missing (not zero).`}
           </p>
           <Button size="sm" variant="secondary" icon={<RotateCw />} type="button" onClick={() => void escrowQuery.refetch()}>
