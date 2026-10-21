@@ -114,6 +114,16 @@ function WizardContent() {
   const tool: CatalogueTool | null = tools.find((candidate) => candidate.id === toolId) ?? null;
   const asset = catalogue.data?.settlementAsset ?? null;
 
+  // A tool created a moment ago (publish your own API) is not in a catalogue read before it existed:
+  // read it again once, instead of showing no stage.
+  const toolMissing = Boolean(toolId) && catalogue.isSuccess && !tool;
+  const refetchedFor = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!toolMissing || !toolId || refetchedFor.current === toolId) return;
+    refetchedFor.current = toolId;
+    void catalogue.refetch();
+  }, [toolMissing, toolId, catalogue]);
+
   const boundByTool = React.useMemo(() => {
     const map = new Map<string, ToolBindingSummary>();
     for (const item of existing.data?.items ?? []) {
@@ -130,7 +140,8 @@ function WizardContent() {
   else if (binding) stage = binding.status === "DRAFT" && !testPassed ? "connect" : "live";
   else stage = tool ? "connect" : "tool";
   if (stage === "live" && !binding) stage = tool ? "connect" : "tool";
-  if (stage === "connect" && !tool && !bindingQuery.isPending) stage = "tool";
+  // `useBinding("")` is a disabled query, pending for good: only wait on it when there is a draft to load.
+  if (stage === "connect" && !tool && !(bindingId && bindingQuery.isPending)) stage = "tool";
 
   const done = new Set<WizardStage>();
   if (tool) done.add("tool");
@@ -261,7 +272,7 @@ function WizardContent() {
       </>
     );
   }
-  if ((bindingId && bindingQuery.isPending) || (toolId && catalogue.isPending)) {
+  if ((bindingId && bindingQuery.isPending) || (toolId && catalogue.isPending) || (toolMissing && catalogue.isFetching)) {
     return (
       <>
         {header}
