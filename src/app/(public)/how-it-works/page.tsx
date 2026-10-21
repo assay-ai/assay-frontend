@@ -8,6 +8,7 @@ import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { Term } from "@/components/patterns/term";
 import { MoneyPair } from "@/components/ui/money-pair";
 import { GLOSSARY } from "@/libs/glossary";
+import { pageMetadata } from "@/libs/page-metadata";
 import {
   Panel,
   PanelBody,
@@ -59,16 +60,7 @@ const DESC =
   "A marketplace where AI agents pay per call for MCP tools, only when the result passes the check. Free calls need no deposit.";
 
 export const metadata: Metadata = {
-  title: "How it works",
-  description: DESC,
-  openGraph: {
-    type: "website",
-    siteName: "Assay",
-    title: "How it works — Assay",
-    description: DESC,
-    url: "/how-it-works",
-    images: [{ url: "/thumbnail.png", width: 1200, height: 630, alt: "How it works — Assay" }],
-  },
+  ...pageMetadata({ title: "How it works", description: DESC, url: "/how-it-works" }),
 };
 
 interface FlowStep {
