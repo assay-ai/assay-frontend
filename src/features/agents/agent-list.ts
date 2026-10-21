@@ -36,11 +36,19 @@ export async function readAgentsWithKeys(): Promise<AgentsWithKeysPage> {
     if (!keysRefused(error)) throw error;
     return readAgentsWithoutKeys();
   }
-  // A row without its keys would read as "No key": refuse it as a failed read instead.
-  if ((page.items ?? []).some((agent) => !agent.credentials || !agent.health)) {
-    throw new ApiError("AGENT_KEYS_MISSING", "The agents came back without their keys", 0);
-  }
-  return page;
+  // An agent session gets the keys of its own agent only; the other rows come
+  // without them (BUG-DEMO-02). Such a row would read as "No key": it is
+  // marked hidden instead, and its keys read as not shown to this session.
+  const items = page.items ?? [];
+  const hidden = items.filter((agent) => !agent.credentials || !agent.health).map((agent) => agent.agentId);
+  if (hidden.length === 0) return page;
+  return {
+    ...page,
+    keysHiddenFor: hidden,
+    items: items.map((agent) =>
+      agent.credentials && agent.health ? agent : { ...agent, credentials: { items: [], hasMore: false }, health: NO_HEALTH },
+    ),
+  };
 }
 
 
@@ -69,15 +77,15 @@ const NO_HEALTH = {
 };
 
 /**
- * The plain list, marked `keysHidden`: the agents show, their keys and health
- * read as "not shown to this session" (`keysByAgent`/`healthByAgent` give
- * nothing for it), never as "no key". The empty `credentials` and `health`
- * only keep the row's shape.
+ * The plain list, every agent in `keysHiddenFor`: the agents show, their keys
+ * and health read as "not shown to this session" (`keysByAgent` and
+ * `healthByAgent` leave them out), never as "no key". The empty `credentials`
+ * and `health` only keep the row's shape.
  */
 async function readAgentsWithoutKeys(): Promise<AgentsWithKeysPage> {
   const plain = await listAgents({ limit: AGENTS_PAGE });
   return {
-    keysHidden: true,
+    keysHiddenFor: plain.items.map((agent) => agent.agentId),
     items: plain.items.map((agent) => ({
       ...(agent as unknown as AgentsWithKeysPage["items"][number]),
       credentials: { items: [], hasMore: false },

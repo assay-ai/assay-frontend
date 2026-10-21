@@ -355,7 +355,7 @@ export function AgentsView() {
             keys={data.keys[agent.agentId]}
             keysPending={data.keysQuery.isPending}
             keysFailed={data.keysQuery.isError}
-            keysHidden={data.keysHidden}
+            keysHidden={data.keysHiddenFor.has(agent.agentId)}
             onRetryKeys={data.refetchKeys}
             readiness={data.readiness[agent.agentId]!}
             escrowReady={

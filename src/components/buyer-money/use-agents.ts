@@ -89,26 +89,31 @@ export interface AgentWithKeys extends AgentRow {
 export interface AgentsWithKeysPage {
   items: AgentWithKeys[];
   /**
-   * The keys were not shown to this session (an agent-kind session, BUG-DEMO-02):
-   * the agents are the plain list, and their keys and health are unknown.
+   * Agents whose keys were not shown to this session (BUG-DEMO-02): an agent
+   * session sees its own agent's keys only, or none when the include was
+   * refused. Their keys and health are unknown, never "no key".
    */
-  keysHidden?: true;
+  keysHiddenFor?: string[];
 }
 
 export { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys };
 
 const KEYS_HIDDEN_ERROR = new ApiError(AGENT_KEYS_HIDDEN, "Agent keys are not shown to an agent session", 403);
 
+/** The rows whose keys this session was shown. */
+function shownItems(page: AgentsWithKeysPage): AgentWithKeys[] {
+  const hidden = new Set(page.keysHiddenFor ?? []);
+  return (page.items ?? []).filter((agent) => !hidden.has(agent.agentId));
+}
+
 /** The keys map the screens read, by agent id. */
 export function keysByAgent(page: AgentsWithKeysPage): Record<string, KeyRow[]> {
-  if (page.keysHidden) return {};
-  return Object.fromEntries((page.items ?? []).map((agent) => [agent.agentId, agent.credentials.items]));
+  return Object.fromEntries(shownItems(page).map((agent) => [agent.agentId, agent.credentials.items]));
 }
 
 /** Each agent's key health, by agent id. */
 export function healthByAgent(page: AgentsWithKeysPage): Record<string, AgentHealth> {
-  if (page.keysHidden) return {};
-  return Object.fromEntries((page.items ?? []).map((agent) => [agent.agentId, agent.health]));
+  return Object.fromEntries(shownItems(page).map((agent) => [agent.agentId, agent.health]));
 }
 
 /** The query's state, for one of its two readings (the agents, or their keys). */
@@ -152,8 +157,10 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
   });
   const { data: page, refetch } = query;
   const agents = React.useMemo(() => page?.items ?? [], [page]);
-  const keysHidden = page?.keysHidden === true;
-  const keys = React.useMemo(() => (page && !page.keysHidden ? keysByAgent(page) : undefined), [page]);
+  const keysHiddenFor = React.useMemo(() => new Set(page?.keysHiddenFor ?? []), [page]);
+  // Every agent's keys hidden (the include was refused): the keys read failed, as a whole.
+  const keysHidden = agents.length > 0 && agents.every((agent) => keysHiddenFor.has(agent.agentId));
+  const keys = React.useMemo(() => (page && !keysHidden ? keysByAgent(page) : undefined), [page, keysHidden]);
   const health = React.useMemo(() => (page ? healthByAgent(page) : {}), [page]);
   // Agents and keys come in one answer. The agents read as failed only when
   // there is nothing to show; a failed refresh (a poll) marks the keys
@@ -202,7 +209,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
         agentAccount: agent.agentAccount,
         credentials: keys?.[agent.agentId],
         credentialsUnreadable: keysQuery.isError,
-        credentialsHidden: keysHidden,
+        credentialsHidden: keysHiddenFor.has(agent.agentId),
         delegates,
         delegatesUnreadable: delegatesQuery.isError,
         escrow: escrowQuery.data,
@@ -213,7 +220,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
       });
     }
     return map;
-  }, [agents, keys, keysQuery.isError, keysHidden, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
+  }, [agents, keys, keysQuery.isError, keysHiddenFor, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
 
   return {
     agentsQuery,
@@ -229,8 +236,8 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     readiness,
     /** The escrow's chain name when it serves free calls only, else `null`. */
     freeOnlyChainName: freeOnlyChainName(escrowQuery.data?.account),
-    /** The keys are not shown to this session (agent-kind): say so, offer no retry. */
-    keysHidden,
+    /** Agents whose keys this session is not shown (agent-kind): say so, offer no retry. */
+    keysHiddenFor,
     refetchKeys: () => void refetch(),
     refetchDelegates: () => void delegatesQuery.refetch(),
   };
