@@ -595,3 +595,40 @@ describe("toStageChecks — a call with no check result (V1-8)", () => {
     expect(toStageChecks(receipt)[1]?.note).toBe("not sampled for this call");
   });
 });
+
+describe("an EXPIRED call that never held money (BUG-BUY-SPEND-01)", () => {
+  const expired = (withheld: string) =>
+    settledReceipt({
+      status: "EXPIRED",
+      classification: null,
+      verdict: null as unknown as Receipt["verdict"],
+      listedPrice: usd("10000"),
+      chargedPrice: usd("0"),
+      withheld: usd(withheld),
+      settledAt: null,
+      holdReleasedAt: "2026-10-16T00:00:05.000Z",
+    });
+
+  it("says it did not run, with no held money and no release", () => {
+    const receipt = expired("0");
+    const story = receiptStory(receipt, undefined, { now: Date.parse("2026-10-16T01:00:00.000Z") });
+    expect(story.state).toBe("EXPIRED");
+    expect(story.notCharged?.headline).toBe("Not charged. This call did not run.");
+    expect(story.notCharged?.explain).not.toMatch(/held for the call|released/);
+    expect(story.flow.map((n) => n.label)).toEqual(["Listed", "Did not run", "Nothing held"]);
+    expect(story.timeline.map((r) => r.label)).not.toContain("Money held");
+    expect(story.timeline.at(-1)?.label).toBe("Did not run, nothing was held");
+  });
+
+  it("keeps the hold-released story for an EXPIRED call that held money", () => {
+    const story = receiptStory(expired("10000"), undefined, { now: Date.parse("2026-10-16T01:00:00.000Z") });
+    expect(story.notCharged?.headline).toBe("Not charged. The call did not finish in time.");
+    expect(story.flow[0]?.label).toBe("Held");
+    expect(story.timeline.map((r) => r.label)).toContain("Money held");
+  });
+
+  it("draws a refund by an upheld report from refundedByReport alone (BUG-X-01)", () => {
+    const receipt = settledReceipt({ chargedPrice: usd("0"), debt: "VOIDED", chargeNote: null, refundedByReport: true });
+    expect(receiptFlow(receipt, "DEBT_VOIDED")[1]?.label).toBe("Report accepted, refunded");
+  });
+});

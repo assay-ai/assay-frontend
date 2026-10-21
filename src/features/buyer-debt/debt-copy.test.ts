@@ -400,3 +400,11 @@ describe("Funding's held line (main d021840 / 49210cf in the redesign)", () => {
     });
   });
 });
+
+describe("callPaymentNote — a call refunded by an upheld report (BUG-X-01)", () => {
+  it("says refunded after the report, not a debt cancelled by a late verdict", () => {
+    expect(callPaymentNote({ debt: "VOIDED", refundedByReport: true })).toBe("Refunded after your report · not charged");
+    expect(callPaymentNote({ debt: "VOIDED", refundedByReport: false })).toBe("Debt cancelled by a late verdict · not charged");
+    expect(callPaymentNote({ debt: "VOIDED" })).toBe("Debt cancelled by a late verdict · not charged");
+  });
+});
