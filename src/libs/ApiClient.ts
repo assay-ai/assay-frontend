@@ -576,11 +576,12 @@ class ApiClient {
         */
         if ((error.response?.status ?? apiError.status) === 429) {
           const headers = error.response?.headers as { get?: (name: string) => unknown; [name: string]: unknown } | undefined;
-          const retryAfter =
-            parseRetryAfter(typeof headers?.get === "function" ? headers.get("retry-after") : headers?.["retry-after"]) ??
-            (apiError.code === TOO_MANY_REQUESTS ? retryAfterFromMessage(apiError.message) : null);
+          const retryAfter = parseRetryAfter(typeof headers?.get === "function" ? headers.get("retry-after") : headers?.["retry-after"]);
+          // The sentence may name the wait from the limiter's own message when the header is unreadable;
+          // the request cooldown below keys on the header alone.
+          const shownWait = retryAfter ?? (apiError.code === TOO_MANY_REQUESTS ? retryAfterFromMessage(apiError.message) : null);
           const bodyHadCode = Boolean((error.response?.data as Partial<ApiErrorBody> | undefined)?.error?.code);
-          const limited = withRateLimit(apiError, retryAfter, bodyHadCode);
+          const limited = withRateLimit(apiError, shownWait, bodyHadCode);
           if (retryAfter !== null && config && (config.method ?? "get").toUpperCase() === "GET") {
             this.cooldowns.set(this.cooldownKey(config), Date.now() + retryAfter * 1000);
           }

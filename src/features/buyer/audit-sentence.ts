@@ -42,6 +42,7 @@ const MONEY_KEY = /(cap|limit|amount|budget|charged|price|balance)$/i;
  * decimal point is already in major units and is left to MONEY_KEY.
  */
 const MINOR_MONEY_KEY = /^(perCallMax|dailyCap|monthlyCap|maxSpendPerHour|requireApprovalAbove|maxPerWindow|maxVoucherAmount)$/;
+/** Assumes the six-decimal assets served today; read the entry's own decimals if the backend adds them. */
 const MINOR_DECIMALS = 6;
 
 /** Bookkeeping fields of a policy version: never part of a sentence a person would say. */
@@ -56,6 +57,7 @@ const KEY_WORDS: Record<string, string> = {
   perCallCap: "per-call limit",
   maxCallsPerMinute: "calls per minute limit",
   revokedAt: "revoked",
+  validUntil: "end date",
 };
 
 function shown(value: unknown, key = ""): string | null {

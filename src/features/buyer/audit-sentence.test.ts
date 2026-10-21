@@ -30,7 +30,7 @@ describe("auditSentence", () => {
         () => null,
         "me@example.com",
       ).line,
-    ).toBe("You set valid until to Nov 19, 10:34 UTC, and set max per window to $5.00");
+    ).toBe("You set end date to Nov 19, 10:34 UTC, and set max per window to $5.00");
   });
   it("never puts an email inside a change; only the actor may be named by one", () => {
     const line = auditSentence(

@@ -353,6 +353,24 @@ describe("429 Too Many Requests", () => {
     expect(retryAfterFromMessage(undefined)).toBeNull();
   });
 
+  it("names the wait from the body sentence when the header is missing, without starting a cooldown", async () => {
+    const body = { success: false, error: { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again in 44 s.", statusCode: 429 } };
+    const { adapter, state } = limiter({ body });
+    const api = client(adapter);
+    const refusal = await api.get("/agents").catch((error: unknown) => error);
+    expect((refusal as ApiError).message).toBe("Too many requests. Try again in 44 s.");
+    // No header, so no local cooldown: the next read still reaches the server.
+    await api.get("/agents").catch(() => undefined);
+    expect(state.requests).toEqual(["GET /agents", "GET /agents"]);
+  });
+
+  it("prefers the header wait over the body sentence", async () => {
+    const body = { success: false, error: { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again in 44 s.", statusCode: 429 } };
+    const { adapter } = limiter({ body, retryAfter: "15" });
+    const refusal = await client(adapter).post("/x", {}).catch((error: unknown) => error);
+    expect((refusal as ApiError).message).toBe("Too many requests. Try again in 15 s.");
+  });
+
   it("fails at once with the wait in the sentence, and is never retried", async () => {
     const { adapter, state } = limiter({ retryAfter: "30" });
     const provider = vi.fn(async () => "t");
