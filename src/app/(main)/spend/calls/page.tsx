@@ -32,7 +32,7 @@ import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
-import { listCalls } from "@/features/buyer/calls-list";
+import { listCalls, type CallsSource } from "@/features/buyer/calls-list";
 import { isFreeToolCall, type FreeToolCall } from "@/services/tool-calls.service";
 import { cn } from "@/utils";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
@@ -52,7 +52,6 @@ import { formatMoney, notCharged, toDecimal } from "@/utils/money";
  */
 
 const PAGE = 50;
-
 
 function CallsList() {
   const params = useSearchParams();
@@ -85,9 +84,11 @@ function CallsList() {
 
   const query = useInfiniteQuery({
     queryKey: ["tool-calls", "list", filter, toolId],
-    queryFn: ({ pageParam }) => listCalls(filter, { limit: PAGE, toolId: toolId ?? undefined, cursor: pageParam ?? undefined }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => (last.pageInfo?.hasMore ? (last.pageInfo.nextCursor ?? null) : null),
+    queryFn: ({ pageParam }) =>
+      listCalls(filter, { limit: PAGE, toolId: toolId ?? undefined, cursor: pageParam?.cursor ?? undefined }, pageParam?.source),
+    initialPageParam: null as { cursor: string; source: CallsSource } | null,
+    getNextPageParam: (last) =>
+      last.pageInfo?.hasMore && last.pageInfo.nextCursor ? { cursor: last.pageInfo.nextCursor, source: last.source } : null,
     retry: 0,
     enabled: !refused,
   });
