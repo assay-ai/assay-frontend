@@ -205,7 +205,7 @@ function ToolPage() {
           />
         ) : serving.length === 0 && tool.kind === "PROVIDER" ? (
           <p className="rounded-xl border border-01 bg-01 px-4 py-3.5 text-body-13 text-02" data-testid="maker-serves">
-            Served by {tool.handle ? `@${tool.handle}` : "its maker"} only: it is one maker&apos;s own API, so there is no backup provider.
+            Served by {tool.handle ? `@${tool.handle}` : "its maker"}{" "}only: it is one maker&apos;s own API, so there is no backup provider.
             {tool.handle ? (
               <>
                 {" "}

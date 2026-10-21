@@ -1,7 +1,7 @@
 import type { CatalogueToolVersionFields, ToolVersionList } from "@/interfaces/contracts";
 import type { Money } from "@/interfaces";
 
-import { api } from "./api";
+import { publicApi } from "./public-api";
 
 /**
  * The public Explorer: the signed-out catalogue and the "not charged" proof
@@ -165,22 +165,22 @@ export interface PublicNotCharged {
 }
 
 export function listPublicTools(): Promise<{ tools: PublicTool[] }> {
-  return api.get<{ tools: PublicTool[] }>("/public/catalogue/tools");
+  return publicApi.get<{ tools: PublicTool[] }>("/public/catalogue/tools");
 }
 
 export function listPublicProviders(): Promise<{ providers: PublicProvider[] }> {
-  return api.get<{ providers: PublicProvider[] }>("/public/catalogue/providers");
+  return publicApi.get<{ providers: PublicProvider[] }>("/public/catalogue/providers");
 }
 
 export function getPublicProvider(providerId: string): Promise<PublicProviderDetail> {
-  return api.get<PublicProviderDetail>(`/public/catalogue/providers/${encodeURIComponent(providerId)}`);
+  return publicApi.get<PublicProviderDetail>(`/public/catalogue/providers/${encodeURIComponent(providerId)}`);
 }
 
 export function getPublicNotCharged(): Promise<PublicNotCharged> {
-  return api.get<PublicNotCharged>("/public/not-charged");
+  return publicApi.get<PublicNotCharged>("/public/not-charged");
 }
 
 /** T3: a catalogue tool's published contract versions and changelog — no sign-in. */
 export function getPublicToolVersions(toolId: string): Promise<ToolVersionList> {
-  return api.get<ToolVersionList>(`/public/catalogue/tools/${encodeURIComponent(toolId)}/versions`);
+  return publicApi.get<ToolVersionList>(`/public/catalogue/tools/${encodeURIComponent(toolId)}/versions`);
 }

@@ -49,9 +49,10 @@ import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 import { operatorHoldReasonText } from "@/libs/slash-hold";
 import { listOperatorCallDisputes } from "@/services/operator-call-disputes.service";
-import { getPlatformHealth, listAccountBlocks, listApprovals, listArbiterDisputes } from "@/services/operator.service";
+import { listAccountBlocks } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Home, route `/operator`: the "Needs you" inbox.
@@ -72,8 +73,6 @@ import { formatMoney } from "@/utils/money";
  *
  * j / k move between rows and Enter takes a row's main action (`?` lists the keys).
  */
-
-const PENDING_PAGE = 100;
 
 function useNow(intervalMs: number): number {
   const [now, setNow] = React.useState(() => Date.now());
@@ -195,21 +194,18 @@ export default function OperatorHome() {
 
   // Same key as the shell's badge, so the two never disagree.
   const pending = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: PENDING_PAGE }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });
   // Read by every operator: the "Penalty disputes open" tile counts disputes on chain from this one list.
   const disputes = useQuery({
-    queryKey: ["operator", "arbiter", "disputes"],
-    queryFn: listArbiterDisputes,
+    ...operatorQueries.arbiterDisputes(),
     refetchInterval: 60_000,
     retry: 0,
   });
   const health = useQuery({
-    queryKey: ["operator", "health"],
-    queryFn: getPlatformHealth,
+    ...operatorQueries.health(),
     refetchInterval: 60_000,
     retry: 0,
   });

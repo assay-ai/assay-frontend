@@ -43,6 +43,9 @@ export interface BalancesResponse {
   balances: AccountBalance[];
 }
 
+/** The one query key `GET /balances` is cached under, by every screen and `sharedRead`. */
+export const BALANCES_KEY = ["balances"] as const;
+
 /** GET /balances — the figure the Overview and Funding screens both lead with. */
 export async function getBalances(): Promise<BalancesResponse> {
   const response = await api.get<BalancesResponse>("/balances");

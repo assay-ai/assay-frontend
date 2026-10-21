@@ -46,7 +46,6 @@ import { createConfigChainReader } from "@/libs/chains/evm/contract-config";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { formatDateTime } from "@/libs/utc-time";
 import type { ManualCaseActionResult, OperatorCaseBrief } from "@/interfaces/operator";
-import { getOperatorCase, listApprovals } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
 import { nothingStandingOutcome } from "@/features/operator/operator-errors";
@@ -55,6 +54,7 @@ import { CancelSheet } from "./_components/cancel-sheet";
 import { ManualActionSheet } from "./_components/manual-action-sheet";
 import { MoreActions } from "./_components/more-actions";
 import { WhyNotLine } from "./_components/why-not-line";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * A penalty, route `/operator/cases/view?id=`.
@@ -137,8 +137,7 @@ export default function OperatorCasePage() {
   }, []);
 
   const caseQuery = useQuery({
-    queryKey: ["operator", "case", proposalId],
-    queryFn: () => getOperatorCase(proposalId),
+    ...operatorQueries.case(proposalId),
     enabled: proposalId !== "",
     retry: 0,
   });
@@ -160,8 +159,7 @@ export default function OperatorCasePage() {
 
   // A two-person request on this penalty already waiting for approval — the same query as the badge.
   const pending = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: 100 }),
+    ...operatorQueries.pendingApprovals(),
     refetchInterval: 30_000,
     retry: 0,
   });

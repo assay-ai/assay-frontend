@@ -7,18 +7,20 @@ import { splitDebts } from "@/features/buyer-debt/debt-copy";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 
 import { agentReadiness, type AgentReadiness } from "@/features/buyer-money/agent-readiness";
+import type { CredentialLike } from "@/features/buyer-money/mcp-config";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 import { useChains } from "@/hooks/useChains";
 import type { EscrowDelegate } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { servesPaidCalls } from "@/libs/chains/paid-rails";
-import { listAgents, listCredentials } from "@/services/account.service";
 import { chainDisplayName } from "@/services/chains.service";
-import { listDelegates } from "@/services/delegation.service";
 import { getSpendPolicyTyped, type SpendPolicy } from "@/services/limits.service";
 import { chainIdOfAccount } from "@/utils/chain";
 
+import { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys } from "@/features/agents/agent-list";
+
 import { useEscrowQuery } from "./use-buyer-money";
+import { useDelegatesQuery } from "./use-delegates";
 
 export interface AgentRow {
   agentId: string;
@@ -26,11 +28,27 @@ export interface AgentRow {
   agentAccount?: string;
 }
 
-export interface KeyRow {
+/** `AgentCredentialDto.oauthClient` (spec §7.10 item 4). */
+export interface KeyOAuthClient {
+  /** The public `client_id`: a CIMD URL, `dcr_…`, or the built-in client's URL. */
+  clientId: string;
+  /** Its own name, or its listed name when verified. Self-declared otherwise. */
+  name: string;
+  /** eTLD+1 of a CIMD client's host; null when no domain is proven (DCR, built-in). */
+  registrableDomain: string | null;
+  verified: boolean;
+  /** May hold a payment key (`OAUTH_PAYMENT_CLIENTS`: the built-in `assay-mcp` only). Every other app is free-only. */
+  paymentClient: boolean;
+}
+
+export interface KeyRow extends CredentialLike {
   id: string;
   agentId: string;
   name: string;
-  prefix: string;
+  /** How the credential was obtained; everything else about it is the same. */
+  issuedVia: "API_KEY" | "OAUTH";
+  /** The app an OAuth grant was issued to; null for an API key. */
+  oauthClient?: KeyOAuthClient | null;
   scopes: string[];
   lastUsedAt: string | null;
   expiresAt: string | null;
@@ -41,15 +59,57 @@ export interface KeyRow {
 }
 
 /**
- * The browser caches GETs for 10 s (`Cache-Control: max-age=10`), so a poll
- * that reuses the URL sees nothing new. Each read gets its own `from` (an
- * instant in 1970, which filters nothing out) to reach the server. See the
- * same trick in the old agents screen.
+ * An agent's key health, worked out by the API from exactly the keys in
+ * `credentials` (`GET /agents?include=health`). Two meanings of "live" are
+ * kept apart: the readiness line's (`liveKeyCount`: not revoked, not past
+ * `expiresAt`) and Get started / Connect's (`unrevokedKeyCount`: not revoked).
  */
-let bust = 0;
-function nextBust(): string {
-  bust += 1;
-  return new Date(bust).toISOString();
+export interface AgentHealth {
+  evaluatedAt: string;
+  liveKeyCount: number;
+  unrevokedKeyCount: number;
+  keyBound: boolean;
+  boundKeyCount: number;
+  /** A key that is not revoked has been used. */
+  firstCallSeen: boolean;
+  /** Latest `lastUsedAt` over live keys. */
+  lastUsedAt: string | null;
+  /** Earliest `lastUsedAt` over keys that are not revoked. */
+  earliestLastUsedAt: string | null;
+  /** Latest `lastUsedAt` over every key, revoked ones included. */
+  lastUsedAtAnyKey: string | null;
+}
+
+/** `GET /agents?include=credentials,health`: an agent row with its first 50 keys and their health. */
+export interface AgentWithKeys extends AgentRow {
+  credentials: { items: KeyRow[]; hasMore: boolean };
+  health: AgentHealth;
+}
+
+export interface AgentsWithKeysPage {
+  items: AgentWithKeys[];
+}
+
+export { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys };
+
+/** The keys map the screens read, by agent id. */
+export function keysByAgent(page: AgentsWithKeysPage): Record<string, KeyRow[]> {
+  return Object.fromEntries((page.items ?? []).map((agent) => [agent.agentId, agent.credentials.items]));
+}
+
+/** Each agent's key health, by agent id. */
+export function healthByAgent(page: AgentsWithKeysPage): Record<string, AgentHealth> {
+  return Object.fromEntries((page.items ?? []).map((agent) => [agent.agentId, agent.health]));
+}
+
+/** The query's state, for one of its two readings (the agents, or their keys). */
+export interface QueryPart<T> {
+  data: T | undefined;
+  error: unknown;
+  isPending: boolean;
+  isError: boolean;
+  isSuccess: boolean;
+  refetch: () => Promise<unknown>;
 }
 
 export function useSpendPolicyQuery(options: { enabled?: boolean } = {}) {
@@ -75,35 +135,38 @@ export function useSpendPolicyQuery(options: { enabled?: boolean } = {}) {
  */
 export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
   const poll = options.pollMs ?? false;
-  const agentsQuery = useQuery({
-    queryKey: ["agents"],
+  const query = useQuery<AgentsWithKeysPage, unknown>({
+    queryKey: AGENTS_WITH_KEYS_KEY,
     retry: false,
-    queryFn: () => listAgents({ limit: 50 }) as unknown as Promise<{ items: AgentRow[] }>,
-  });
-  const agents = React.useMemo(() => agentsQuery.data?.items ?? [], [agentsQuery.data]);
-  const agentIds = React.useMemo(() => agents.map((a) => a.agentId), [agents]);
-
-  const keysQuery = useQuery({
-    queryKey: ["agent-keys", agentIds],
-    enabled: agentIds.length > 0,
-    retry: 0,
     refetchInterval: poll,
-    queryFn: async () => {
-      const lists = await Promise.all(
-        agentIds.map((id) => listCredentials(id, { limit: 50, from: nextBust() } as never) as Promise<{ items: KeyRow[] }>),
-      );
-      return Object.fromEntries(agentIds.map((id, i) => [id, lists[i]!.items])) as Record<string, KeyRow[]>;
-    },
+    queryFn: readAgentsWithKeys,
   });
+  const { data: page, refetch } = query;
+  const agents = React.useMemo(() => page?.items ?? [], [page]);
+  const keys = React.useMemo(() => (page ? keysByAgent(page) : undefined), [page]);
+  const health = React.useMemo(() => (page ? healthByAgent(page) : {}), [page]);
+  // Agents and keys come in one answer. The agents read as failed only when
+  // there is nothing to show; a failed refresh (a poll) marks the keys
+  // unreadable and keeps the agents on screen, as the separate keys poll did.
+  const agentsQuery: QueryPart<AgentsWithKeysPage> = {
+    data: page,
+    error: query.isLoadingError ? query.error : null,
+    isPending: query.isPending,
+    isError: query.isLoadingError,
+    isSuccess: page !== undefined,
+    refetch,
+  };
+  const keysQuery: QueryPart<Record<string, KeyRow[]>> = {
+    data: keys,
+    error: query.error,
+    isPending: query.isPending,
+    isError: query.isError,
+    isSuccess: query.isSuccess,
+    refetch,
+  };
 
   const delegationOn = agents.some((a) => supportsDelegation(a.agentAccount));
-  const delegatesQuery = useQuery({
-    queryKey: ["escrow-delegates", "live"],
-    enabled: delegationOn,
-    retry: 0,
-    refetchInterval: poll,
-    queryFn: () => listDelegates(Date.now()),
-  });
+  const delegatesQuery = useDelegatesQuery({ enabled: delegationOn, pollMs: poll });
   const escrowQuery = useEscrowQuery();
   const policyQuery = useSpendPolicyQuery();
   const debtsQuery = useBuyerDebtsQuery();
@@ -123,7 +186,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     for (const agent of agents) {
       map[agent.agentId] = agentReadiness({
         agentAccount: agent.agentAccount,
-        credentials: keysQuery.data?.[agent.agentId],
+        credentials: keys?.[agent.agentId],
         credentialsUnreadable: keysQuery.isError,
         delegates,
         delegatesUnreadable: delegatesQuery.isError,
@@ -135,7 +198,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
       });
     }
     return map;
-  }, [agents, keysQuery.data, keysQuery.isError, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
+  }, [agents, keys, keysQuery.isError, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
 
   return {
     agentsQuery,
@@ -144,12 +207,14 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     escrowQuery,
     policyQuery,
     agents,
-    keys: keysQuery.data ?? {},
+    keys: keys ?? {},
+    /** Each agent's key health (`GET /agents?include=health`), by agent id. */
+    health,
     delegates,
     readiness,
     /** The escrow's chain name when it serves free calls only, else `null`. */
     freeOnlyChainName: freeOnlyChainName(escrowQuery.data?.account),
-    refetchKeys: () => void keysQuery.refetch(),
+    refetchKeys: () => void refetch(),
     refetchDelegates: () => void delegatesQuery.refetch(),
   };
 }

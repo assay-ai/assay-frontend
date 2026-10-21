@@ -5,7 +5,7 @@ import type { EscrowDelegate, Money } from "@/interfaces";
 import { agentReadiness, type ReadinessCredential } from "./agent-readiness";
 import { capsAreSet, capsSentence, capsSuccessText, capsToForm, keyGroups, parseCaps, presetDescription, presetFor } from "./caps";
 import { firstCallPrompt, getStartedComplete, getStartedStates, payByInvitation, payStage, stepOptional, type GetStartedFacts } from "./get-started";
-import { KEY_PLACEHOLDER, keyPlaceholder, mcpConfig } from "./mcp-config";
+import { apiKeyConfig, KEY_PLACEHOLDER, keyPlaceholder } from "./mcp-config";
 import { PENDING_TX_MAX_AGE_MS, parsePending, withPending, withoutPending, type PendingTx } from "./pending-tx";
 import { nextUtcMidnight, nextUtcMonth, windowRefillAt } from "./refill";
 import { isLowBalance, runwayDays, runwayLine } from "./runway";
@@ -79,23 +79,14 @@ describe("runway", () => {
   });
 });
 
-describe("mcp config", () => {
+describe("API-key config", () => {
   const url = "https://mcp.example/mcp";
-  it("wraps the remote server in mcp-remote for Claude Desktop", () => {
-    const parsed = JSON.parse(mcpConfig("claude-desktop", { url, token: "assay_live_sk1" }));
-    expect(parsed.mcpServers.assay.command).toBe("npx");
-    expect(parsed.mcpServers.assay.args).toContain(url);
-    expect(parsed.mcpServers.assay.env.ASSAY_AUTH).toBe("Bearer assay_live_sk1");
-  });
-  it("gives Cursor and other clients the URL and header, with a placeholder when the key is not on screen", () => {
-    expect(JSON.parse(mcpConfig("cursor", { url, token: "k" })).mcpServers.assay).toEqual({
-      url,
-      headers: { Authorization: "Bearer k" },
-    });
-    expect(mcpConfig("other", { url, token: null })).toContain(KEY_PLACEHOLDER);
+  it("puts the key in a header, with a placeholder when the key is not on screen", () => {
+    expect(JSON.parse(apiKeyConfig({ url, token: "k" })).mcpServers.assay).toEqual({ type: "http", url, headers: { Authorization: "Bearer k" } });
+    expect(apiKeyConfig({ url, token: null })).toContain(KEY_PLACEHOLDER);
     // A known key is named by its prefix, never a bare placeholder.
-    const named = mcpConfig("cursor", { url, token: null, keyPrefix: "assay_live_ab12…" });
-    expect(named).toContain("assay_live_ab12…REST_OF_YOUR_KEY");
+    const named = apiKeyConfig({ url, token: null, keyPrefix: "assay_sk_live_ab12…" });
+    expect(named).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
     expect(named).not.toContain(KEY_PLACEHOLDER);
     expect(keyPlaceholder(null)).toBe(KEY_PLACEHOLDER);
   });

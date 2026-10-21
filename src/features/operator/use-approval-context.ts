@@ -5,15 +5,12 @@ import * as React from "react";
 
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
 import { getOperatorTool } from "@/services/operator-contracts.service";
-import { listAccountBlocks } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
 import { approvalTargetId, type ApprovalContext, type ApprovalToolInfo } from "./approvals";
 import { eligibleApprovers } from "./inbox";
 import { useOperatorDirectory, usePenaltyBriefs, usePenaltyNames, useProviderNames } from "./use-operator-lookups";
-
-/** The API's page ceiling. Enough to name what a pending request is about. */
-const LOOKUP_LIMIT = 100;
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * What an approval card needs besides the approval: the block and operator
@@ -32,8 +29,7 @@ export function useApprovalContext(
   const directory = useOperatorDirectory();
   const needsBlocks = rows.some((row) => row.action === "account.unblock");
   const blocksQuery = useQuery({
-    queryKey: ["operator", "blocks", "lookup"],
-    queryFn: () => listAccountBlocks({ limit: LOOKUP_LIMIT }),
+    ...operatorQueries.blocksLookup(),
     enabled: needsBlocks,
     retry: 0,
   });

@@ -14,6 +14,16 @@ import type { WalletStep } from "@/components/patterns/wallet-steps";
 
 export type ProviderPendingKind = "stake" | "unstake" | "withdraw" | "dispute";
 
+const STAKE_MOVED: readonly (readonly string[])[] = [
+  ["provider", "stake"],
+  ["provider", "stake-wallet-balances"],
+  ["provider", "me"],
+  ["provider", "tool-bindings"],
+  ["provider", "tool-binding"],
+  ["provider", "publish-check"],
+  ["chain-slashes"],
+];
+
 export interface ProviderPendingTx {
   /** Stable per action, e.g. `dispute:<requestId>:dispute`; tracking the same id replaces it. */
   id: string;
@@ -110,3 +120,24 @@ export function trackSubmissions(
     },
   }));
 }
+
+/**
+ * What a confirmed transaction of each kind changes on the provider side, as
+ * query-key prefixes, so the refetch after it covers that and not the whole
+ * provider console (earnings, payouts, verdicts, SLA windows, calls and
+ * credentials are never moved by a stake transaction). `["chain-slashes"]`,
+ * the on-chain penalty rows, is refetched for every kind as well.
+ *
+ * - stake, unstake, withdraw: the stake and what is derived from it — the
+ *   wallet's token balance, the slash hold (`["provider", "me"]`, e.g.
+ *   bonded below the minimum), the bindings and their publish checks (paid
+ *   calls only reach a staked binding).
+ * - dispute: the penalty's case, the stake (a frozen penalty holds part of
+ *   it) and the slash hold.
+ */
+export const REFRESH_AFTER_CONFIRMED: Readonly<Record<ProviderPendingKind, readonly (readonly string[])[]>> = {
+  stake: STAKE_MOVED,
+  unstake: STAKE_MOVED,
+  withdraw: STAKE_MOVED,
+  dispute: [["provider", "slash-proposal-case"], ["provider", "stake"], ["provider", "me"], ["chain-slashes"]],
+};

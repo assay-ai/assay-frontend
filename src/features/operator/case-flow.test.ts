@@ -55,7 +55,6 @@ function brief(overrides: {
           cancelledRecords: 0,
         },
         disputeId: null,
-        outcome: null,
         resolutionKind: null,
         resolvedAt: iso(NOW - 4 * DAY),
         executedAt: null,

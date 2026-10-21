@@ -6,7 +6,6 @@ import * as React from "react";
 import type { AssayCaseIndex } from "@/features/chain-slashes/assay-match";
 import { useChainSlashes, useNowSeconds } from "@/features/chain-slashes/use-chain-slashes";
 import { stakeChains } from "@/features/provider-stake/chain-stake";
-import { PROVIDER_STAKE_KEY } from "@/features/provider-stake/use-stake-status";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import {
@@ -20,10 +19,10 @@ import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deploym
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import { slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 import { getSlashProposalCaseDetail } from "@/services/provider-slash-cases.service";
-import { getProviderStake } from "@/services/provider-stake.service";
 import { addressOfAccount } from "@/utils/chain";
 
 import { penaltyRowOf, sortPenalties, type PenaltyRow } from "./model";
+import { providerQueries } from "@/features/provider-home/queries";
 
 export const PENALTY_DEPLOYMENT = ROBINHOOD_TESTNET_STAKE;
 
@@ -129,7 +128,7 @@ export function usePenalties(options: { withCases?: "open" | "all" | "none" } = 
   const nowSeconds = useNowSeconds();
   const demo = demoEnabled();
 
-  const stake = useQuery({ queryKey: PROVIDER_STAKE_KEY, queryFn: getProviderStake, retry: 0 });
+  const stake = useQuery(providerQueries.stake());
   const authority =
     stakeChains(stake.data).find((entry) => entry.chainId === PENALTY_DEPLOYMENT.chainId)?.stakeAuthority ?? null;
   const ownAddress: HexString | null = authority ? normaliseEvmAddress(addressOfAccount(authority)) : null;

@@ -12,7 +12,7 @@ import type { SetupStepState } from "@/components/patterns/setup-checklist";
  * Free calls need only steps 1–2, so 3 and 4 never block them; 4 is blocked
  * until 3 because caps are set on an escrow, which the first deposit opens.
  *
- * Step 4 needs the agent's payment key, made with `agent-cli`, which is not
+ * Step 4 needs the agent's payment key, made by `assay-mcp`, which is not
  * published: paid calls are by invitation during testnet (owner decision
  * D14). Until a payment key is bound, step 4 says so and is not counted as
  * unfinished ({@link payByInvitation}).
@@ -64,7 +64,7 @@ export function getStartedStates(facts: GetStartedFacts): Record<GetStartedStepI
 /**
  * Paying needs a payment key and none is bound yet: step 4 reads "Paid calls:
  * by invitation during testnet" and is not counted (D14). Once a key is bound
- * (an invited buyer ran `agent-cli bind`), step 4 counts as before.
+ * (an invited buyer ran `npx -y @goassay-ai/mcp@<V> enable-paid`), step 4 counts as before.
  */
 export function payByInvitation(facts: GetStartedFacts): boolean {
   return facts.freeOnly !== true && facts.needsDelegation && !facts.keyBound;
@@ -103,15 +103,15 @@ export function payStage(facts: Pick<GetStartedFacts, "capsSet" | "keyBound" | "
 
 /**
  * Paid calls during testnet (D14): by invitation, because the payment key is
- * made with `agent-cli`, which has no public install path. Said plainly where
+ * made by `assay-mcp`, which has no public install path. Said plainly where
  * paying would be set up, with "Ask for access" when `SUPPORT_URL` is set.
  */
 export const PAID_BY_INVITATION_TITLE = "Paid calls: by invitation during testnet";
 export const PAID_BY_INVITATION_TEXT =
-  "Paid calls are by invitation during testnet: paying needs a payment key made with agent-cli, which only invited testers have for now. Free calls work without it.";
+  "Paid calls are by invitation during testnet: paying needs a payment key made by assay-mcp, which only invited testers have for now. Free calls work without it.";
 
-/** For an invited buyer, next to the command: where `agent-cli` comes from. */
-export const AGENT_CLI_SOURCE = "Invited already? Your Assay contact gives you agent-cli. Run this on the agent's machine:";
+/** For an invited buyer, next to the command: where `assay-mcp` comes from. */
+export const ASSAY_MCP_SOURCE = "Invited already? Your Assay contact gives you assay-mcp. Run this on the agent's machine:";
 
 /** A catalogue row, as much of it as the step 2 prompt needs. */
 export interface PromptTool {

@@ -113,12 +113,13 @@ export interface ToolRow {
   routable: boolean;
   unroutableReason: string | null;
   /**
-   * CAIP-2, the chains this tool settles on — or `undefined` when the API said
-   * nothing, which is every row today. Passed straight through and **never**
-   * defaulted to `[]`: the two are the same to `settlementReach`, and an `[]`
-   * written here would be this hook claiming knowledge it does not have.
+   * CAIP-2, the chains this tool settles on — `null` when the API says it is
+   * not known (nothing routable), `undefined` when it said nothing. Passed
+   * straight through and **never** defaulted to `[]`: all three are the same
+   * to `settlementReach`, and an `[]` written here would be this hook claiming
+   * knowledge it does not have.
    */
-  settlementChains: string[] | undefined;
+  settlementChains: string[] | null | undefined;
   /** The price per chain, with the provider setting it; empty when the API sends none. */
   prices?: ChainPrice[];
   /** Your own traffic on this tool. */

@@ -6,13 +6,18 @@ import { useSyncExternalStore } from "react";
 import { useChains } from "@/hooks/useChains";
 import type { Chain } from "@/interfaces/chain";
 import {
-  heldAssets,
+  BALANCES_KEY,
+  getBalances,
   pickDisplayAsset,
   providerEarningAssets,
   storeDisplayAsset,
   storedDisplayAsset,
 } from "@/services";
-import { subscribeDisplayAsset } from "@/services/display-asset";
+import { assetsOfBalances, subscribeDisplayAsset } from "@/services/display-asset";
+
+function selectHeldAssets(response: { balances: readonly { asset: string }[] }): string[] {
+  return assetsOfBalances(response.balances ?? []);
+}
 import { assetName, chainDisplayName } from "@/services/chains.service";
 
 /** `USDG on Robinhood Chain testnet`. */
@@ -36,11 +41,20 @@ export function useDisplayAssetPick(): string | null {
  * until that is known.
  */
 export function useDisplayAsset(scope: Scope) {
-  const query = useQuery({
-    queryKey: ["display-assets", scope],
-    queryFn: () => (scope === "buyer" ? heldAssets() : providerEarningAssets()),
-    staleTime: 60_000,
+  // A buyer's assets are a slice of the balances every money screen reads: one request, refreshed with them.
+  const held = useQuery({
+    queryKey: BALANCES_KEY,
+    queryFn: getBalances,
+    select: selectHeldAssets,
+    enabled: scope === "buyer",
   });
+  const earned = useQuery({
+    queryKey: ["display-assets", scope],
+    queryFn: providerEarningAssets,
+    staleTime: 60_000,
+    enabled: scope === "provider",
+  });
+  const query = scope === "buyer" ? held : earned;
   const assets = query.data ?? [];
   const stored = useDisplayAssetPick();
   return {

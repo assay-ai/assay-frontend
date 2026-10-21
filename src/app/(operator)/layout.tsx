@@ -31,8 +31,9 @@ import {
   type OperatorSessionEnd,
   type OperatorSessionRecord,
 } from "@/libs/operator-session";
-import { getOperatorIdentity, listApprovals, listArbiterDisputes, logoutOperator } from "@/services/operator.service";
+import { getOperatorIdentity, logoutOperator } from "@/services/operator.service";
 import { useTheme } from "@/providers/ThemeProvider";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * The operator console shell.
@@ -60,8 +61,6 @@ import { useTheme } from "@/providers/ThemeProvider";
  * operator action reports its result by toast, so the mount below is
  * load-bearing.
  */
-
-const PENDING_PAGE = 100;
 
 export default function OperatorLayout({ children }: { children: React.ReactNode }) {
   const { themeType } = useTheme();
@@ -100,16 +99,14 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
   const { data, error, isError, isLoading } = identityQuery;
 
   const pendingQuery = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: PENDING_PAGE }),
+    ...operatorQueries.pendingApprovals(),
     enabled: Boolean(session && data),
     refetchInterval: 30_000,
     retry: 0,
   });
   const canRule = data ? capabilitiesFor(data.roles).rule : false;
   const disputesQuery = useQuery({
-    queryKey: ["operator", "arbiter", "disputes"],
-    queryFn: listArbiterDisputes,
+    ...operatorQueries.arbiterDisputes(),
     enabled: Boolean(session && data && canRule),
     refetchInterval: 60_000,
     retry: 0,

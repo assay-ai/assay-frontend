@@ -603,6 +603,16 @@ describe("useSigner().signAndSend", () => {
     expect(base58Decode(signature)).toEqual(SIGNATURE_BYTES);
   });
 
+  it("forwards { showWalletUIs: true } as options.uiOptions on signAndSend and signTransaction (R-WEB-5)", async () => {
+    privy.signCalls = [];
+    privy.signResult = new Uint8Array([1, 2]);
+    const signer = readySigner({ chainId: SOLANA_DEVNET_CAIP2 });
+    await signer.signAndSend(SOLANA_TX, { showWalletUIs: true });
+    expect(privy.sendCalls[0]).toMatchObject({ options: { uiOptions: { showWalletUIs: true } } });
+    await signer.signTransaction(SOLANA_TX, { showWalletUIs: true });
+    expect(privy.signCalls[0]).toMatchObject({ options: { uiOptions: { showWalletUIs: true } } });
+  });
+
   it("throws rather than defaulting when the chain id is unknown", async () => {
     const signer = readySigner({ chainId: "solana:nonsense" });
     await expect(signer.signAndSend({ ...SOLANA_TX, chainId: "solana:nonsense" })).rejects.toThrow(
@@ -868,6 +878,22 @@ describe("the eip155 branch", () => {
     expect(privyEvm.typedDataCalls).toHaveLength(0);
   });
 
+  it("forwards { showWalletUIs: true } to Privy's uiOptions, next to the address (R-WEB-5)", async () => {
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    await state.signer!.signTypedData(TYPED_DATA, { showWalletUIs: true });
+    expect(privyEvm.typedDataCalls).toHaveLength(1);
+    expect(privyEvm.typedDataCalls[0].options).toEqual({
+      address: evmEmbedded.address,
+      uiOptions: { showWalletUIs: true },
+    });
+  });
+
+  it("without the option, passes no uiOptions (Privy's own default applies)", async () => {
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    await state.signer!.signTypedData(TYPED_DATA);
+    expect(privyEvm.typedDataCalls[0].options).toEqual({ address: evmEmbedded.address });
+  });
+
   it("refuses a typed-data request whose DOMAIN names another chain than the signer's", async () => {
     // Frontend review 2026-10-15, F1: the wrapper said 46630 and the domain
     // said 1, and the embedded wallet signed for chain 1.
@@ -956,6 +982,17 @@ describe("the eip155 branch", () => {
       ]);
     });
 
+    it("forwards { showWalletUIs: true } to Privy on an embedded signAndSend: the non-relayed SetLimits path (R1-I2)", async () => {
+      const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+      await state.signer!.signAndSend({ ...EVM_TX, from: EVM_EMBEDDED }, { showWalletUIs: true });
+      expect(privyEvm.transactionCalls).toHaveLength(1);
+      expect(privyEvm.transactionCalls[0]!.options).toEqual({
+        address: EVM_EMBEDDED,
+        uiOptions: { showWalletUIs: true },
+      });
+      expect(evmRpc.broadcastCalls).toHaveLength(1);
+    });
+
     it("lets an injected wallet SEND it itself — on the right chain, no page-side fill or broadcast", async () => {
       // Until 2026-09-29 this refused: MetaMask/Rabby cannot sign without
       // sending. Sending is what this door asks for, so the wallet broadcasts
@@ -1032,6 +1069,16 @@ describe("the eip155 branch", () => {
         type: 2,
       }),
       options: { address: EVM_EMBEDDED },
+    });
+  });
+
+  it("forwards { showWalletUIs: true } on an eip155 transaction to Privy's uiOptions (R-WEB-5)", async () => {
+    privyEvm.transactionCalls = [];
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    await state.signer!.signTransaction({ ...EVM_TX, from: EVM_EMBEDDED }, { showWalletUIs: true });
+    expect(privyEvm.transactionCalls[0]!.options).toEqual({
+      address: EVM_EMBEDDED,
+      uiOptions: { showWalletUIs: true },
     });
   });
 

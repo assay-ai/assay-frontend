@@ -23,10 +23,10 @@ import { useListingProgress } from "@/features/provider-home/use-listing-progres
 import { useProviderInbox } from "@/features/provider-home/use-provider-inbox";
 import { getSessionToken } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
-import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 import { useTheme } from "@/providers/ThemeProvider";
 import { routes } from "@/libs/routes";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * The provider console shell — the design's "Sidebar" component, used by
@@ -139,10 +139,7 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
     Either way `items` is empty here and the rail renders its fixed rows, which
     is the correct state for a provider with no bindings.
   */
-  const { data } = useQuery({
-    queryKey: ["provider", "tool-bindings", "sidebar"],
-    queryFn: () => listToolBindings({ limit: 50 }),
-  });
+  const { data } = useQuery(providerQueries.bindings());
   const names = useProviderToolNames();
   // The same read as the Inbox page, so the badge equals what the page says.
   const inbox = useProviderInbox();

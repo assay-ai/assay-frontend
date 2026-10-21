@@ -3,7 +3,7 @@
 import { DisplayAssetSelect, useDisplayAssetPick } from "@/components/display-asset-select";
 import { ChartNoAxesColumn, ChevronRight, Plus, X } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { WalletSetupBanner } from "@/components/auth/wallet-setup-banner";
 import { ALERT_ICON, presentAlert, useAlertLimitContext, useMarkAlertsRead } from "@/components/layout/alert-entry";
@@ -61,11 +61,9 @@ import { toast } from "@/utils/toast";
  * "Free quota" has no endpoint to read a quota or a ceiling from, and "Recent
  * calls" is required by this goal and has nowhere else on the screen to live.
  *
- * The header says the figures update every 30s, so they do — that sentence is
- * a promise, not decoration.
+ * The header says the figures update every 30s, so they do (`useOverview`
+ * refetches on that interval) — that sentence is a promise, not decoration.
  */
-
-const REFRESH_MS = 30_000;
 
 function HoldFigure({ label, value }: { label: string; value: string }) {
   return (
@@ -90,11 +88,6 @@ export default function OverviewPage() {
   // The month is a fact about the calendar, not about the response, so the
   // tile labels stay correct even when every request failed.
   const monthLabel = useMemo(() => monthPeriod(anchor).label, [anchor]);
-
-  useEffect(() => {
-    const timer = setInterval(reload, REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [reload]);
 
   /*
     Was `data?.balance ?? null`, fed by `balances.balances?.[0]` — the tile that

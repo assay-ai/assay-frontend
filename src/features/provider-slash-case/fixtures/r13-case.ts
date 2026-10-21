@@ -76,7 +76,6 @@ export function caseOf(
       appliedAmount: null,
       clocks: clocksOf(clocks),
       disputeId: extra.disputeId ?? null,
-      outcome: null,
       resolutionKind: null,
       resolvedAt: null,
       executedAt: extra.executedAt ?? null,

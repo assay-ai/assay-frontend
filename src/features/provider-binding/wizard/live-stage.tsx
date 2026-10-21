@@ -36,6 +36,8 @@ import {
   DEFAULT_FAILURE_PERCENT,
   DEFAULT_FREE_CALLS_PER_AGENT,
   failureRateFromPercent,
+  freeBudgetFromInput,
+  freeBudgetHint,
   freeCallsFromInput,
   penaltyExample as penaltyExampleOf,
   modeOfChoice,
@@ -128,6 +130,25 @@ export function parseLiveForm(form: LiveForm, binding: ToolBindingDetail, asset:
   if (failure.value !== binding.slaFailureRate) body.slaFailureRate = failure.value!;
   if (timeout.value !== binding.timeoutMs) body.timeoutMs = timeout.value!;
   return { body, errors, price, freeCalls, failureRate: failure.value };
+}
+
+/**
+ * The wizard's "Free calls per day, all agents (optional)" on a Free listing
+ * (BUG-P0-01): the same field and DTO key (`freeDailyBudget`, a call count;
+ * empty = `null` = the platform default) as the binding's Settings page. Only
+ * Free offers it here; Free + paid keeps its per-agent box, and Settings has
+ * the cap for every mode. The patch is empty when nothing changed.
+ */
+export function freeBudgetPatch(
+  mode: ReturnType<typeof modeOfChoice>,
+  text: string,
+  binding: Pick<ToolBindingDetail, "freeDailyBudget">,
+): { error: string | null; value: number | null; patch: Pick<UpdateToolBindingBody, "freeDailyBudget"> } {
+  if (mode !== "FREE") return { error: null, value: binding.freeDailyBudget ?? null, patch: {} };
+  const parsed = freeBudgetFromInput(text);
+  if (parsed.error) return { error: parsed.error, value: null, patch: {} };
+  const current = binding.freeDailyBudget ?? null;
+  return { error: null, value: parsed.value, patch: parsed.value === current ? {} : { freeDailyBudget: parsed.value } };
 }
 
 function PercentStepper({
@@ -229,12 +250,17 @@ export function LiveStage({
     retry: 0,
   });
 
+  const [freeBudget, setFreeBudget] = React.useState(() =>
+    binding.freeDailyBudget == null ? "" : String(binding.freeDailyBudget),
+  );
   const parsed = parseLiveForm(form, binding, asset);
   const mode = modeOfChoice(form.choice);
   const set = (patch: Partial<LiveForm>) => setForm((current) => ({ ...current, ...patch }));
+  const budget = freeBudgetPatch(mode, freeBudget, binding);
+  const body = parsed.body && !budget.error ? { ...parsed.body, ...budget.patch } : null;
 
   // Autosave: a valid change is saved a moment after the provider stops typing.
-  const pendingBody = parsed.body && Object.keys(parsed.body).length > 0 ? parsed.body : null;
+  const pendingBody = body && Object.keys(body).length > 0 ? body : null;
   const bodyKey = pendingBody ? JSON.stringify(pendingBody) : "";
   const save = React.useCallback(async () => {
     if (!pendingBody || readOnly) return;
@@ -299,10 +325,10 @@ export function LiveStage({
   const testRows = versioned && check.data ? majorTestRows(check.data, termsOf(binding).majors) : [];
   const untested = testRows.filter((row) => !row.met).map((row) => `v${row.major}`);
   const move = versioned ? moveNotice(termsOf(binding), majorChoices(tool)) : null;
-  const hasErrors = Object.keys(parsed.errors).length > 0;
+  const hasErrors = Object.keys(parsed.errors).length > 0 || budget.error !== null;
   // An empty price is not marked red before anything was typed; the button says what is missing instead.
   const priceEmpty = form.price.trim() === "";
-  const onlyPriceMissing = priceEmpty && Object.keys(parsed.errors).every((key) => key === "price");
+  const onlyPriceMissing = priceEmpty && !budget.error && Object.keys(parsed.errors).every((key) => key === "price");
 
   let blockReason: React.ReactNode = null;
   if (readOnly) blockReason = "Your account is blocked, so publishing is paused.";
@@ -406,6 +432,20 @@ export function LiveStage({
             />
           ) : null}
 
+          {mode === "FREE" ? (
+            <Field
+              label="Free calls per day, all agents (optional)"
+              inputMode="numeric"
+              suffix="calls"
+              value={freeBudget}
+              disabled={readOnly}
+              placeholder="Platform default"
+              onChange={(event) => setFreeBudget(event.target.value)}
+              error={budget.error ?? undefined}
+              hint={freeBudgetHint(mode)}
+            />
+          ) : null}
+
           <PercentStepper
             value={form.failurePercent}
             onChange={(next) => set({ failurePercent: next })}
@@ -447,7 +487,13 @@ export function LiveStage({
           <div className="flex flex-col gap-2 rounded-lg border border-01 bg-01 p-4" aria-live="polite">
             <span className="text-label-13 text-01">Summary</span>
             {mode === "FREE" ? (
-              <p className="text-body-13 text-02">Free for every agent. No revenue, no stake needed, no penalty risk on money.</p>
+              <p className="text-body-13 text-02">
+                Free for every agent
+                {budget.value !== null && !budget.error
+                  ? `, up to ${budget.value.toLocaleString("en-US")} free ${budget.value === 1 ? "call" : "calls"} a day in total`
+                  : ", up to the platform's default daily limit of free calls"}
+                . No revenue, no stake needed, no penalty risk on money.
+              </p>
             ) : priceMoney && youGet ? (
               <p className="text-body-13 text-01">
                 Buyers pay {formatMoney(priceMoney, { decimals: 6 })} → you get {formatMoney(youGet, { decimals: 6 })} a call

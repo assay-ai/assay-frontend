@@ -21,7 +21,7 @@ const STAKE = {
   recommendedBuffer: null,
 } as unknown as ProviderStake;
 
-vi.mock("@/services/provider-stake.service", () => ({ revalidateProviderStake: vi.fn(async () => STAKE) }));
+vi.mock("@/services/provider-stake.service", () => ({ getProviderStake: vi.fn(async () => STAKE) }));
 vi.mock("@/features/provider-stake/use-stake-status", () => ({
   useStakeStatus: () => ({ stake: STAKE, staked: usd("80000000"), isLoading: false }),
 }));

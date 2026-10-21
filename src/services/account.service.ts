@@ -10,8 +10,12 @@ export interface Agent {
   [key: string]: unknown;
 }
 
-/** GET /agents. */
-export function listAgents(query: ListQuery = {}): Promise<CursorPage<Agent>> {
+/**
+ * GET /agents. `include: "credentials,health"` nests each agent's first 50
+ * keys (as `GET /agents/:id/credentials?limit=50` answers them) and their
+ * health — a person's read, refused to an agent credential.
+ */
+export function listAgents(query: ListQuery & { include?: string } = {}): Promise<CursorPage<Agent>> {
   return api.get<CursorPage<Agent>>("/agents", query as Record<string, unknown>);
 }
 
@@ -43,10 +47,6 @@ export function listNotifications(
   query: ListQuery & { event?: string[]; unreadOnly?: boolean } = {}
 ): Promise<CursorPage<unknown>> {
   return api.get<CursorPage<unknown>>("/notifications", query as Record<string, unknown>);
-}
-
-export function getUnreadCount(): Promise<{ count: number }> {
-  return api.get<{ count: number }>("/notifications/unread-count");
 }
 
 /** PATCH /notifications/:id/read — the person's session only; idempotent; 404 outside the organization. */

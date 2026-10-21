@@ -28,7 +28,7 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import {
   ALERT_PRESETS,
-  BUYER_EVENTS,
+  customiseEvents,
   CHANNEL_NAME,
   availableChannels,
   destinationError,
@@ -64,6 +64,7 @@ import { presentAlert, useAlertLimitContext, useMarkAlertsRead } from "@/compone
 
 import { AGGREGATION_LABEL, NOTIFICATION_CATALOGUE, NOTIFICATION_EVENT_LABEL } from "./notification-catalogue";
 import { PageHeader, StatusPill } from "./chrome";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Alert settings (`/alerts`): where alerts go and what you are told about.
@@ -300,6 +301,11 @@ export function AlertsView() {
     return map;
   }, [preferencesQuery.data]);
 
+  // A provider organization also sees its provider-side alerts under Customise. Same
+  // signal and key as the provider console: `GET /providers/me` answers (404 = not a provider).
+  const providerMe = useQuery(providerQueries.me());
+  const isProvider = providerMe.isSuccess;
+
   const isEnabled = React.useCallback(
     (event: NotificationEvent, channel: NotificationChannel) => preferenceOverride.get(`${event}|${channel}`) ?? true,
     [preferenceOverride],
@@ -487,7 +493,7 @@ export function AlertsView() {
               Customise: every alert, how urgent and how often
             </summary>
             <ul className="flex flex-col px-4 pb-3 tablet:px-5">
-              {BUYER_EVENTS.filter((event) => NOTIFICATION_CATALOGUE[event].hasProducer).map((event) => {
+              {customiseEvents(Object.keys(NOTIFICATION_CATALOGUE) as NotificationEvent[], { provider: isProvider }).filter((event) => NOTIFICATION_CATALOGUE[event].hasProducer).map((event) => {
                 const def = NOTIFICATION_CATALOGUE[event];
                 return (
                   <li key={event} className="flex flex-col gap-1 border-t border-01 py-2.5 first:border-t-0 tablet:flex-row tablet:items-center tablet:gap-3">

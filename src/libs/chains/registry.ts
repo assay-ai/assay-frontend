@@ -47,6 +47,18 @@ export function isEvmChain(chainId: string): boolean {
 }
 
 /**
+ * Whether a buyer's escrow exists only once they first deposit, so nothing can
+ * be signed against it before that. True on Solana, where the first deposit
+ * opens the escrow account. False on `eip155`: `escrows[buyer]` is there from
+ * the start (all zeros), so the payer can set limits and let an agent pay
+ * before depositing, and a voucher is still only ever paid from the chain
+ * balance. An unknown chain keeps the stricter answer.
+ */
+export function firstDepositOpensEscrow(chainId: string | null | undefined): boolean {
+  return !chainId || !isEvmChain(chainId);
+}
+
+/**
  * `hex` on `eip155`, `base58` everywhere else — including on an id this build
  * does not recognise.
  *

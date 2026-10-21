@@ -27,9 +27,8 @@ import { useChains } from "@/hooks/useChains";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import type { ProviderStakeRequirementItem, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
-import { getProviderRegistration } from "@/services/provider-registration.service";
-import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Stake — route `/provider/capital` (nav label "Stake").
@@ -105,11 +104,8 @@ export default function ProviderStakePage() {
   // The same rows and wording as the Withdraw sheet: every open penalty, disputed ones included.
   const hold = openPenaltyHold(usePenalties({ withCases: "none" }).rows);
   const { chains } = useChains();
-  const registration = useQuery({ queryKey: ["provider", "registration"], queryFn: getProviderRegistration, retry: 0 });
-  const bindings = useQuery({
-    queryKey: ["provider", "tool-bindings", "sidebar"],
-    queryFn: () => listToolBindings({ limit: 50 }),
-  });
+  const registration = useQuery(providerQueries.registration());
+  const bindings = useQuery(providerQueries.bindings());
 
   const [sheet, setSheet] = React.useState<"stake" | "withdraw" | null>(null);
   React.useEffect(() => {

@@ -1252,7 +1252,7 @@ export function MappingEditor({
             <p role="alert" className="px-1 text-body-13 text-danger-500">
               {optionalAtRequired.map((row) => row.target).join(", ")} —{" "}
               {optionalAtRequired.length === 1 ? "this field is" : "these fields are"}{" "}
-              required by the tool, so if {optionalAtRequired.length === 1 ? "it" : "they"} may be missing, give a
+              required by the tool, so if {optionalAtRequired.length === 1 ? "it" : "they"}{" "}may be missing, give a
               default value too (open the row&rsquo;s settings). Without one it cannot be saved.
             </p>
           ) : null}

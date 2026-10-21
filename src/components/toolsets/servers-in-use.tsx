@@ -107,7 +107,7 @@ export function ServersInUse({ agentId, agentName, lastCallAt }: { agentId: stri
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="servers-in-use">
       <p className="text-body-xs text-03">
-        The servers {agentName} has called or was given in the last 30 days. Read-only: to change one, make a new URL and replace the old one in your app.
+        The servers {agentName} has called or was given in the last 30 days. Change makes a new URL for a server; replace the old one in your app.
       </p>
       {query.isPending ? (
         <SkeletonRows rows={2} />
@@ -153,7 +153,6 @@ export function ServersInUse({ agentId, agentName, lastCallAt }: { agentId: stri
             </div>
           ) : null}
 
-          <p className="text-body-xs text-03 tablet:hidden">Change makes a new URL for a server; replace the old one in your app.</p>
           <ul className="flex flex-col gap-2 tablet:hidden" data-testid="server-cards">
             {servers.map((server) => (
               <ServerCard key={server.canonicalUrl} server={server} clash={clashes(server)} onChange={() => change(server)} onUpdate={() => update(server)} />

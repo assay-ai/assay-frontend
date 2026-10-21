@@ -8,13 +8,15 @@ import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } from "@/features/buyer-money/deposit-flow";
+import { DEPOSIT_CREDIT_TEXT } from "@/features/buyer-money/confirming";
 import { testTokenHelp } from "@/features/buyer-money/gas-help";
 import { describeMoneyError } from "@/features/buyer-money/money-errors";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
-import { depositChoice } from "@/features/funding/deposit-chain";
+import { depositChoiceFor } from "@/features/funding/deposit-chain";
 import { depositWalletView, useDepositWallet } from "@/features/funding/deposit-wallet";
 import { depositUnavailableOn, depositableChains, offeredChains } from "@/features/funding/depositable-chains";
 import { chainBalances } from "@/features/g30/balance";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import { usePendingTransactions } from "@/hooks/usePendingTransactions";
 import { useSigner } from "@/hooks/useSigner";
 import { demoEnabled } from "@/libs/demo/demo-api";
@@ -53,9 +55,11 @@ export interface DepositSheetProps {
   onOpenChange: (open: boolean) => void;
   /** Offered after success when the escrow has no account ceiling yet. */
   onSetCaps?: () => void;
+  /** Offer only this chain (the enable-paid page: the only RPC its policy reaches). */
+  onlyChainId?: string | null;
 }
 
-export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProps) {
+export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null }: DepositSheetProps) {
   const queryClient = useQueryClient();
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
@@ -67,7 +71,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
     status: money.escrowQuery.isPending ? "loading" : money.escrowQuery.isError ? "error" : "ready",
     chainId: money.chainId,
   });
-  const choice = depositChoice(offeredChains(depositable));
+  const choice = depositChoiceFor(offeredChains(depositable), onlyChainId);
   const chainId = choice.kind === "fixed" ? choice.chain.chainId : picked;
   const chain = chainId ? findChain(money.chains, chainId) : null;
   const chainName = chainId ? chainDisplayName(money.chains, chainId) : null;
@@ -225,13 +229,15 @@ export function DepositSheet({ open, onOpenChange, onSetCaps }: DepositSheetProp
       successTitle="Deposit confirmed on chain"
       successDescription={
         needsCaps
-          ? "It shows in your balance within about a minute. Next: set your account ceiling, so your agents can pay."
-          : "It shows in your balance within about a minute. Your agents can spend it within their spending limits."
+          ? `${DEPOSIT_CREDIT_TEXT} Next: set your account ceiling, so your agents can pay.`
+          : `${DEPOSIT_CREDIT_TEXT} Your agents can then spend it within their spending limits.`
       }
       onSuccess={() => {
         void queryClient.invalidateQueries({ queryKey: ["balances"] });
         void queryClient.invalidateQueries({ queryKey: ["deposits"] });
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+        // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+        void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
       }}
       doneAction={
         needsCaps && onSetCaps

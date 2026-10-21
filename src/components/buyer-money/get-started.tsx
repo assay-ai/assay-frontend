@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { capsAreSet } from "@/features/buyer-money/caps";
 import {
-  AGENT_CLI_SOURCE,
+  ASSAY_MCP_SOURCE,
   PAID_BY_INVITATION_TEXT,
   PAID_BY_INVITATION_TITLE,
   firstCallPrompt,
@@ -39,7 +39,7 @@ import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { McpConfigTabs } from "./mcp-config-tabs";
 import { useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
-import type { McpClient } from "@/features/buyer-money/mcp-config";
+import { assayMcpRun, keyForHint, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { GasHelpNote } from "./gas-help-note";
 import { useAgentsAndKeys } from "./use-agents";
 
@@ -63,7 +63,6 @@ import { useAgentsAndKeys } from "./use-agents";
  */
 const DISMISS_KEY = "assay.get-started.dismissed";
 const LIVE_POLL_MS = 5_000;
-const BIND_COMMAND = "agent-cli keygen && agent-cli bind";
 
 function readDismissed(): boolean {
   try {
@@ -92,18 +91,38 @@ function freeOnlyChain(chainId: string | null): boolean {
   return chainId !== null && !servesPaidCalls(chainId);
 }
 
+/**
+ * The agent Get started is about: the one furthest along — paying, else
+ * holding a bound key, else holding a key that is not revoked — and the first
+ * agent only when none is. Always the first one read a second agent that
+ * already pays as "Let your agent pay" whenever the first had only revoked
+ * keys, and kept the 5-second listener on for a bind nobody was making.
+ */
+function getStartedAgent(data: AgentsAndKeys): AgentsAndKeys["agents"][number] | null {
+  const agents = data.agents;
+  return (
+    agents.find((a) => data.readiness[a.agentId]?.grant?.status === "ACTIVE") ??
+    agents.find((a) => Boolean(data.readiness[a.agentId]?.boundCredential?.delegateAccount)) ??
+    agents.find((a) => (data.health[a.agentId]?.unrevokedKeyCount ?? 0) > 0) ??
+    agents[0] ??
+    null
+  );
+}
+
 /** The facts Get started ticks from, read off the agents, keys and escrow. */
 function getStartedFactsFrom(data: AgentsAndKeys) {
-  const agent = data.agents[0] ?? null;
+  const agent = getStartedAgent(data);
   const allKeys = data.agents.flatMap((a) => data.keys[a.agentId] ?? []);
   const agentKeyCount = agent ? (data.keys[agent.agentId] ?? []).length : 0;
+  // Get started's "live" is not revoked, expiry aside: the health's `unrevokedKeyCount`.
   const liveKeys = allKeys.filter((k) => !k.revokedAt);
+  const health = data.agents.map((a) => data.health[a.agentId]).filter((h) => h !== undefined);
   const escrow = data.escrowQuery.data;
   const readiness = agent ? data.readiness[agent.agentId] : undefined;
   const bound = readiness?.boundCredential ?? null;
   const facts: GetStartedFacts = {
-    hasLiveKey: liveKeys.length > 0,
-    firstCallSeen: liveKeys.some((k) => k.lastUsedAt),
+    hasLiveKey: health.some((h) => h.unrevokedKeyCount > 0),
+    firstCallSeen: health.some((h) => h.firstCallSeen),
     // "Has ever deposited": the first deposit opens the escrow. A balance
     // spent down to zero later must not bring the checklist back.
     hasFunds: escrow?.exists === true,
@@ -114,7 +133,15 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
     needsDelegation: supportsDelegation(agent?.agentAccount),
     freeOnly: freeOnlyChain(chainIdOfAccount(escrow?.account ?? agent?.agentAccount)),
   };
-  return { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts };
+  // When the first call arrived: the earliest use of a key that is not revoked.
+  const firstCallAt =
+    health
+      .map((h) => h.earliestLastUsedAt)
+      .filter((at): at is string => at !== null)
+      .sort()[0] ?? null;
+  // A bind can only be awaited for a key that is not revoked: the payment key is bound to one.
+  const agentHasKey = agent ? (data.health[agent.agentId]?.unrevokedKeyCount ?? 0) > 0 : false;
+  return { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts, firstCallAt, agentHasKey };
 }
 
 /**
@@ -123,12 +150,12 @@ function getStartedFactsFrom(data: AgentsAndKeys) {
  * Overview load, then the card vanished (V1-1).
  */
 function dataLoading(data: AgentsAndKeys): boolean {
-  const agent = data.agents[0];
   return (
     data.agentsQuery.isPending ||
     (data.agents.length > 0 && data.keysQuery.isPending) ||
     data.escrowQuery.isPending ||
-    (agent !== undefined && data.readiness[agent.agentId]?.loading === true)
+    // Every agent's: which one Get started is about depends on all of them (`getStartedAgent`).
+    data.agents.some((agent) => data.readiness[agent.agentId]?.loading === true)
   );
 }
 
@@ -165,17 +192,16 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const [createdToken, setCreatedToken] = React.useState<string | null>(null);
   const [expanded, setExpanded] = React.useState<string | null | undefined>(undefined);
 
-  const { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts } = getStartedFactsFrom(data);
+  const { agent, liveKeys, agentKeyCount, escrow, readiness, bound, facts, firstCallAt, agentHasKey } = getStartedFactsFrom(data);
   // Step 1 done, but the full key is gone: make a new one here and fill it in.
   const createInPlace = useCreateKey(agent?.agentId ?? null, agentKeyCount, (key) => setCreatedToken(key.token));
   const catalogue = useCatalogue();
   // Copying the config hands out `/`: Servers in use then waits for its first call.
   const recordConnect = useRecordConnect(agent?.agentId);
-  const onCopyConfig = (client: McpClient) => {
-    if (agent) recordConnect.mutate({ url: mcpEndpointUrl(), serverName: "assay", client });
+  const onCopyConfig = (client: McpClient, copied?: string) => {
+    if (agent) recordConnect.mutate({ url: copied ?? urlForClient(client, mcpEndpointUrl()), serverName: "assay", client });
   };
   const states = getStartedStates(facts);
-  const firstCallAt = liveKeys.map((k) => k.lastUsedAt).filter((v): v is string => Boolean(v)).sort()[0] ?? null;
   const { chains } = useChains();
   const chainId = chainIdOfAccount(escrow?.account ?? agent?.agentAccount);
   const chain = chainId ? findChain(chains, chainId) : null;
@@ -187,7 +213,20 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const invitation = payByInvitation(facts);
 
   // The live listener: on while the first call or the payment key is awaited.
-  const listen = (states.call === "current" || (states.pay !== "done" && stage === "bind")) && !revealing;
+  const loading = dataLoading(data);
+  // On Overview, render nothing until the data says it is needed: a set-up
+  // account should not see a checklist skeleton flash on every visit.
+  const hidden = placement === "overview" && (loading || complete || dismissed);
+  // The live listener, only while there is something to wait for on screen: the
+  // first call of a key that exists, or the bind of a key that is not revoked.
+  // Never while the checklist is hidden, loading or complete: then the agent
+  // rows' 30-second read is enough.
+  const listen =
+    !hidden &&
+    !loading &&
+    !complete &&
+    (states.call === "current" || (states.pay !== "done" && stage === "bind" && agentHasKey)) &&
+    !revealing;
   React.useEffect(() => setPoll(listen ? LIVE_POLL_MS : false), [listen]);
 
   // When the data moves the current step on, let the checklist follow it again.
@@ -201,10 +240,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     if (step) setAskedStep(step);
   }, []);
 
-  const loading = dataLoading(data);
-  // On Overview, render nothing until the data says it is needed: a set-up
-  // account should not see a checklist skeleton flash on every visit.
-  if (placement === "overview" && (loading || complete || dismissed)) return null;
+  if (hidden) return null;
 
   const agentName = agent?.label ?? "your agent";
   // Free calls only on this chain: steps 3 and 4 do not apply, said up front.
@@ -234,9 +270,10 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
             {createdToken ? <p className="text-body-xs text-03">{newKeyPaysNote(payingKeyName(readiness))}</p> : null}
             <McpConfigTabs
               token={createdToken}
-              keyPrefix={liveKeys[0]?.prefix ?? null}
+              keyPrefix={keyForHint(liveKeys)?.prefix ?? null}
               onCopy={onCopyConfig}
               onCreateKey={() => createInPlace.mutate()}
+              agentName={agent?.label ?? null}
               creatingKey={createInPlace.isPending}
               createKeyError={createInPlace.isError ? createKeyErrorText(createInPlace.error) : null}
             />
@@ -423,10 +460,10 @@ export function PaidByInvitation({ agentName, onSetCaps }: { agentName: string; 
       <details className="text-body-13 text-02">
         <summary className="min-h-10 cursor-pointer select-none content-center text-label-13 text-01">Invited already?</summary>
         <div className="mt-2 flex min-w-0 flex-col gap-2.5">
-          <p className="text-body-xs text-03" data-testid="agent-cli-source">
-            {AGENT_CLI_SOURCE.replace("the agent's machine", `${agentName}'s machine`)}
+          <p className="text-body-xs text-03" data-testid="assay-mcp-source">
+            {ASSAY_MCP_SOURCE.replace("the agent's machine", `${agentName}'s machine`)}
           </p>
-          <CodeBlock title="Terminal" code={BIND_COMMAND} wrap />
+          <CodeBlock title="Terminal" code={`${assayMcpRun()} enable-paid`} wrap />
           <Listening>Waiting for the payment key. This updates by itself.</Listening>
           {onSetCaps ? (
             <Button type="button" variant="secondary" className="self-start" onClick={onSetCaps}>

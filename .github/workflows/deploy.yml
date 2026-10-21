@@ -16,7 +16,8 @@ name: Deploy
 #     NEXT_PUBLIC_BASE_URL       e.g. https://app.example.com
 #     NEXT_PUBLIC_API_BASE_URL   e.g. https://api.example.com/api/v1
 #     NEXT_PUBLIC_PRIVY_APP_ID   the Privy app id (25 characters)
-#     NEXT_PUBLIC_MCP_URL        optional, shown in the /connect snippet
+#     NEXT_PUBLIC_ASSAY_MCP_VERSION  the exact @goassay-ai/mcp version install commands pin
+#     NEXT_PUBLIC_MCP_URL        required: the MCP host, shown in the /connect snippet
 #     NEXT_PUBLIC_DEMO_CHAINS    demo only: "robinhood" turns the demo data on
 #     NEXT_PUBLIC_SHOW_KITCHEN_SINK  optional: "1" keeps /kitchen-sink
 #     CLOUDFLARE_PAGES_PROJECT   the Pages project to deploy to
@@ -63,6 +64,7 @@ jobs:
       NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL || secrets.NEXT_PUBLIC_BASE_URL }}
       NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || secrets.NEXT_PUBLIC_API_BASE_URL }}
       NEXT_PUBLIC_PRIVY_APP_ID: ${{ vars.NEXT_PUBLIC_PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
+      NEXT_PUBLIC_ASSAY_MCP_VERSION: ${{ vars.NEXT_PUBLIC_ASSAY_MCP_VERSION || secrets.NEXT_PUBLIC_ASSAY_MCP_VERSION }}
       NEXT_PUBLIC_MCP_URL: ${{ vars.NEXT_PUBLIC_MCP_URL || secrets.NEXT_PUBLIC_MCP_URL }}
       NEXT_PUBLIC_DEMO_CHAINS: ${{ vars.NEXT_PUBLIC_DEMO_CHAINS || secrets.NEXT_PUBLIC_DEMO_CHAINS }}
       NEXT_PUBLIC_SHOW_KITCHEN_SINK: ${{ vars.NEXT_PUBLIC_SHOW_KITCHEN_SINK || secrets.NEXT_PUBLIC_SHOW_KITCHEN_SINK }}
@@ -82,7 +84,7 @@ jobs:
       - name: Check the environment is configured
         run: |
           missing=0
-          for name in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_PRIVY_APP_ID CLOUDFLARE_PAGES_PROJECT; do
+          for name in NEXT_PUBLIC_BASE_URL NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_PRIVY_APP_ID NEXT_PUBLIC_ASSAY_MCP_VERSION NEXT_PUBLIC_MCP_URL CLOUDFLARE_PAGES_PROJECT; do
             if [ -z "${!name}" ]; then echo "::error::$name is not set in this environment (neither as a Variable nor as a Secret)"; missing=1; fi
           done
           [ ${#NEXT_PUBLIC_PRIVY_APP_ID} -eq 25 ] || { echo "::error::NEXT_PUBLIC_PRIVY_APP_ID must be 25 characters"; missing=1; }
@@ -98,12 +100,18 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
+      # Demo pages hold made-up data: keep them out of search results.
       # Only production may be indexed: demo holds made-up data and develop is a
       # test deployment.
       - name: Keep demo and develop out of search engines
         if: github.ref_name != 'main'
         run: |
           printf '\n/*\n  X-Robots-Tag: noindex, nofollow\n' >> out/_headers
+
+      # Spec R-WEB-2/3/4: the exact out/ that is deployed must carry integrity
+      # on every script and the strict headers, whichever branch was pushed.
+      - name: Check the built headers
+        run: pnpm check:headers
 
       - name: Upload the built site
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

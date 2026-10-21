@@ -17,11 +17,24 @@ import { exceedsScale, toAtomic, toDecimal } from "@/utils/money";
  * - both caps above zero, the per-payment cap no higher than the per-window cap;
  * - neither cap above the escrow's OWN current limit (the escrow limits keep
  *   applying to the agent too — these caps can only narrow them);
- * - an expiry between 1 and 365 days out.
+ * - an expiry between 1 and 365 days out: 30 by default (owner decision O2),
+ *   at most the chain's one-year limit (the same rule enable-paid applies).
  */
 export const DEFAULT_DELEGATION_DAYS = 30;
+/** The chain's `MAX_DELEGATION_LIFETIME_SECONDS` (365 days), in days. */
 export const MAX_DELEGATION_DAYS = 365;
+/**
+ * Taken off a full-year expiry so clock skew (up to 2 minutes) and block time
+ * never push it past the chain's limit, which the chain would refuse.
+ */
+export const MAX_EXPIRY_MARGIN_SECONDS = 600;
 const SECONDS_PER_DAY = 86_400;
+
+/** `days` whole days from `nowSeconds`; a full year keeps {@link MAX_EXPIRY_MARGIN_SECONDS} under the chain's limit. */
+export function expiryFromDays(nowSeconds: number, days: number): number {
+  const end = Math.floor(nowSeconds) + days * SECONDS_PER_DAY;
+  return days >= MAX_DELEGATION_DAYS ? end - MAX_EXPIRY_MARGIN_SECONDS : end;
+}
 
 export interface DelegationFormInput {
   maxVoucherAmount: string;
@@ -178,7 +191,7 @@ export function parseDelegationForm(
       maxPerWindow: toAtomic(perWindow.value, decimals),
       validUntil: keep
         ? String(currentValidUntil)
-        : String(Math.floor(nowSeconds) + Number(days) * SECONDS_PER_DAY),
+        : String(expiryFromDays(nowSeconds, Number(days))),
     },
   };
 }
@@ -249,7 +262,7 @@ export function delegationRows(
   });
 }
 
-/** The last four hex characters of an address — what `agent-cli address` shows the person. */
+/** The last four hex characters of an address — what `npx -y @goassay-ai/mcp@<V> status` shows the person. */
 export function keyFingerprint(account: string | null | undefined): string {
   if (!account) return "";
   const address = addressOf(account);
@@ -258,7 +271,7 @@ export function keyFingerprint(account: string | null | undefined): string {
 
 /**
  * The person confirms the key they authorise is THEIR machine's, by typing its
- * last four characters as `agent-cli address` printed them on that machine.
+ * last four characters as `npx -y @goassay-ai/mcp@<V> status` printed them on that machine.
  * Anyone holding the agent's token can bind a key of their own; this is what
  * keeps a stolen token from becoming a grant the person signs blind (review S3-9).
  */
@@ -371,7 +384,7 @@ export function delegationInvalidText(error: unknown): string | null {
   if (/ValidUntil/i.test(reason)) {
     return (
       "The expiry is too soon. An agent’s authorisation must last at least about " +
-      "1 hour 5 minutes from now (and at most 365 days). Choose a later expiry and sign again."
+      `1 hour 5 minutes from now (and at most ${MAX_DELEGATION_DAYS} days). Choose a later expiry and sign again.`
     );
   }
   return (

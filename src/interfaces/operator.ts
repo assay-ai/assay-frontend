@@ -217,15 +217,6 @@ export type ChainProposalStatus =
   | "NONE" | "PROPOSING" | "PENDING" | "CANCEL_REQUESTED" | "DISPUTED"
   | "EXECUTED" | "CANCELLED" | "REFUSED";
 
-/** assay-backend `src/modules/slash/domain/arbitration.ts` `ArbitrationOutcome`. */
-export type ArbitrationOutcome =
-  | "UPHELD"
-  | "UPHELD_RECALCULATED"
-  | "OVERTURNED_PLATFORM_DEFECT"
-  | "OVERTURNED_POLICY_DEFECT"
-  | "OVERTURNED_GRIEFING"
-  | "OVERTURNED_INSUFFICIENT_EVIDENCE";
-
 /**
  * Where a penalty stands, as `GET /operator/cases` groups it: the case status
  * and the mirrored on-chain status read in the case screen's precedence. A

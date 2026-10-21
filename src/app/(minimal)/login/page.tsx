@@ -9,6 +9,8 @@ import { useEffect, useState } from "react";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Button } from "@/components/ui/button";
 import { GLOSSARY } from "@/libs/glossary";
+import { useWalletLink } from "@/features/auth/wallet-link";
+import { isStrictPagePath, loadPage } from "@/features/oauth/strict-pages";
 import { safeNextPath } from "@/libs/login-redirect";
 import { cn } from "@/utils";
 
@@ -232,11 +234,26 @@ export default function LoginPage() {
   // Read from the address bar at that moment as well as from the hook, so a
   // first render before the query string is known never sends a signed-in
   // person to `/` instead (V1-13).
+  const walletLink = useWalletLink();
+  const walletSettled = walletLink === "linked" || walletLink === "unavailable";
   useEffect(() => {
     if (!ready || !authenticated) return;
     const fromAddress = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("next");
-    router.replace(fromAddress !== null ? safeNextPath(fromAddress) : next);
-  }, [ready, authenticated, router, next]);
+    // Always validated first; only then can it pick the kind of navigation.
+    const target = fromAddress !== null ? safeNextPath(fromAddress) : next;
+    if (!isStrictPagePath(target)) {
+      router.replace(target);
+      return;
+    }
+    // Back to a strict page (the consent page): a full load, so it gets its
+    // own headers. A full load also drops this page's Privy client, and with
+    // it the embedded wallets a brand-new account is still being given
+    // (`createOnLogin` runs inside the login event only): the account would
+    // be left with no wallet and every API call refused with
+    // AUTH_WALLET_NOT_LINKED. So leave once the API has linked the wallet, or
+    // has given up and the consent page can say so.
+    if (walletSettled) loadPage(target);
+  }, [ready, authenticated, router, next, walletSettled]);
 
   // Don't flash a sign-in form at someone who is already signed in.
   const signedIn = ready && authenticated;
@@ -325,7 +342,9 @@ export default function LoginPage() {
                 {!ready
                   ? "Loading sign-in…"
                   : signedIn
-                    ? "Signing you in"
+                    ? walletLink === "provisioning"
+                      ? "Setting up your wallet…"
+                      : "Signing you in"
                     : "Continue with email or wallet"}
               </Button>
             )}

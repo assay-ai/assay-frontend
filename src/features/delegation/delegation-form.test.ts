@@ -16,11 +16,13 @@ import {
   errorsAfterEdit,
   escrowCanDelegate,
   findDelegation,
+  MAX_DELEGATION_DAYS,
   MIN_VALID_UNTIL_LEAD_SECONDS,
   parseDelegationForm,
   serverNowSeconds,
   supportsDelegation,
 } from "./delegation-form";
+import { ENABLE_PAID_MAX_DAYS } from "./enable-paid";
 
 const ASSET = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
 const usdg = (amount: string): Money => ({ amount, asset: ASSET, decimals: 6 });
@@ -109,6 +111,19 @@ describe("parseDelegationForm", () => {
     const parsed = parseDelegationForm(input(patch), ESCROW, DELEGATE, NOW);
     expect(parsed.ok).toBe(false);
     expect(parsed.ok ? {} : parsed.errors).toHaveProperty(field);
+  });
+
+  it("allows up to a year, the chain's limit, the same as enable-paid (30 days by default, O2)", () => {
+    expect(MAX_DELEGATION_DAYS).toBe(365);
+    expect(MAX_DELEGATION_DAYS).toBe(ENABLE_PAID_MAX_DAYS);
+    expect(parseDelegationForm(input({ validDays: "31" }), ESCROW, DELEGATE, NOW).ok).toBe(true);
+    const year = parseDelegationForm(input({ validDays: "365" }), ESCROW, DELEGATE, NOW);
+    expect(year.ok).toBe(true);
+    // A full year stays under the chain's 365-day limit even with 2 minutes of clock skew.
+    const until = Number(year.ok ? year.body.validUntil : 0);
+    expect(until - Math.floor(NOW)).toBeLessThanOrEqual(365 * 86_400 - 120);
+    const parsed = parseDelegationForm(input({ validDays: "366" }), ESCROW, DELEGATE, NOW);
+    expect(parsed.ok ? {} : parsed.errors).toEqual({ validDays: "Between 1 and 365 days." });
   });
 });
 

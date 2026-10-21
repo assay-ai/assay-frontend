@@ -1436,7 +1436,7 @@ function demoAgents(): { agentId: string; label: string; agentAccount: string; c
 }
 const STAGING_ADDRESS = "0x2F5d8B17aC93e04f6b1D7c8A05E2f9B34cD61a70";
 /**
- * The prod agent's own payment key (bound with `agent-cli bind`), authorised to
+ * The prod agent's own payment key (made by `npx -y @goassay-ai/mcp@<V> enable-paid`), authorised to
  * pay below. A function, not a constant: `fixtures.ts` imports this file, so
  * `DEMO_CHAIN_ID` is not initialised yet while this module evaluates.
  */
@@ -1535,7 +1535,9 @@ function freshCredentials(agentId: string) {
         id: "cred_fresh",
         agentId,
         name: "Key 1",
-        prefix: "assay_live_f00d",
+        issuedVia: "API_KEY",
+        oauthClient: null,
+        prefix: "assay_sk_live_f00d",
         scopes: ["tools:call"],
         lastUsedAt: stage === "call" ? null : minutesAgo(3),
         expiresAt: null,
@@ -1925,7 +1927,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
             id: staging ? "cred_9c41" : "cred_2f70",
             agentId,
             name: staging ? "staging runner" : "orchestrator",
-            prefix: staging ? "assay_live_8fd2" : "assay_live_31ac",
+            issuedVia: "API_KEY",
+            oauthClient: null,
+            prefix: staging ? "assay_sk_live_8fd2" : "assay_sk_live_31ac",
             scopes: ["tools:call"],
             lastUsedAt: minutesAgo(staging ? 820 : 2),
             expiresAt: null,
@@ -1942,7 +1946,9 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
                   id: "cred_0b19",
                   agentId,
                   name: "CI deploy",
-                  prefix: "assay_live_a47e",
+                  issuedVia: "API_KEY",
+                  oauthClient: null,
+                  prefix: "assay_sk_live_a47e",
                   scopes: ["tools:call"],
                   lastUsedAt: minutesAgo(24000),
                   expiresAt: null,
@@ -1998,8 +2004,8 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
         id: "cred_demo_new",
         agentId: segment(path, 1),
         name: typeof name === "string" && name.trim() ? name.trim() : "Key 1",
-        prefix: "assay_live_d3m0",
-        token: "assay_live_d3m0_demo-key-shown-once-not-a-real-secret",
+        prefix: "assay_sk_live_d3m0",
+        token: "assay_sk_live_d3m0_demo-key-shown-once-not-a-real-secret",
         scopes: ["tools:call"],
         createdAt: new Date().toISOString(),
       };
@@ -2025,7 +2031,7 @@ export const BUYER_FIXTURES: readonly DemoFixture[] = [
           resourceType: "session",
           resourceId: "ses_41d8",
           before: null,
-          after: { credential: "assay_live_31ac" },
+          after: { credential: "assay_sk_live_31ac" },
           createdAt: minutesAgo(1440),
         },
         {

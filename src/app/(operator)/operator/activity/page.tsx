@@ -29,9 +29,9 @@ import { useOperatorDirectory, usePenaltyNames, useProviderNames } from "@/featu
 import type { OverrideLogEntry } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { formatClock, utcDay, utcTitle } from "@/libs/utc-time";
-import { listOperatorTools } from "@/services/operator-contracts.service";
-import { listAccountBlocks, listOverrideLog } from "@/services/operator.service";
+import { listOverrideLog } from "@/services/operator.service";
 import { cn } from "@/utils";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Activity, route `/operator/activity`: every manual intervention, newest
@@ -55,7 +55,6 @@ const ICONS: Readonly<Record<ActivityIcon, LucideIcon>> = {
   team: UserCog,
   other: CircleDot,
 };
-
 
 const LIST_LIMIT = 25;
 const CHIP =
@@ -81,12 +80,11 @@ function ActivityScreen() {
   const directory = useOperatorDirectory();
   const providers = useProviderNames();
   const blocks = useQuery({
-    queryKey: ["operator", "blocks", "lookup"],
-    queryFn: () => listAccountBlocks({ limit: 100 }),
+    ...operatorQueries.blocksLookup(),
     retry: 0,
   });
   // Tool names for takedowns, reviews and versions: the same list the Tools page reads.
-  const tools = useQuery({ queryKey: ["operator", "tools", "list"], queryFn: listOperatorTools, retry: 0, staleTime: 60_000 });
+  const tools = useQuery(operatorQueries.tools());
 
   const setParams = (next: { kind?: ActivityKind; q?: string; targetId?: string | null; mine?: boolean }) => {
     const params = new URLSearchParams(searchParams.toString());

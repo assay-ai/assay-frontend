@@ -1,25 +1,18 @@
 "use client";
 
 import { chargedCallsFromTotals, chargedFromTotals, owedFromTotals } from "@/features/g30/spend-buckets";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo } from "react";
 
 import type { CursorPage, Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { utcDayBounds } from "@/libs/utc-time";
-import {
-  getBalances,
-  getHolds,
-  getReceiptsSummary,
-  getWithheld,
-  listNotifications,
-  listToolCalls,
-  type AccountBalance,
-  type ToolCall,
-} from "@/services";
+import { listNotifications, type AccountBalance, type ToolCall } from "@/services";
+import { getOverview, type OverviewResponse } from "@/services/dashboard.service";
+import { pickDisplayAsset, resolveDisplayAsset, storedDisplayAsset } from "@/services/display-asset";
 import { toDecimal } from "@/utils/money";
 
 import { attentionRows } from "./alert-model";
-import { monthPeriod, recentDays, type Period } from "./period";
+import { monthPeriod, type Period } from "./period";
 import { readWithheld, type HoldRow, type SummaryWire, type WithheldForAsset } from "./wire";
 
 /** Needs attention shows this many; the rest are behind "See all alerts". */
@@ -71,6 +64,8 @@ export interface OverviewData {
   /** Tool ids seen in the 7-day window, most-spent first. */
   chartTools: string[];
   recentCalls: ToolCall[];
+  /** How many unread pages this load read: the next refresh reads no more than that. */
+  attentionPages: number;
   /** Unread alerts, newest first: as many pages as Needs attention needed (see `readAttention`). */
   notifications: NotificationRow[];
   /** The unread list was read to its end. When false, more unread alerts may exist. */
@@ -84,6 +79,12 @@ export interface OverviewState {
   reload: () => void;
 }
 
+/** Every Overview query; a write that changes what the screen shows invalidates this. */
+export const OVERVIEW_KEY = ["overview"] as const;
+
+/** How often the figures refresh: the header promises "Updates every 30 seconds". */
+export const OVERVIEW_REFRESH_MS = 30_000;
+
 /**
  * Bar heights are the one place a money amount becomes a float. Nothing
  * rendered as text comes from this: every figure on the screen still goes
@@ -94,57 +95,48 @@ function toChartNumber(money: Money | undefined | null): number {
   return money ? toDecimal(money).toNumber() : 0;
 }
 
-async function loadChart(days: Period[]): Promise<{ chart: ChartDay[]; tools: string[] }> {
-  // `GET /receipts/summary` groups by exactly ONE dimension, so a day-by-tool
-  // stack costs one request per day. Seven parallel requests is the price of
-  // the chart the design draws; there is no two-dimensional grouping to ask
-  // for instead.
-  const summaries = await Promise.all(
-    days.map(
-      (d) =>
-        getReceiptsSummary({ from: d.from, to: d.to, groupBy: "tool" }) as Promise<SummaryWire>,
-    ),
-  );
-
+/** The 7-day day-by-tool stack, from `GET /overview`'s `chart` (one summary per UTC day). */
+function chartFrom(chart: OverviewResponse["chart"]): { chart: ChartDay[]; tools: string[] } {
   const totals = new Map<string, number>();
-  const chart = summaries.map((summary, i) => {
+  const days = (chart.days ?? []).map((day) => {
     const byTool: Record<string, number> = {};
-    for (const group of summary.groups ?? []) {
+    for (const group of (day.summary as SummaryWire).groups ?? []) {
       const value = toChartNumber(group.chargedTotal);
       byTool[group.key] = value;
       totals.set(group.key, (totals.get(group.key) ?? 0) + value);
     }
-    return { key: days[i].key, byTool };
+    return { key: day.key, byTool };
   });
 
   const tools = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
-  return { chart, tools };
+  return { chart: days, tools };
 }
 
 /** Unread alerts per page, and the most pages one load reads. */
 const ATTENTION_PAGE = 50;
 const ATTENTION_PAGES = 5;
+/** Recent calls shows this many. */
+const RECENT_CALLS = 6;
 
 /**
  * Reads unread alerts page by page until Needs attention has its rows or the
- * list ends. Cleared alerts stay unread (hiding is display only), so they can
- * pile up above an open one; reading only the newest page would then say
- * "Nothing needs your attention" while something does. The balances come
- * from their own request, so "cleared" is judged here with balances unknown —
- * never hiding more than the page will.
+ * list ends, starting from the first page `GET /overview` already answered.
+ * Cleared alerts stay unread (hiding is display only), so they can pile up
+ * above an open one; reading only the newest page would then say "Nothing
+ * needs your attention" while something does. "Cleared" is judged here with
+ * balances unknown — never hiding more than the page will.
  */
 async function readAttention(
   anchor: Date,
   maxPages: number,
+  first: CursorPage<NotificationRow>,
 ): Promise<{ items: NotificationRow[]; complete: boolean; pages: number }> {
   const items: NotificationRow[] = [];
-  let cursor: string | undefined;
-  let pages = 0;
-  while (pages < maxPages) {
-    const result = (await listNotifications({ limit: ATTENTION_PAGE, unreadOnly: true, cursor })) as CursorPage<NotificationRow>;
-    pages += 1;
-    items.push(...(result.items ?? []));
-    cursor = result.pageInfo?.hasMore ? (result.pageInfo.nextCursor ?? undefined) : undefined;
+  let page = first;
+  let pages = 1;
+  for (;;) {
+    items.push(...(page.items ?? []));
+    const cursor = page.pageInfo?.hasMore ? (page.pageInfo.nextCursor ?? undefined) : undefined;
     if (!cursor) return { items, complete: true, pages };
     const open = attentionRows(items, {
       now: anchor.getTime(),
@@ -153,94 +145,132 @@ async function readAttention(
       complete: false,
       shown: ATTENTION_SHOWN,
     });
-    if (open.shown.length >= ATTENTION_SHOWN) break;
+    if (open.shown.length >= ATTENTION_SHOWN || pages >= maxPages) break;
+    page = (await listNotifications({ limit: ATTENTION_PAGE, unreadOnly: true, cursor })) as CursorPage<NotificationRow>;
+    pages += 1;
   }
   return { items, complete: false, pages };
 }
 
-/** `assetKey`: the display-asset pick; a change refetches without a reload. */
+/** The assets these balances are in, in their order, without duplicates. */
+function assetsOf(balances: readonly AccountBalance[]): string[] {
+  return [...new Set(balances.map((row) => row.asset))];
+}
+
+/**
+ * The newest Overview answer in the cache, if any. Read from the cache, not
+ * kept beside it, so the identity reset (`resetQueries`) forgets it with the
+ * rest, and a load that was cancelled or overtaken never writes it.
+ */
+function latestOverview(queryClient: QueryClient): OverviewData | undefined {
+  const latest = queryClient
+    .getQueryCache()
+    .findAll({ queryKey: OVERVIEW_KEY })
+    .filter((query) => query.state.data !== undefined)
+    .sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt)[0];
+  return latest?.state.data as OverviewData | undefined;
+}
+
+/**
+ * One `GET /overview`, then the further unread pages Needs attention needs.
+ *
+ * `?asset=` is the pick `getReceiptsSummary` makes (`resolveDisplayAsset`),
+ * sent only for a buyer who holds more than one asset. After the first load
+ * the balances come with the overview itself (`known`), so a refresh does not
+ * read `GET /balances` again just to decide it.
+ */
+async function loadOverview(
+  anchor: Date,
+  maxAttentionPages: number,
+  known: readonly AccountBalance[] | undefined,
+): Promise<{ wire: OverviewResponse; notes: { items: NotificationRow[]; complete: boolean; pages: number } }> {
+  const ask = (asset: string | undefined) =>
+    getOverview({
+      at: anchor.toISOString(),
+      ...(asset ? { asset } : {}),
+      callsLimit: RECENT_CALLS,
+      alertsLimit: ATTENTION_PAGE,
+    });
+  let wire: OverviewResponse;
+  if (known) {
+    try {
+      wire = await ask(pickDisplayAsset(assetsOf(known), storedDisplayAsset()));
+    } catch (error) {
+      // A second asset arrived since the last refresh: decide again from a fresh read.
+      if (!(error instanceof ApiError) || error.code !== "VERIFICATION_SUMMARY_MULTIPLE_ASSETS") throw error;
+      wire = await ask(await resolveDisplayAsset());
+    }
+  } else {
+    wire = await ask(await resolveDisplayAsset());
+  }
+  const notes = await readAttention(anchor, maxAttentionPages, wire.notifications as CursorPage<NotificationRow>);
+  return { wire, notes };
+}
+
+function toOverviewData(month: Period, wire: OverviewResponse, notes: Awaited<ReturnType<typeof loadOverview>>["notes"]): OverviewData {
+  const monthSummary = wire.monthSummary as SummaryWire;
+  const todayGroup = (wire.todaySummary as SummaryWire).totals;
+  const chart = chartFrom(wire.chart);
+  return {
+    month,
+    balances: wire.balances.balances ?? [],
+    holds: (wire.holds as CursorPage<HoldRow>).items ?? [],
+    withheld: readWithheld(wire.withheld, monthSummary.asset),
+    monthListed: monthSummary.totals?.listedTotal ?? null,
+    attentionPages: Math.max(1, notes.pages),
+    // "Spent" is charged only (one meaning on every screen); owed sits beside it.
+    todayCharged: chargedFromTotals(todayGroup),
+    todayOwed: owedFromTotals(todayGroup),
+    // The count matches the amount: charged calls only; an owed call is named apart.
+    todayCalls: chargedCallsFromTotals(todayGroup),
+    todayOwedCalls: todayGroup?.owedCalls ?? 0,
+    yesterdayCharged: chargedFromTotals((wire.yesterdaySummary as SummaryWire).totals),
+    chart: chart.chart,
+    chartTools: chart.tools,
+    recentCalls: wire.recentCalls.items ?? [],
+    notifications: notes.items,
+    notificationsComplete: notes.complete,
+  };
+}
+
+/**
+ * The Overview's figures: ONE `GET /overview` every 30 seconds (it used to be
+ * 14–18 requests), plus a further unread page only when Needs attention is
+ * not full yet. Any part failing fails the whole load, as the batch did.
+ *
+ * `assetKey`: the display-asset pick; a change refetches without a reload.
+ */
 export function useOverview(anchor: Date, assetKey: string | null = null): OverviewState {
-  const [data, setData] = useState<OverviewData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<ApiError | null>(null);
-  const [nonce, setNonce] = useState(0);
-  // The first load reads up to ATTENTION_PAGES pages; each 30-second refresh
-  // reads only as many as that load needed, so a refresh is not five reads.
-  const attentionPages = useRef<number | null>(null);
-
+  const queryClient = useQueryClient();
   const month = useMemo(() => monthPeriod(anchor), [anchor]);
-  const days = useMemo(() => recentDays(anchor, 7), [anchor]);
-  // The UTC day, the boundary the Recent calls rows' "Today" / "Yesterday"
-  // labels use and the backend groups by, so "Spent today" counts exactly the
-  // rows labelled today (review 2026-10-17 P3).
-  const today = useMemo(() => utcDayBounds(anchor), [anchor]);
-  const yesterday = useMemo(() => utcDayBounds(anchor, { offsetDays: -1 }), [anchor]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
+  const query = useQuery<OverviewData, unknown>({
+    queryKey: [...OVERVIEW_KEY, anchor.toISOString(), assetKey],
+    queryFn: async () => {
+      const previous = latestOverview(queryClient);
+      // The first load reads up to ATTENTION_PAGES pages; each refresh reads
+      // only as many as the last load needed, so a refresh is not five reads.
+      const { wire, notes } = await loadOverview(anchor, previous?.attentionPages ?? ATTENTION_PAGES, previous?.balances);
+      return toOverviewData(month, wire, notes);
+    },
+    refetchInterval: OVERVIEW_REFRESH_MS,
+    // Back on the tab after a while (the interval pauses while it is hidden): fresh figures at once.
+    staleTime: OVERVIEW_REFRESH_MS,
+    refetchOnWindowFocus: true,
+    // A new asset pick keeps the figures on screen until the new ones land.
+    placeholderData: keepPreviousData,
+    retry: 0,
+  });
 
-    Promise.all([
-      getBalances(),
-      getHolds() as Promise<CursorPage<HoldRow>>,
-      getWithheld({ from: month.from, to: month.to }),
-      getReceiptsSummary({
-        from: month.from,
-        to: month.to,
-        groupBy: "day",
-      }) as Promise<SummaryWire>,
-      // Two windows of their own, not rows of the month's (UTC) day groups.
-      getReceiptsSummary({ from: today.from, to: today.to, groupBy: "tool" }) as Promise<SummaryWire>,
-      getReceiptsSummary({ from: yesterday.from, to: yesterday.to, groupBy: "tool" }) as Promise<SummaryWire>,
-      loadChart(days),
-      listToolCalls({ limit: 6, sort: "createdAt", order: "desc" }),
-      // Needs attention: unread only, so a dismissed (read) alert stays gone.
-      readAttention(anchor, attentionPages.current ?? ATTENTION_PAGES),
-    ])
-      .then(([balances, holds, withheldRaw, monthSummary, todaySummary, yesterdaySummary, chart, calls, notes]) => {
-        if (cancelled) return;
+  const { refetch } = query;
+  const reload = useCallback(() => void refetch(), [refetch]);
+  // As before: a refresh clears the last error while it runs, and the figures stay.
+  const error =
+    query.isFetching || query.error == null
+      ? null
+      : query.error instanceof ApiError
+        ? query.error
+        : new ApiError("UNKNOWN", "The overview could not be loaded", 0);
 
-        const todayGroup = todaySummary.totals;
-        attentionPages.current = Math.max(1, notes.pages);
-
-        setData({
-          month,
-          balances: balances.balances ?? [],
-          holds: holds.items ?? [],
-          withheld: readWithheld(withheldRaw, monthSummary.asset),
-          monthListed: monthSummary.totals?.listedTotal ?? null,
-          // "Spent" is charged only (one meaning on every screen); owed sits beside it.
-          todayCharged: chargedFromTotals(todayGroup),
-          todayOwed: owedFromTotals(todayGroup),
-          // The count matches the amount: charged calls only; an owed call is named apart.
-          todayCalls: chargedCallsFromTotals(todayGroup),
-          todayOwedCalls: todayGroup?.owedCalls ?? 0,
-          yesterdayCharged: chargedFromTotals(yesterdaySummary.totals),
-          chart: chart.chart,
-          chartTools: chart.tools,
-          recentCalls: calls.items ?? [],
-          notifications: notes.items,
-          notificationsComplete: notes.complete,
-        });
-        setLoading(false);
-      })
-      .catch((cause: unknown) => {
-        if (cancelled) return;
-        setError(
-          cause instanceof ApiError
-            ? cause
-            : new ApiError("UNKNOWN", "The overview could not be loaded", 0),
-        );
-        setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [anchor, month, days, today, yesterday, nonce, assetKey]);
-
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
-
-  return { data, loading, error, reload };
+  return { data: query.data ?? null, loading: query.isFetching, error, reload };
 }

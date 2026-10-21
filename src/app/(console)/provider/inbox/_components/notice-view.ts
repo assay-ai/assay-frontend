@@ -93,17 +93,8 @@ const on = (tool: string | null) => (tool ? ` on ${tool}` : "");
 
 /** Why a proposed penalty was cancelled, in plain words, from what the payload records. */
 function cancelReason(payload: Payload): { key: string; sentence: string } {
-  if (text(payload, "sweepId")) {
-    return {
-      key: "sweep",
-      sentence: "We found a defect on our side that affected several tools, including yours, and cancelled every penalty it caused.",
-    };
-  }
   const kind = text(payload, "resolutionKind");
   if (kind === "CHAIN_ARBITER") return { key: "arbiter", sentence: "The arbiter ruled for you on chain." };
-  if (kind === "AUTO_PLATFORM_MISS") {
-    return { key: "platform-miss", sentence: "Assay did not decide your case in time, so it counts for you, not against you." };
-  }
   if (payload.overturned === true) return { key: "overturned", sentence: "Your dispute was accepted." };
   return {
     key: "chain",

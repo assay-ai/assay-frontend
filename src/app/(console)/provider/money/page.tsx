@@ -42,6 +42,7 @@ import { chainIdOfAsset } from "@/utils/chain";
 import { cn } from "@/utils";
 import { formatMoney, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
+import { earningsKey, monthWindow } from "@/features/provider-home/report-windows";
 
 /**
  * Money — "how much did I earn, and is it in my wallet?"
@@ -58,13 +59,6 @@ import { toast } from "@/utils/toast";
  *    difference" drawer (what each outcome means, how to join on the call id).
  */
 
-function monthWindow(now: Date) {
-  return {
-    from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
-    to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
-  };
-}
-
 function amountOf(money: Money | null | undefined): number {
   return money ? toDecimal(money).toNumber() : 0;
 }
@@ -77,14 +71,21 @@ export default function ProviderMoneyPage() {
   const [explainOpen, setExplainOpen] = React.useState(false);
 
   const earnings = useQuery({
-    queryKey: ["provider", "earnings", "tool", month.from, month.to],
+    queryKey: earningsKey(month),
     queryFn: () => getProviderEarnings({ ...month, groupBy: "tool" }),
   });
   const payouts = useQuery({
     queryKey: ["provider", "payouts", "all"],
     queryFn: () => listProviderPayouts({ limit: 100 }),
   });
-  const calls = useCallsExport(month);
+  /*
+    The per-call CSV (`GET /providers/me/calls/export`, up to 50 000 rows, a
+    few a minute per organisation) is read only when something on screen
+    needs a row per call: the download, a "Show the calls" list, or the
+    explanation drawer when the ledger cannot be read. Never on page load.
+  */
+  const [callsWanted, setCallsWanted] = React.useState(false);
+  const [downloadAsked, setDownloadAsked] = React.useState(false);
   const names = useProviderToolNames();
   const stake = useStakeStatus();
   const penalties = usePenalties({ withCases: "none" });
@@ -99,7 +100,6 @@ export default function ProviderMoneyPage() {
   const { chains } = useChains();
   const { current: displayAsset, isPending: assetPending } = useDisplayAsset("provider");
 
-  const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
   /*
     Not credited, by reason, from the earnings report: every call of the month
     (the per-call file is capped), and a summary that is the sum of its
@@ -136,6 +136,8 @@ export default function ProviderMoneyPage() {
     queryFn: () => getProviderReconciliation(displayAsset ? { ...month, asset: displayAsset } : month),
     enabled: explainOpen && !assetPending,
   });
+  const calls = useCallsExport(month, { enabled: callsWanted || (explainOpen && ledger.isError) });
+  const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
   const classes = React.useMemo(() => foldClasses(rows), [rows]);
   const observedTake = React.useMemo(() => observedTakeRate(rows), [rows]);
   const recon = React.useMemo(
@@ -145,6 +147,22 @@ export default function ProviderMoneyPage() {
   /* The fee rate a passed-but-unpaid call's share is worked out at: the terms when read, else the one rate the paid calls realised. */
   const feeRatePercent =
     recon?.configuredRatePercent ?? (observedTake.rates.length === 1 ? Number(observedTake.rates[0]) : null);
+
+  // The download, once the file asked for has arrived (or at once, when the screen already holds it).
+  const downloadReady = downloadAsked && calls.data !== undefined && !calls.isFetching;
+  React.useEffect(() => {
+    if (!downloadReady || !calls.data) return;
+    setDownloadAsked(false);
+    downloadCallsCsv(calls.data.csv, calls.data.filename, calls.meta);
+    if (calls.meta && !calls.meta.truncated) {
+      toast.success(`${monthName} CSV downloaded`, {
+        description: `${callCount(calls.meta.rowCount)}, one row each. Check your downloads folder.`,
+      });
+    }
+  }, [downloadReady, calls.data, calls.meta, monthName]);
+  React.useEffect(() => {
+    if (downloadAsked && calls.isError && !calls.isFetching) setDownloadAsked(false);
+  }, [downloadAsked, calls.isError, calls.isFetching]);
 
   const payoutItems = (assetPending ? [] : payoutsInAsset(payouts.data?.items ?? [], displayAsset)).slice(0, 8);
 
@@ -158,16 +176,10 @@ export default function ProviderMoneyPage() {
         <Button
           variant="secondary"
           icon={<Download />}
-          loading={calls.isFetching && !calls.data}
-          disabled={!calls.data}
+          loading={downloadAsked && calls.isFetching}
           onClick={() => {
-            if (!calls.data) return;
-            downloadCallsCsv(calls.data.csv, calls.data.filename, calls.meta);
-            if (calls.meta && !calls.meta.truncated) {
-              toast.success(`${monthName} CSV downloaded`, {
-                description: `${callCount(calls.meta.rowCount)}, one row each. Check your downloads folder.`,
-              });
-            }
+            setCallsWanted(true);
+            setDownloadAsked(true);
           }}
         >
           Download {monthName} CSV
@@ -245,6 +257,8 @@ export default function ProviderMoneyPage() {
               <UnpaidBlock
                 lines={unpaid}
                 rows={calls.data ? rows : null}
+                rowsFailed={calls.isError}
+                onWantRows={() => setCallsWanted(true)}
                 feeRatePercent={feeRatePercent}
                 toolName={(id) => names.toolName(id) ?? "A tool no longer listed"}
               />
@@ -399,7 +413,7 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
       <span className="flex min-w-0 flex-1 flex-col">
         {/* Rail B: the buyer's escrow paid this transaction on chain, for these calls. */}
         <span className="text-body-13 text-01">
-          Paid for {payout.calls != null ? callCount(payout.calls) : "calls"} from the buyer&apos;s escrow
+          Paid for {payout.calls != null ? callCount(payout.calls) : "calls"}{" "}from the buyer&apos;s escrow
         </span>
         <span className="text-body-xs text-03">
           Sent to your wallet · <UtcTime value={payout.createdAt} />
@@ -437,12 +451,18 @@ const unpaidCallMoney = (value: Money | null | undefined) => formatMoney(value, 
 function UnpaidBlock({
   lines,
   rows,
+  rowsFailed,
+  onWantRows,
   feeRatePercent,
   toolName,
 }: {
   lines: readonly UnpaidLine[];
-  /** The month's per-call rows in the shown asset, or null when the file is not available. */
+  /** The month's per-call rows in the shown asset, or null while the file is not read (yet). */
   rows: readonly CallRow[] | null;
+  /** The per-call file could not be read. */
+  rowsFailed: boolean;
+  /** Read the per-call file: a "Show the calls" list was opened. */
+  onWantRows: () => void;
   /** Assay's fee in percent, when one rate is known: a call's share is worked out at it. */
   feeRatePercent: number | null;
   toolName: (toolId: string) => string;
@@ -466,7 +486,15 @@ function UnpaidBlock({
       </div>
       <ul className="flex flex-col divide-y divide-01">
         {lines.map((line) => (
-          <UnpaidRow key={line.key} line={line} rows={rows} feeRatePercent={feeRatePercent} toolName={toolName} />
+          <UnpaidRow
+            key={line.key}
+            line={line}
+            rows={rows}
+            rowsFailed={rowsFailed}
+            onWantRows={onWantRows}
+            feeRatePercent={feeRatePercent}
+            toolName={toolName}
+          />
         ))}
       </ul>
     </section>
@@ -476,11 +504,15 @@ function UnpaidBlock({
 function UnpaidRow({
   line,
   rows,
+  rowsFailed,
+  onWantRows,
   feeRatePercent,
   toolName,
 }: {
   line: UnpaidLine;
   rows: readonly CallRow[] | null;
+  rowsFailed: boolean;
+  onWantRows: () => void;
   feeRatePercent: number | null;
   toolName: (toolId: string) => string;
 }) {
@@ -510,12 +542,26 @@ function UnpaidRow({
           ) : null}
         </span>
       </p>
-      {drill && drill.total > 0 ? (
-        <details className="group">
+      {/* The calls themselves come from the per-call file, read only when this list is opened. */}
+      {(drill ? drill.total : line.calls) > 0 ? (
+        <details
+          className="group"
+          onToggle={(event) => {
+            if (event.currentTarget.open) onWantRows();
+          }}
+        >
           <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-label-xs text-primary-600 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 [&::-webkit-details-marker]:hidden">
             <ChevronRight aria-hidden="true" className="size-3.5 transition-transform group-open:rotate-90" />
-            {drill.total === 1 ? "Show the call" : `Show the ${drill.total.toLocaleString("en-US")} calls`}
+            {(drill ? drill.total : line.calls) === 1
+              ? "Show the call"
+              : `Show the ${(drill ? drill.total : line.calls).toLocaleString("en-US")} calls`}
           </summary>
+          {!drill ? (
+            <p className="mt-2 text-body-xs text-03">
+              {rowsFailed ? "The calls could not be read right now. Try again in a moment." : "Reading the calls…"}
+            </p>
+          ) : null}
+          {drill ? (
           <ul className="mt-2 flex flex-col divide-y divide-01 rounded-md border border-01 bg-02">
             {drill.items.map((call) => {
               const worth = unpaidCallAmount(call, feeRatePercent);
@@ -537,7 +583,8 @@ function UnpaidRow({
               );
             })}
           </ul>
-          {drill.more > 0 ? (
+          ) : null}
+          {drill && drill.more > 0 ? (
             <p className="mt-1.5 text-body-xs text-03">
               And {callCount(drill.more)} more in this month&apos;s CSV (the <code className="font-mono">classification</code> column
               reads <code className="font-mono">{line.className}</code>).

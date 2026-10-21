@@ -13,7 +13,7 @@ the codebase is organised, for anyone reading it or reporting a problem.
 
 ## Setup
 
-Requirements: Node.js 20+, pnpm 10 (pinned in `package.json`; use
+Requirements: Node.js 22+, pnpm 10 (pinned in `package.json`; use
 `corepack enable`, or prefix commands with `npx -y pnpm@10`).
 
 ```bash

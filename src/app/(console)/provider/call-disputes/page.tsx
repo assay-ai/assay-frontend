@@ -18,6 +18,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 import { listProviderCallDisputes, type CallDisputeState } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
+import { OPEN_REPORTS_PAGE, providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Bad-result reports — route `/provider/call-disputes`: buyers' reports about
@@ -39,7 +40,11 @@ export default function ProviderReportsPage() {
   const list = useInfiniteQuery({
     queryKey: [...callDisputeKeys.provider, "list", filter],
     initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => listProviderCallDisputes({ state, cursor: pageParam }),
+    // The Open list's first page is the console's own read of the open reports (the badge's), not a second one.
+    queryFn: ({ pageParam, client }) =>
+      filter === "open" && pageParam === undefined
+        ? client.fetchQuery(providerQueries.openReports())
+        : listProviderCallDisputes({ state, cursor: pageParam, limit: OPEN_REPORTS_PAGE }),
     getNextPageParam: (last) => (last.pageInfo.hasMore ? (last.pageInfo.nextCursor ?? undefined) : undefined),
     retry: 0,
   });

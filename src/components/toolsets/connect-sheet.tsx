@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { isMcpClient, keyMode, mcpConfig, type McpClient } from "@/features/buyer-money/mcp-config";
+import { apiKeyConfig, installCommand, tryBuild, installText, isLocalClient, isMcpClient, keyForHint, keyMode, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { newKeyPaysNote, payingKeyName } from "@/components/buyer-money/create-key";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
@@ -24,11 +24,14 @@ import {
   isToolsetChoice,
   mcpToolName,
   parseMcpUrl,
-  suggestServerName,
+  defaultServerName,
+  serverNameRefusal,
+  longestToolLength,
   toolDisplay,
   uniqueServerName,
   type ConnectChoice,
   type DiscoveryChoice,
+  type ServerNameRefusal,
 } from "@/features/connect/mcp-url";
 import { allowToolsBody, restoreBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
@@ -72,8 +75,9 @@ import {
  * skeleton while it loads, never 0), the tools that can't run with their
  * reason, the warnings with their fixes, the client tabs (remembered per agent)
  * and More options: the version lock, "How the agent sees tools", "Always
- * loaded" and "Only free tools". Copy or Done records the URL
- * (`POST /agents/:id/connect-urls`) and the sheet waits for the first call.
+ * loaded" and "Only free tools". Copy records the URL actually copied
+ * (`POST /agents/:id/connect-urls`) and the sheet waits for the first call;
+ * Done only closes.
  *
  * The title names what is connected and to which agent ("Connect Research
  * to My agent"). Copy is off while the snippet holds a placeholder: "Create a
@@ -232,26 +236,41 @@ export function ConnectBody({
               : fixedUrl
                 ? { kind: "url", url: fixedUrl }
                 : null;
-  const url = choice ? buildMcpUrl(choice, { free, discovery }) : null;
+  // The client tab comes first: hosted connectors are free only, so the URL previewed, recorded and copied is one string.
+  const [client, setClient] = React.useState<McpClient>("claude-code");
+  const builtUrl = choice ? buildMcpUrl(choice, { free, discovery }) : null;
+  const url = builtUrl ? urlForClient(client, builtUrl) : null;
   const preview = useMcpPreview(url, effectiveAgentId);
   // Unique among the agent's other servers, so two servers never share a name in one client.
-  const serverName = uniqueServerName(
-    choice ? suggestServerName(choice) : "assay",
-    (servers.data?.servers ?? []).filter((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url).map((s) => s.serverName),
-  );
+  const longestTool = longestToolLength(preview.data?.listedTools);
+  // A link-only set's name follows its slug (spec 9.3); the URL carries only the token, so the slug comes from the page.
+  const nameChoice: ConnectChoice | null = choice?.kind === "link" && sharedInfo?.slug ? { kind: "toolset", slug: sharedInfo.slug } : choice;
+  const otherNames = (servers.data?.servers ?? []).filter((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url).map((s) => s.serverName);
+  const suggestedName = suggestUniqueName(nameChoice ? defaultServerName(nameChoice, longestTool) : "assay", otherNames, longestTool);
+  // The editable name (spec 9.3): checked live with the 3.2 rule; a refused name makes no command or deeplink.
+  const choiceKey = JSON.stringify(choice);
+  const [typedName, setTypedName] = React.useState<{ key: string; value: string } | null>(null);
+  const typed = typedName && typedName.key === choiceKey ? typedName.value : null;
+  const serverName = typed ?? suggestedName ?? "";
+  // Hosted connectors take no name, so a refused name never blocks them. The name is checked as typed: a space is refused, never dropped.
+  const nameUsed = client !== "claude-ai" && client !== "chatgpt";
+  const nameRefusal = !nameUsed ? null : typed === null && suggestedName === null ? NO_FREE_NAME : serverNameRefusal(serverName, longestTool);
+  const nameRefused = nameRefusal !== null;
+  const nameTaken = nameUsed && !nameRefused && otherNames.includes(serverName);
 
   // The key: the full one only when it was created here (memory only); otherwise its prefix.
   const agentKeys: KeyRow[] = effectiveAgentId ? (data.keys[effectiveAgentId] ?? []) : [];
   const liveKeys = agentKeys.filter((k) => !k.revokedAt);
   const [created, setCreated] = React.useState<{ token: string; prefix: string; name: string } | null>(null);
-  const keyPrefix = created?.prefix ?? liveKeys[0]?.prefix ?? null;
-  const keyName = created?.name ?? liveKeys[0]?.name ?? null;
+  // An app sign-in (OAuth grant) has no prefix to name in the config: skip it.
+  const hintKey = keyForHint(liveKeys);
+  const keyPrefix = created?.prefix ?? hintKey?.prefix ?? null;
+  const keyName = created?.name ?? hintKey?.name ?? null;
   const createKey = useCreateKey(effectiveAgentId, agentKeys.length, (key) => setCreated({ token: key.token, prefix: key.prefix, name: key.name }));
   // A key made for another agent is not this agent's.
   React.useEffect(() => setCreated(null), [effectiveAgentId]);
 
   // The client tab, remembered per agent (this browser first, else the server's last hand-out).
-  const [client, setClient] = React.useState<McpClient>("claude-code");
   React.useEffect(() => {
     if (!effectiveAgentId) return;
     const remembered = readClient(effectiveAgentId) ?? (servers.data?.servers.map((s) => s.client).find(isMcpClient) ?? null);
@@ -259,6 +278,8 @@ export function ConnectBody({
   }, [effectiveAgentId, servers.data]);
 
   const [recorded, setRecorded] = React.useState<string | null>(null);
+  // The URL last handed out, as copied: a hosted connector's "Show paid tools too" copies it without free=1.
+  const [handedOut, setHandedOut] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState(false);
   React.useEffect(() => {
     if (!copied) return;
@@ -266,9 +287,9 @@ export function ConnectBody({
     return () => window.clearTimeout(t);
   }, [copied]);
   const record = useMutation({
-    mutationFn: () => recordConnectUrl(effectiveAgentId!, { url: url!, serverName, client }),
-    onSuccess: (row) => {
-      setRecorded(row?.canonicalUrl ?? preview.data?.canonicalUrl ?? url);
+    mutationFn: (target: string) => recordConnectUrl(effectiveAgentId!, { url: target, serverName: serverName && serverNameRefusal(serverName, longestTool) === null ? serverName : undefined, client }),
+    onSuccess: (row, target) => {
+      setRecorded(row?.canonicalUrl ?? (target === url ? preview.data?.canonicalUrl : null) ?? target);
       void queryClient.invalidateQueries({ queryKey: toolsetKeys.servers(effectiveAgentId!) });
     },
   });
@@ -276,17 +297,36 @@ export function ConnectBody({
   const firstCallSeen = Boolean(recordedRow && (recordedRow.firstCallAt || recordedRow.lastCallAt));
   React.useEffect(() => setWaitPoll(recorded && !firstCallSeen ? POLL_MS : false), [recorded, firstCallSeen]);
   // A new answer is a new URL: it has not been handed out yet.
-  React.useEffect(() => setRecorded(null), [url]);
+  React.useEffect(() => {
+    setRecorded(null);
+    setHandedOut(null);
+  }, [url]);
 
+  // A hosted connector's URL carries free=1 whatever the switch says: the switch shows it on.
+  const urlIsFree = Boolean(url) && hasFreeParam(url!);
   const blocked = copyBlocked(preview.data);
-  const snippet = url ? mcpConfig(client, { url, token: created?.token ?? null, keyPrefix, serverName }) : "";
+  // The proxy install carries no key; only "My own code" does.
+  const needsKey = client === "other";
+  const snippet = !url
+    ? ""
+    : nameRefused
+      ? ""
+      : isLocalClient(client)
+      ? (tryBuild(() => installText(installCommand(client, { url, name: serverName }))) ?? "")
+      : needsKey
+        ? (tryBuild(() => apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })) ?? "")
+        : url;
 
-  const handOut = () => {
-    if (!url || !effectiveAgentId || record.isPending || recorded) return;
-    record.mutate();
+  const handOut = (copiedUrl?: string) => {
+    const target = copiedUrl ?? url;
+    if (!target || !effectiveAgentId || record.isPending || handedOut === target || nameRefused) return;
+    setHandedOut(target);
+    record.mutate(target, { onError: () => setHandedOut(null) });
   };
+  // A refused install (InstallInputError) leaves no snippet: nothing to copy or record.
+  const nothingToCopy = !url || blocked || nameRefused || (needsKey && !created) || snippet === "";
   const copy = async () => {
-    if (!url || blocked || !created) return;
+    if (nothingToCopy) return;
     try {
       await navigator.clipboard.writeText(snippet);
       setCopied(true);
@@ -349,6 +389,8 @@ export function ConnectBody({
           : `${t.pricingMode === "FREE" ? "Free" : `from ${formatMoney(t.fromPrice, { decimals: 4 })}`} · ${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}`;
       return { id: mcp, label: mcp, disabled: t.providerCount === 0, detail: title ? `${title} · ${price}` : price };
     });
+  // A remote-only install of a second URL signs in again (R-UI-11): the agent already has another server.
+  const secondUrl = (servers.data?.servers ?? []).some((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url);
   const others = servers.data && preview.data ? overBudgetWith(preview.data, servers.data.servers) : null;
   const searching = preview.data?.discovery === "SEARCH";
   const defaultMode = choice ? (defaultDiscovery(choice) ?? "auto") : "auto";
@@ -562,21 +604,45 @@ export function ConnectBody({
 
         {url && !blocked ? (
           <div className="flex min-w-0 flex-col gap-2">
-            <KeyLine prefix={keyPrefix} keyName={keyName} agentName={agent?.label ?? null} full={Boolean(created)} />
+            <KeyLine prefix={keyPrefix} keyName={keyName} agentName={agent?.label ?? null} full={Boolean(created)} client={client} />
             {created ? (
               <p className="text-body-xs text-03">
                 {newKeyPaysNote(effectiveAgentId ? payingKeyName(data.readiness[effectiveAgentId]) : null)}
               </p>
             ) : null}
+            {nameUsed ? (
+            <div className="flex flex-col gap-1" data-testid="connect-name">
+              <label className="flex flex-col gap-1">
+                <span className="text-label-13 text-01">Server name</span>
+                <input
+                  className="min-h-10 w-full rounded-md border border-02 bg-01 px-3 py-2 font-mono text-mono-sm text-01"
+                  value={serverName}
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  aria-invalid={nameRefused || undefined}
+                  aria-describedby="connect-name-hint"
+                  onChange={(e) => setTypedName({ key: choiceKey, value: e.target.value })}
+                />
+              </label>
+              <p id="connect-name-hint" role={nameRefused || nameTaken ? "alert" : undefined} className={cn("text-body-xs", nameRefused ? "text-danger-700" : nameTaken ? "text-warning-700" : "text-03")} data-testid="connect-name-hint">
+                {nameRefusal ? nameRefusal.message : nameTaken ? `${agentName} already has a server named ${serverName}. Two servers with one name clash in one app: pick another name.` : "How the app lists this server. Lowercase letters, digits and -."}
+              </p>
+            </div>
+            ) : null}
             <McpConfigTabs
+              guide
+              nameRefused={nameRefused}
+              secondUrl={secondUrl}
               token={created?.token ?? null}
               keyPrefix={keyPrefix}
               url={url}
               serverName={serverName}
               client={client}
               onClientChange={setClientRemembered}
-              onCopy={() => handOut()}
+              onCopy={(_client, copiedUrl) => handOut(copiedUrl)}
               onCreateKey={effectiveAgentId ? () => createKey.mutate() : undefined}
+              agentName={agent?.label ?? null}
               creatingKey={createKey.isPending}
               createKeyError={createKey.isError ? createKeyErrorText(createKey.error) : null}
             />
@@ -633,13 +699,13 @@ export function ConnectBody({
             <div className="flex flex-col gap-1">
               <Switch
                 className="min-h-10"
-                checked={free}
-                disabled={!free && !offersFreeOnly(preview.data)}
+                checked={free || urlIsFree}
+                disabled={urlIsFree || (!free && !offersFreeOnly(preview.data))}
                 onChange={(e) => setFree(e.target.checked)}
                 label="Only free tools"
               />
               <p className="text-body-xs text-03">
-                {free || offersFreeOnly(preview.data)
+                {free || urlIsFree || offersFreeOnly(preview.data)
                   ? "Lists only tools with free calls. Calls through this URL are never charged; past the free calls they are refused."
                   : "Not available here: none of these tools has free calls."}
               </p>
@@ -667,8 +733,8 @@ export function ConnectBody({
           type="button"
           icon={copied ? <Check /> : <Copy />}
           onClick={() => void copy()}
-          disabled={!url || blocked || !created}
-          title={!created && url && !blocked ? TEMPLATE_COPY_REASON : undefined}
+          disabled={nothingToCopy}
+          title={needsKey && !created && url && !blocked ? TEMPLATE_COPY_REASON : undefined}
           data-testid="connect-copy"
           aria-live="polite"
         >
@@ -677,7 +743,8 @@ export function ConnectBody({
         <Button
           type="button"
           variant="secondary"
-          // Done records nothing: a URL is handed out only when it is copied.
+          // Done records nothing: a URL is handed out only when it is copied (on purpose: Done
+          // without a copy hands nothing out, so nothing should wait for a first call).
           onClick={onDone}
         >
           Done
@@ -686,6 +753,25 @@ export function ConnectBody({
       </div>
     </>
   );
+}
+
+const NO_FREE_NAME: ServerNameRefusal = { kind: "tooLong", message: "No name is free and fits this server's tool names. Type a name." };
+
+/** A name no other server of the agent uses, or `null` when none fits (the proxy throws in the same case). */
+function suggestUniqueName(base: string, taken: readonly (string | null)[], longestTool: number): string | null {
+  try {
+    return uniqueServerName(base, taken, longestTool);
+  } catch {
+    return null;
+  }
+}
+
+function hasFreeParam(url: string): boolean {
+  try {
+    return new URL(url).searchParams.get("free") === "1";
+  } catch {
+    return false;
+  }
 }
 
 /** "weather" → "Weather". */
@@ -926,7 +1012,9 @@ export function ResultLine({
   );
 }
 
-function KeyLine({ prefix, keyName, agentName, full }: { prefix: string | null; keyName: string | null; agentName: string | null; full: boolean }) {
+function KeyLine({ prefix, keyName, agentName, full, client }: { prefix: string | null; keyName: string | null; agentName: string | null; full: boolean; client: McpClient }) {
+  // Only My own code carries a key; the other clients sign in, so a key line says nothing about them.
+  if (client !== "other") return null;
   if (!prefix) {
     return <p className="text-body-13 text-02">{agentName ?? "This agent"} has no key yet. Create one below: the config then carries it.</p>;
   }
