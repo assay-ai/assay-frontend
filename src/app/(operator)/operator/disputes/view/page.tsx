@@ -40,7 +40,14 @@ const COLLECTION_STATE: Readonly<Record<string, string>> = {
   NORMAL: "Collected for the provider",
   DEBT_OUTSTANDING: "Buyer owes it (debt)",
   WRITTEN_OFF: "Written off (provider unpaid)",
+  REFUNDED: "Refunded to the buyer",
 };
+/** The API's collection state never says "held"; the refund plan does. */
+function collectionKey(intent: { collectionState: string; refundPlan?: string | null }): string {
+  if (intent.refundPlan === "RELEASE_HELD") return "HELD";
+  if (intent.refundPlan === "ALREADY_REFUNDED") return "REFUNDED";
+  return intent.collectionState;
+}
 
 function DisputeScreen() {
   const id = useSearchParam("id");
@@ -134,7 +141,7 @@ function DisputeScreen() {
               ["Call", INTENT_STATUS[d.intent.status] ?? d.intent.status],
               ["Payment", d.intent.rail === "RAIL_B_VOUCHER" ? "Escrow voucher" : "Paid at call time"],
               ["Price", formatMoney(d.intent.price, { decimals: 4 })],
-              ["Collection", COLLECTION_STATE[d.intent.collectionState] ?? d.intent.collectionState],
+              ["Collection", COLLECTION_STATE[collectionKey(d.intent)] ?? d.intent.collectionState],
             ].map(([label, value]) => (
               <div key={label} className="flex min-w-0 flex-col gap-0.5">
                 <dt className="text-body-xs text-03">{label}</dt>
