@@ -10,6 +10,7 @@ import { useSpendPolicyQuery } from "@/components/buyer-money/use-agents";
 import { useToolVersions } from "@/components/contracts/use-tool-versions";
 import { ServingChip } from "@/components/g31/providers-view";
 import { useCatalogue, type ProviderRow } from "@/components/g31/use-catalogue";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { EntityPicker } from "@/components/patterns/entity-picker";
 import { PageState } from "@/components/patterns/page-state";
@@ -50,7 +51,7 @@ import { failRateShort, formatCallPrice } from "@/features/explorer/explorer-tex
 import { useChainName } from "@/hooks/useChainName";
 import { getCatalogueProvider } from "@/services/catalogue.service";
 import { ApiError } from "@/libs/ApiClient";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import {
   deleteToolset,
   replaceToolsetEntries,
@@ -113,7 +114,7 @@ export function ToolsetPage({ id, slug, free, version }: { id: string | null; sl
       <PageState
         kind={notFound ? "empty" : "error"}
         title={notFound ? "Not found" : "This tool set could not be loaded"}
-        description={notFound ? "No tool set of yours has this address." : query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
+        description={notFound ? "No tool set of yours has this address." : query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
         {...(notFound ? { action: { label: "Your tool sets", href: "/toolsets/mine" } } : { onRetry: () => void query.refetch() })}
       />,
     );

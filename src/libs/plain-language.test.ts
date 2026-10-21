@@ -184,6 +184,12 @@ describe("plainApiError", () => {
   it("names the wait of a 429", () => {
     expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 26 })).toBe("Too many requests. Try again in 26 s.");
   });
+  it("names the seconds still left of a 429's wait at the given instant", () => {
+    const retryAt = Date.parse("2026-10-21T00:00:30Z");
+    expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 30, retryAt }, Date.parse("2026-10-21T00:00:12Z"))).toBe(
+      "Too many requests. Try again in 18 s.",
+    );
+  });
   it("falls back to the fixed sentence without a wait", () => {
     expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429 })).toBe(plainError("TOO_MANY_REQUESTS"));
   });

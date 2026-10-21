@@ -109,7 +109,8 @@ export function ChargedHeadline({ headline, sub, listed, paid, notCharged, actio
 export interface NotChargedHeadlineProps {
   listed: string;
   paid: string;
-  notCharged: string;
+  /** `null` leaves the box out: a call that never held money had nothing to not charge. */
+  notCharged: string | null;
   /** The first line. Verbatim, and it changes with the state. */
   headline: string;
   /**
@@ -161,13 +162,15 @@ export function NotChargedHeadline({
           align="start"
           className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
         />
-        <Amount
-          label="Not charged"
-          value={notCharged}
-          teal
-          align="start"
-          className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
-        />
+        {notCharged !== null ? (
+          <Amount
+            label="Not charged"
+            value={notCharged}
+            teal
+            align="start"
+            className="min-w-0 flex-1 tablet:flex-none tablet:items-end"
+          />
+        ) : null}
       </div>
     </section>
   );

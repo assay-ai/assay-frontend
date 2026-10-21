@@ -121,6 +121,8 @@ export interface GuaranteeData {
    * they are in no not-charged line or total. Told apart, never as a reason.
    */
   notRunCalls: number;
+  /** False when the calls read hit its page cap: `notRunCalls` is then a floor. */
+  notRunComplete: boolean;
 }
 
 export interface GuaranteeState {
@@ -328,7 +330,9 @@ export function useGuarantee(anchor: Date, monthsBack = 3, assetKey: string | nu
         const calls = callR.status === "fulfilled" ? callR.value : { items: [], complete: true };
         const monthRows = monthR.status === "fulfilled" ? monthR.value : [];
         const freeCalls = calls.items.filter((c) => toDecimal(c.price).isZero());
-        const notRunCalls = calls.items.filter((c) => !toDecimal(c.price).isZero() && neverRan(c)).length;
+        // Only the asset on screen: money in two assets is never counted together (fe-followup M1).
+        const sameAsset = (c: ToolCall) => !summary?.asset || c.price.asset === summary.asset;
+        const notRunCalls = calls.items.filter((c) => !toDecimal(c.price).isZero() && neverRan(c) && sameAsset(c)).length;
 
         setData({
           period,
@@ -350,6 +354,7 @@ export function useGuarantee(anchor: Date, monthsBack = 3, assetKey: string | nu
               ? { calls: freeCalls.length, listed: sumMoney(freeCalls.map((c) => c.price), null) }
               : null,
           notRunCalls,
+          notRunComplete: calls.complete,
         });
         // Only a total failure is the page's error; a partial one is a section's.
         setError(
