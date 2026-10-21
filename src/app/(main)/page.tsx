@@ -11,6 +11,7 @@ import { AgentHealthList } from "@/components/buyer-money/agent-health";
 import { GetStarted, useGetStartedShown } from "@/components/buyer-money/get-started";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
+import { plainError } from "@/libs/plain-language";
 import { Button } from "@/components/ui/button";
 import { EntityName } from "@/components/patterns/entity-name";
 import { UtcTime } from "@/components/patterns/utc-time";
@@ -244,7 +245,7 @@ export default function OverviewPage() {
         <PageState
           kind="error"
           title="The overview could not be loaded"
-          description={<ApiErrorSentence error={error} />}
+          description={<ApiErrorSentence error={error} fallback={plainError(undefined)} />}
           onRetry={reload}
           code={error.code}
           details={error.message}

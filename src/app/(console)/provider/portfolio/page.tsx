@@ -6,6 +6,7 @@ import { Info } from "lucide-react";
 import { useMemo } from "react";
 
 import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
+import { plainError } from "@/libs/plain-language";
 import { Banner } from "@/components/ui/banner";
 import { PageState } from "@/components/patterns/page-state";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
@@ -266,7 +267,7 @@ export default function ProviderPortfolioPage() {
         <Banner
           tone="danger"
           title="The portfolio could not be loaded"
-          description={<ApiErrorSentence error={error} />}
+          description={<ApiErrorSentence error={error} fallback={plainError(undefined)} />}
         />
       ) : null}
 

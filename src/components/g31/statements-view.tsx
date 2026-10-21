@@ -7,6 +7,7 @@ import * as React from "react";
 
 import { DisplayAssetSelect, displayAssetLabel, useDisplayAssetPick } from "@/components/display-asset-select";
 import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
+import { plainError } from "@/libs/plain-language";
 import { EntityName } from "@/components/patterns/entity-name";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -248,7 +249,7 @@ function StatementsContent() {
         <PageState
           kind="error"
           title={`The ${period.label} statement could not be loaded`}
-          description={<ApiErrorSentence error={summary.error} />}
+          description={<ApiErrorSentence error={summary.error} fallback={plainError(undefined)} />}
           onRetry={() => void summary.refetch()}
           code={summary.error.code}
           details={summary.error.message}

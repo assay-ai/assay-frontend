@@ -45,7 +45,17 @@ const readClock = () => clock.now;
 export function useApiErrorSentence(error: unknown, fallback?: string): string {
   const counting = error instanceof ApiError && error.code === TOO_MANY_REQUESTS && typeof error.retryAt === "number";
   const now = React.useSyncExternalStore(counting ? subscribeClock : noSubscription, readClock, readClock);
-  if (error instanceof ApiError) return counting ? plainApiError(error, now) : plainApiError(error);
+  if (error instanceof ApiError) {
+    if (!counting) return plainApiError(error);
+    /*
+      The shared clock may still hold an old tick on the first render after a
+      long idle (it refreshes on subscribe). The error's own arrival
+      (`retryAt` − `retryAfterSeconds`) is a floor, so the wait shown is never
+      larger than the one the header named (review M5).
+    */
+    const arrived = error.retryAt! - (error.retryAfterSeconds ?? 0) * 1000;
+    return plainApiError(error, Math.max(now, arrived));
+  }
   return fallback ?? plainError("ERR_NETWORK");
 }
 
