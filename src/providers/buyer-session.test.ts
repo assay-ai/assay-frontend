@@ -15,6 +15,7 @@ import {
   markPublicShell,
   onPublicShell,
   signedOutLanding,
+  showsSignedOut,
   unauthorizedTarget,
   type BuyerSessionEffects,
 } from "./buyer-session";
@@ -198,6 +199,28 @@ describe("applyIdentityChange", () => {
     await flush();
     expect(fx.startWalletLink).not.toHaveBeenCalled();
     expect(fx.queryClient.resetQueries).toHaveBeenCalledTimes(1);
+  });
+});
+
+// BUG-BUY-CONNECT-02: only these two app-connection pages stay for a signed-out visitor.
+describe("unauthorizedTarget on the app-connection pages", () => {
+  it("keeps the error page and the consent page without a request", () => {
+    expect(unauthorizedTarget({ pathname: "/connect/authorize-error", search: "?reason=client_unknown", previous: null })).toBe(
+      "/connect/authorize-error?reason=client_unknown",
+    );
+    expect(unauthorizedTarget({ pathname: "/connect/authorize", search: "", previous: null, consentRequest: false })).toBe(
+      "/connect/authorize",
+    );
+  });
+
+  it("still sends the consent page with a request, and every other page, to sign-in", () => {
+    expect(unauthorizedTarget({ pathname: "/connect/authorize", search: "", previous: null, consentRequest: true })).toBe(
+      "/login?next=%2Fconnect%2Fauthorize",
+    );
+    for (const pathname of ["/connect", "/connect/preview", "/connect/authorize-errors", "/agents/enable-paid", "/funding"]) {
+      expect(showsSignedOut(pathname, false), pathname).toBe(false);
+      expect(unauthorizedTarget({ pathname, search: "", previous: null })).toMatch(/^\/login\?next=/);
+    }
   });
 });
 
