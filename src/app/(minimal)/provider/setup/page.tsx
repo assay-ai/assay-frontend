@@ -28,6 +28,7 @@ import { knowsError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
+import { addressOfAccount } from "@/utils/chain";
 
 /**
  * Provider setup — `/provider/setup`. Three steps on one page:
@@ -352,7 +353,7 @@ function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void 
     >
       {active.map((account) => (
         <Outcome key={account.chainId} tone="teal" icon={<CircleCheck />}>
-          Paid to <span className="font-mono text-mono-13 [overflow-wrap:anywhere]">{account.accountId}</span> on{" "}
+          Paid to <span className="font-mono text-mono-13 [overflow-wrap:anywhere]">{addressOfAccount(account.accountId)}</span> on{" "}
           {chainName(account.chainId)}.
         </Outcome>
       ))}
