@@ -13,6 +13,7 @@ import {
   confirmingLine,
   confirmingOnChain,
   confirmingPollMs,
+  escrowFreeSplit,
   escrowLedgerRow,
   readyForPaidCalls,
   uncreditedLine,
@@ -128,5 +129,25 @@ describe("uncredited on-chain money", () => {
     expect(uncreditedLine(m("5000000"))).toBe("$5.00 on chain, not yet usable by agents");
     expect(uncreditedLine(m("0"))).toBeNull();
     expect(uncreditedLine(undefined)).toBeNull();
+  });
+});
+
+/* Lot 1 A3 review I1: the escrow card's "Available" is the headline, uncredited money its own segment. */
+describe("escrowFreeSplit", () => {
+  it("with uncredited money and nothing confirming, Available equals the headline", () => {
+    const headline = readyForPaidCalls(m("25000000"), row({ available: m("20000000"), pending: m("0") }), m("5000000"));
+    const split = escrowFreeSplit(m("25000000"), headline, m("5000000"));
+    expect(split.available?.amount).toBe(headline?.amount);
+    expect(split.uncredited?.amount).toBe("5000000");
+    expect(split.confirming).toBeNull();
+  });
+
+  it("splits the rest into uncredited and confirming, and is unchanged without a ready figure", () => {
+    expect(escrowFreeSplit(m("30000000"), m("20000000"), m("4000000"))).toMatchObject({
+      available: { amount: "20000000" },
+      uncredited: { amount: "4000000" },
+      confirming: { amount: "6000000" },
+    });
+    expect(escrowFreeSplit(m("30000000"), null, m("4000000"))).toEqual({ available: m("30000000"), uncredited: null, confirming: null });
   });
 });
