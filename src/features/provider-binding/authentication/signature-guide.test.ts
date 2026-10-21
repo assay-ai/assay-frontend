@@ -20,4 +20,8 @@ describe("signature guide", () => {
     );
     expect(signatureSnippet(null)).toContain("app.use(assayVerify());");
   });
+
+  it("imports the package from the @goassay-ai npm scope, which is ours", () => {
+    expect(signatureSnippet(null)).toContain('from "@goassay-ai/provider-verify/express"');
+  });
 });
