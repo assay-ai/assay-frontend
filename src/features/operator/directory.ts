@@ -260,32 +260,44 @@ export function deriveSubject(name: string): string {
 }
 
 /**
- * The "No limit" chip's value. It ends in a line break, which a single-line
- * text field can never hold (browsers strip it from `<input>` values), so
- * typing "unlimited" in Custom is an invalid amount, never "no limit" (review
- * I2 of BUG-BUY-MONEY-03: the Custom field no longer strips what is typed).
+ * The authority limit as the form holds it: the "No limit" chip, or what was
+ * picked or typed as an amount. "No limit" is its own state, set only by the
+ * chip (lot 1 E18; review I2 of BUG-BUY-MONEY-03), so no text typed in Custom
+ * can ever mean "no limit".
  */
-export const NO_LIMIT_CHOICE = "unlimited\n";
+export type LimitChoice = { readonly kind: "none" } | { readonly kind: "amount"; readonly text: string };
 
-/**
- * The limit picked or typed, in dollars, → minor units or one sentence. "No
- * limit" comes only from the chip (`NO_LIMIT_CHOICE`); a typed "0" (spaces
- * around it too) is the zero limit, as before.
- */
-export function parseLimitChoice(choice: string, decimals: number): { atomic: string | null; error: string | null } {
-  if (choice === NO_LIMIT_CHOICE) return { atomic: null, error: null };
-  if (choice.trim() === "") return { atomic: null, error: "Choose a limit." };
-  if (choice.trim() === "0") return { atomic: "0", error: null };
-  const parsed = parseAmountInput(choice, { decimals });
-  return { atomic: parsed.atomic, error: parsed.error };
+export const NO_LIMIT: LimitChoice = { kind: "none" };
+
+/** An amount picked or typed, in dollars. */
+export function limitAmount(text: string): LimitChoice {
+  return { kind: "amount", text };
+}
+
+/** The "No limit" chip's key in `PresetChips`; only the chip's `onPick` sets `NO_LIMIT`. */
+export const NO_LIMIT_CHIP = "no-limit";
+
+/** The `PresetChips` value of a choice. */
+export function limitChipValue(choice: LimitChoice): string {
+  return choice.kind === "none" ? NO_LIMIT_CHIP : choice.text;
 }
 
 /**
- * The limit chosen in dollars ("0", "100", "1000", `NO_LIMIT_CHOICE` or a
- * typed amount already converted to minor units) as the form's `LimitInput`.
+ * The limit picked or typed, in dollars, → minor units or one sentence. A
+ * typed "0" (spaces around it too) is the zero limit, as before.
  */
-export function limitInputFromChoice(choice: string, atomic: string | null): LimitInput {
-  if (choice === NO_LIMIT_CHOICE) return { mode: "unbounded", amount: "" };
-  if (choice.trim() === "0" || atomic === "0") return { mode: "zero", amount: "" };
+export function parseLimitChoice(choice: LimitChoice, decimals: number): { atomic: string | null; error: string | null } {
+  if (choice.kind === "none") return { atomic: null, error: null };
+  const text = choice.text;
+  if (text.trim() === "") return { atomic: null, error: "Choose a limit." };
+  if (text.trim() === "0") return { atomic: "0", error: null };
+  const parsed = parseAmountInput(text, { decimals });
+  return { atomic: parsed.atomic, error: parsed.error };
+}
+
+/** The choice, with its amount already converted to minor units, as the form's `LimitInput`. */
+export function limitInputFromChoice(choice: LimitChoice, atomic: string | null): LimitInput {
+  if (choice.kind === "none") return { mode: "unbounded", amount: "" };
+  if (choice.text.trim() === "0" || atomic === "0") return { mode: "zero", amount: "" };
   return { mode: "amount", amount: atomic ?? "" };
 }

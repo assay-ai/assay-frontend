@@ -137,8 +137,12 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
       id: "caps",
       label: "Sign the new account ceiling",
       cost: "free",
-      run: async ({ report }) => {
-        const signer = requireSigner(money.signerState, money.ownerShort);
+      promptTitle: "Set your account ceiling",
+      promptDescription: body
+        ? `At most ${formatLimit({ amount: body.maxVoucherAmount, asset: "", decimals: money.decimals })} a call and ${formatLimit({ amount: body.maxPerWindow, asset: "", decimals: money.decimals })} in 24 hours, for all your agents together. Free, no gas.`
+        : undefined,
+      run: async ({ report, prompt }) => {
+        const signer = requireSigner(money.signerState, money.ownerShort, prompt);
         report({ stage: "preparing" });
         const signed: EscrowLimitsBody = atRisk ? { ...body!, acknowledgeUnsettled: true } : body!;
         const intent = await createEscrowLimitsIntent(signed);

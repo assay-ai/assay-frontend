@@ -7,6 +7,7 @@ import * as React from "react";
 
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { ToolAccessControl } from "@/components/explorer/tool-access-control";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { EntityName } from "@/components/patterns/entity-name";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
@@ -27,7 +28,7 @@ import {
 import { chainsText } from "@/features/toolsets/provider-fit";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getCatalogueProvider } from "@/services/catalogue.service";
 import { formatMoney } from "@/utils/money";
@@ -94,7 +95,7 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
         <PageState
           kind="error"
           title="This provider could not be loaded"
-          description={entry.error instanceof ApiError ? plainApiError(entry.error) : plainError("ERR_NETWORK")}
+          description={entry.error instanceof ApiError ? <ApiErrorSentence error={entry.error} /> : plainError("ERR_NETWORK")}
           onRetry={() => void entry.refetch()}
           code={entry.error instanceof ApiError ? entry.error.code : null}
         />

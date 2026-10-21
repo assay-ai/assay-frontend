@@ -55,10 +55,59 @@ export function anyConfirming(balances: readonly FullBalance[] | undefined): boo
  * confirming; while a deposit is, the ledger's `available` caps it, because the
  * ledger is what holds a call's price and the chain already counts the deposit.
  */
-export function readyForPaidCalls(chainSpendable: Money | null, row: FullBalance | null | undefined): Money | null {
+export function readyForPaidCalls(
+  chainSpendable: Money | null,
+  row: FullBalance | null | undefined,
+  uncredited?: Money | null,
+): Money | null {
+  /*
+    Money on chain the ledger has not credited (lot 1 A3, `GET /escrow`
+    `uncreditedOnChain`) is counted by the chain and usable by no agent: the
+    headline is what agents can spend, the ledger's `available`, as on
+    Overview, the wallet menu and Close account. Without the field (an older
+    backend) nothing changes.
+  */
+  const uncreditedAmount = positiveMoney(uncredited);
+  if (uncreditedAmount && chainSpendable) {
+    const capped = BigInt(chainSpendable.amount || "0") - BigInt(uncreditedAmount.amount);
+    const chainUsable: Money = { ...chainSpendable, amount: (capped > 0n ? capped : 0n).toString() };
+    if (!row) return chainUsable;
+    return BigInt(row.available.amount || "0") < BigInt(chainUsable.amount) ? row.available : chainUsable;
+  }
   if (!row || !confirmingOnChain(row)) return chainSpendable;
   if (!chainSpendable) return row.available;
   return BigInt(row.available.amount || "0") < BigInt(chainSpendable.amount || "0") ? row.available : chainSpendable;
+}
+
+function positiveMoney(money: Money | null | undefined): Money | null {
+  return money && BigInt(money.amount || "0") > 0n ? money : null;
+}
+
+/**
+ * The escrow card's split of the chain's spendable figure (lot 1 A3, review
+ * I1): "Available" is what agents can spend (`ready`, the headline); the rest
+ * is uncredited money (up to `uncredited`) and money still confirming. With
+ * no `ready`, the chain figure is all available, as before.
+ */
+export function escrowFreeSplit(
+  chainFree: Money | null,
+  ready: Money | null,
+  uncredited: Money | null | undefined,
+): { available: Money | null; uncredited: Money | null; confirming: Money | null } {
+  if (!ready || !chainFree) return { available: chainFree, uncredited: null, confirming: null };
+  const rest = BigInt(chainFree.amount || "0") - BigInt(ready.amount || "0");
+  if (rest <= 0n) return { available: ready, uncredited: null, confirming: null };
+  const cap = BigInt(positiveMoney(uncredited)?.amount ?? "0");
+  const uncreditedPart = rest < cap ? rest : cap;
+  const confirmingPart = rest - uncreditedPart;
+  const money = (amount: bigint): Money | null => (amount > 0n ? { ...chainFree, amount: amount.toString() } : null);
+  return { available: ready, uncredited: money(uncreditedPart), confirming: money(confirmingPart) };
+}
+
+/** "$5.00 on chain, not yet usable by agents" when `GET /escrow` reports uncredited money, else null (lot 1 A3). */
+export function uncreditedLine(uncredited: Money | null | undefined): string | null {
+  const amount = positiveMoney(uncredited);
+  return amount ? `${formatMoney(amount)} on chain, not yet usable by agents` : null;
 }
 
 /** "$20.00 still confirming on chain (usually a few seconds)", or null. */

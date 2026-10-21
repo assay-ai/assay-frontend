@@ -112,7 +112,11 @@ export function chainErrorText(code: string): string {
     case "SLASH_PLAN_EVIDENCE_MISMATCH":
       return "The penalty's plan does not match its evidence.";
     default:
-      return `The chain refused it (${code}).`;
+      // A local SLASH_* / PROVIDER_* refusal never reached the chain (fe-followup M6); a
+      // contract's custom error is CamelCase (`ProposalAlreadyExists`); anything else is not blamed on either.
+      if (/^(SLASH|PROVIDER)_/.test(code)) return `Assay did not send it (${code}).`;
+      if (/^[A-Z][a-z]+[A-Za-z0-9]*$/.test(code)) return `The chain refused it (${code}).`;
+      return `The last attempt failed (${code}).`;
   }
 }
 

@@ -123,6 +123,7 @@ import {
   resolveSignerState,
   toSolanaChain,
   useSigner,
+  withWalletPrompt,
   type SelectableWallet,
   type Signer,
   type UseSignerResult,
@@ -886,6 +887,35 @@ describe("the eip155 branch", () => {
       address: evmEmbedded.address,
       uiOptions: { showWalletUIs: true },
     });
+  });
+
+  it("puts the prompt's title and description on Privy's sign screen (lot 1 D14)", async () => {
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    await state.signer!.signTypedData(TYPED_DATA, { showWalletUIs: true, title: "Set limits", description: "$1.00 a call" });
+    expect(privyEvm.typedDataCalls[0].options).toEqual({
+      address: evmEmbedded.address,
+      uiOptions: { showWalletUIs: true, title: "Set limits", description: "$1.00 a call" },
+    });
+  });
+
+  it("withWalletPrompt adds the text to every confirmation, and never drops showWalletUIs (lot 1 D14)", async () => {
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [evmEmbedded] });
+    const signer = withWalletPrompt(state.signer!, { title: "Deposit 20.00 USDG", description: "Into your escrow." });
+    await signer.signTypedData(TYPED_DATA, { showWalletUIs: true });
+    expect(privyEvm.typedDataCalls[0].options).toEqual({
+      address: evmEmbedded.address,
+      uiOptions: { showWalletUIs: true, title: "Deposit 20.00 USDG", description: "Into your escrow." },
+    });
+    privyEvm.transactionCalls = [];
+    await signer.signTransaction({ ...EVM_TX, from: EVM_EMBEDDED }, { showWalletUIs: true });
+    // A transaction screen has no title: it goes to the details row.
+    expect(privyEvm.transactionCalls[0]!.options).toEqual({
+      address: EVM_EMBEDDED,
+      uiOptions: { showWalletUIs: true, description: "Into your escrow.", transactionInfo: { action: "Deposit 20.00 USDG" } },
+    });
+    // A call without options still asks Privy for its default, text or not.
+    await signer.signTypedData(TYPED_DATA);
+    expect(privyEvm.typedDataCalls[1].options).toEqual({ address: evmEmbedded.address });
   });
 
   it("without the option, passes no uiOptions (Privy's own default applies)", async () => {

@@ -112,23 +112,29 @@ function escape(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-/** One CSV row per group: names AND ids, the asset, and plain amounts. */
+/**
+ * One CSV row per group: names AND ids, the asset, and plain amounts. A
+ * free-only group counts its free calls, as the row on screen does (never
+ * "0 calls"), and the last column says how many calls were free.
+ */
 export function spendCsv(
   groups: readonly SummaryGroup[],
   options: { dimensionHeader: string; labelOf: (key: string) => string; assetLabel: string },
 ): string {
-  const header = [options.dimensionHeader, `${options.dimensionHeader} id`, "Asset", "Calls", "Listed", "Charged", "Not charged", "Not charged calls", "Owed", "Owed calls"];
+  const header = [options.dimensionHeader, `${options.dimensionHeader} id`, "Asset", "Calls", "Listed", "Charged", "Not charged", "Not charged calls", "Owed", "Owed calls", "Free calls"];
   const rows = groups.map((g) => [
     options.labelOf(g.key),
     g.key,
     options.assetLabel,
-    String(g.calls),
+    // A rare zero-price intent is in both `calls` and `freeCalls` (see `rankRows`).
+    String(toDecimal(g.listedTotal).isZero() ? Math.max(g.calls, g.freeCalls ?? 0) : g.calls),
     formatMoney(g.listedTotal, { grouped: false, exact: true, symbol: "", decimals: g.listedTotal.decimals }),
     formatMoney(g.chargedTotal, { grouped: false, exact: true, symbol: "", decimals: g.chargedTotal.decimals }),
     formatMoney(notChargedOf(g), { grouped: false, exact: true, symbol: "", decimals: notChargedOf(g).decimals }),
     String(g.notChargedCalls ?? g.refundedCalls),
     g.owedTotal ? formatMoney(g.owedTotal, { grouped: false, exact: true, symbol: "", decimals: g.owedTotal.decimals }) : "0",
     String(g.owedCalls ?? 0),
+    String(g.freeCalls ?? 0),
   ]);
   return [header, ...rows].map((r) => r.map(escape).join(",")).join("\n");
 }

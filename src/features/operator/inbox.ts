@@ -4,6 +4,7 @@ import type {
   OperatorDirectoryEntry,
   OperatorIdentity,
   PlatformHealth,
+  ReconciliationAssetRow,
 } from "@/interfaces/operator";
 
 import { approveBlockedBecause, approverRolesFor, isOwnRequest } from "./approvals";
@@ -262,6 +263,44 @@ export function healthIssues(health: PlatformHealth): HealthIssue[] {
   return issues;
 }
 
+/** The reconciliation job runs every 5 minutes; three missed runs and its answer is too old to call normal. */
+export const RECONCILIATION_STALE_SECONDS = 15 * 60;
+
+/**
+ * What the latest reconciliation runs say against "All systems normal" (lot 1
+ * D16): one issue per CRITICAL or WARN asset, one when a run is too old, one
+ * when none has run, and one when the rows could not be read. Empty only when
+ * every asset is OK and fresh. `assetName` turns a CAIP-19 id into a name.
+ */
+export function reconciliationIssues(
+  rows: readonly ReconciliationAssetRow[] | undefined,
+  options: { unreadable?: boolean; assetName?: (asset: string) => string } = {},
+): HealthIssue[] {
+  if (options.unreadable) return [{ id: "recon:unreadable", text: "Reconciliation could not be read" }];
+  if (!rows) return [];
+  if (rows.length === 0) return [{ id: "recon:none", text: "Reconciliation has not run yet" }];
+  // The asset's chain (CAIP-2, before the "/"), unless the caller names it better.
+  const name = options.assetName ?? ((asset: string) => asset.split("/")[0] ?? asset);
+  const issues: HealthIssue[] = [];
+  for (const row of rows) {
+    if (row.severity === "CRITICAL") {
+      issues.push({ id: `recon:critical:${row.asset}`, text: `Reconciliation critical on ${name(row.asset)}: withdrawals are frozen` });
+    } else if (row.severity !== "OK") {
+      issues.push({ id: `recon:warn:${row.asset}`, text: `Reconciliation warning on ${name(row.asset)}` });
+    }
+    // Fails safe: a missing or non-numeric age is never "fresh" (review M1).
+    if (!(typeof row.ageSeconds === "number" && row.ageSeconds <= RECONCILIATION_STALE_SECONDS)) {
+      issues.push({
+        id: `recon:stale:${row.asset}`,
+        text: Number.isFinite(row.ageSeconds)
+          ? `Reconciliation on ${name(row.asset)} last ran ${lagText(row.ageSeconds)} ago`
+          : `Reconciliation on ${name(row.asset)}: when it last ran is unknown`,
+      });
+    }
+  }
+  return issues;
+}
+
 /**
  * A lag or an age, in the two largest units: "3 d 7 h", "5 h 12 min",
  * "12 min", "under a minute". Never minutes alone past an hour (operator
@@ -332,9 +371,16 @@ export function needsYouWork(base: ToolWork, cancels: number, toolRequestsOverdu
  * Why Home may not show a calm "Nothing needs you" (D16): stale chain data,
  * or chain freshness that could not be read at all. Null when it may. Pure.
  */
-export function calmStateBlocker(health: { stale: { lagSeconds: number | null } | null; unreadable: boolean }): string | null {
+export function calmStateBlocker(health: {
+  stale: { lagSeconds: number | null } | null;
+  unreadable: boolean;
+  /** `reconciliationIssues(...)`: a CRITICAL asset or an unreadable answer is never a calm Home (review M2). */
+  reconciliation?: readonly HealthIssue[];
+}): string | null {
   if (health.stale) return staleChainSentence(health.stale);
   if (health.unreadable) return "Can't confirm: chain data freshness could not be read (disputes and rulings may be missing)";
+  const recon = health.reconciliation?.find((issue) => issue.id.startsWith("recon:critical:") || issue.id === "recon:unreadable");
+  if (recon) return recon.text;
   return null;
 }
 

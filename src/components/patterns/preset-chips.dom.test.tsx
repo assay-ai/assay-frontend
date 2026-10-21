@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { NO_LIMIT_CHOICE, parseLimitChoice } from "@/features/operator/directory";
+import { limitAmount, limitChipValue, NO_LIMIT, NO_LIMIT_CHIP, parseLimitChoice, type LimitChoice } from "@/features/operator/directory";
 import { parseAmountInput } from "@/utils/money";
 
 import { PresetChips } from "./preset-chips";
@@ -56,18 +56,18 @@ describe("PresetChips custom amount", () => {
 
 // Review I2: the operator limit's "No limit" chip cannot be reached by typing its key in Custom.
 function LimitHarness() {
-  const [value, setValue] = React.useState("");
+  const [value, setValue] = React.useState<LimitChoice>(limitAmount(""));
   const parsed = parseLimitChoice(value, 6);
   return (
     <>
       <PresetChips
         label="Authority limit"
-        presets={["0", "100", { value: NO_LIMIT_CHOICE, label: "No limit" }]}
-        value={value}
-        onChange={setValue}
-        error={value ? parsed.error : null}
+        presets={["0", "100", { value: NO_LIMIT_CHIP, label: "No limit", onPick: () => setValue(NO_LIMIT) }]}
+        value={limitChipValue(value)}
+        onChange={(text) => setValue(limitAmount(text))}
+        error={value.kind === "amount" && value.text ? parsed.error : null}
       />
-      <output data-testid="unbounded">{value === NO_LIMIT_CHOICE ? "yes" : "no"}</output>
+      <output data-testid="unbounded">{value.kind === "none" ? "yes" : "no"}</output>
     </>
   );
 }
@@ -81,6 +81,14 @@ describe("the operator limit chips", () => {
     fireEvent.change(screen.getByLabelText("Authority limit, custom amount"), { target: { value: "unlimited" } });
     expect(screen.getByText("Enter an amount like 20 or 20.50.")).toBeTruthy();
     expect(screen.getByRole("radio", { name: "No limit" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByTestId("unbounded").textContent).toBe("no");
+  });
+
+  it("reads the chip's own key typed in Custom as an invalid amount (lot 1 E18)", () => {
+    render(<LimitHarness />);
+    fireEvent.click(screen.getByRole("radio", { name: "Custom" }));
+    fireEvent.change(screen.getByLabelText("Authority limit, custom amount"), { target: { value: NO_LIMIT_CHIP } });
+    expect(screen.getByText("Enter an amount like 20 or 20.50.")).toBeTruthy();
     expect(screen.getByTestId("unbounded").textContent).toBe("no");
   });
 

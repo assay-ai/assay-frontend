@@ -127,6 +127,19 @@ export interface BuyerEscrow {
    * escrow, or when the chain could not be read.
    */
   lifetime: EscrowLifetime | null;
+  /**
+   * Money in this escrow on chain that the ledger has not credited yet, so
+   * agents cannot spend it (lot 1 A3): chain balance minus what the ledger
+   * accounts for, floored at 0. `null` when the chain could not be read or
+   * there is no escrow; absent on an older backend (show nothing).
+   */
+  uncreditedOnChain?: Money | null;
+  /**
+   * True when the last reconciliation of this asset was CRITICAL, so a
+   * withdrawal request or claim would be refused `SETTLEMENT_WITHDRAWALS_FROZEN`
+   * (lot 1 D16). `null` unknown; absent on an older backend (no up-front check).
+   */
+  withdrawalsFrozen?: boolean | null;
 }
 
 /** `BuyerEscrow.lifetime`. */

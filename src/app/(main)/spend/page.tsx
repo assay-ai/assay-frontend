@@ -8,6 +8,8 @@ import * as React from "react";
 import { CallsInFlight } from "@/components/buyer/calls-in-flight";
 import { Sparkline } from "@/components/buyer/sparkline";
 import { DisplayAssetSelect, displayAssetLabel, useDisplayAssetPick } from "@/components/display-asset-select";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
+import { plainError } from "@/libs/plain-language";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
@@ -33,7 +35,6 @@ import { useChains } from "@/hooks/useChains";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
-import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getReceiptsSummary, getWithheld } from "@/services";
 import { cn } from "@/utils";
@@ -228,7 +229,7 @@ export default function SpendPage() {
         <PageState
           kind="error"
           title="Your spend could not be loaded"
-          description={plainApiError(query.error)}
+          description={<ApiErrorSentence error={query.error} fallback={plainError(undefined)} />}
           onRetry={() => void query.refetch()}
           code={query.error.code}
           details={query.error.message}
