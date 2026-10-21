@@ -80,6 +80,14 @@ describe("budgetAgentId: the agent whose Assay limits this session can edit", ()
     expect(budgetAgentId(agents, null, null)).toBeNull();
     expect(budgetAgentId([agents[0]!], null, null)).toBe("a");
   });
+  it("uses the agent the server names (subjectAgentId), also for an organization default (BUG-BUY-CONNECT-05)", () => {
+    expect(budgetAgentId(agents, { agentId: null, subjectAgentId: "b" }, "eip155:1:0xaa")).toBe("b");
+    expect(budgetAgentId(agents, { agentId: "a", subjectAgentId: "b" }, null)).toBe("b");
+  });
+  it("names no agent when the server's subject is not on screen, never another agent", () => {
+    expect(budgetAgentId(agents, { agentId: null, subjectAgentId: "zz" }, "eip155:1:0xaa")).toBeNull();
+    expect(budgetAgentId([agents[0]!], { agentId: null, subjectAgentId: "zz" }, null)).toBeNull();
+  });
 });
 
 describe("ceilingCountsMoreThanAgents", () => {
