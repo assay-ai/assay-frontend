@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DocumentTitle } from "@/components/layout/document-title";
 import { PublicShell } from "@/components/layout/public-shell";
 import { Button } from "@/components/ui/button";
 
@@ -18,6 +19,7 @@ const NOT_FOUND_LINKS = [
 export default function NotFound() {
   return (
     <PublicShell>
+      <DocumentTitle title="Page not found — Assay" />
       <div className="flex w-full flex-1 flex-col items-center justify-center gap-8 px-4 py-12 tablet:px-7">
         <div className="flex flex-col items-center gap-3">
           <p className="font-mono text-mono-13 text-03">404</p>

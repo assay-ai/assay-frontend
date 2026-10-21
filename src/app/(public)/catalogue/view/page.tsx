@@ -94,6 +94,7 @@ function ToolPage() {
     return (
       <PageState
         kind="empty"
+        titleAsH1
         title="We could not find that tool"
         description="It may have been renamed or is no longer listed."
         action={{ label: "See all tools", href: "/catalogue" }}
