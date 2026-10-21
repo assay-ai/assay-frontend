@@ -89,6 +89,22 @@ describe("argumentsProblem", () => {
       expect(argumentsProblem({ name: "Berlin", unit: "kelvin" }, geocode)).toBe("“unit” must be one of metric, imperial.");
     });
 
+    // Review M4: enum by value, not by key order, and text matching a number option where the field has no type.
+    it("compares enum values by value", () => {
+      const schema = {
+        properties: {
+          box: { type: "object", enum: [{ a: 1, b: [1, 2] }] },
+          size: { enum: [10, 20] },
+          flag: { enum: [true] },
+        },
+      };
+      expect(argumentsProblem({ box: { b: [1, 2], a: 1 } }, schema)).toBeNull();
+      expect(argumentsProblem({ box: { a: 1, b: [2, 1] } }, schema)).toBe("“box” is not one of the values the tool takes.");
+      expect(argumentsProblem({ size: "10", flag: "true" }, schema)).toBeNull();
+      expect(argumentsProblem({ size: 10 }, schema)).toBeNull();
+      expect(argumentsProblem({ size: "30" }, schema)).toBe("“size” must be one of 10, 20.");
+    });
+
     it("still runs values on and inside the bounds", () => {
       expect(argumentsProblem({ name: "Berlin", count: 10, ratio: 0.5, old: 3, unit: "metric" }, geocode)).toBeNull();
       expect(argumentsProblem({ name: "Be", count: 1 }, geocode)).toBeNull();

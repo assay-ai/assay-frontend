@@ -83,9 +83,27 @@ function numberOr(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function sameValue(a: unknown, b: unknown): boolean {
+/**
+ * Whether a typed value is this enum option. `argumentsFromText` turns text
+ * into a number or boolean only where the field's type says so; a field with
+ * no type stays text, so a string matches a number or boolean option of the
+ * same text ("10" is 10). Objects and arrays compare by value, whatever the
+ * key order.
+ */
+function sameValue(option: unknown, value: unknown): boolean {
+  if (option === value) return true;
+  if (typeof value === "string" && (typeof option === "number" || typeof option === "boolean")) return String(option) === value;
+  return deepEqual(option, value);
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  return typeof a === "object" && typeof b === "object" && JSON.stringify(a) === JSON.stringify(b);
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((item, i) => deepEqual(item, b[i]));
+  }
+  if (!isRecord(a) || !isRecord(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => Object.hasOwn(b, key) && deepEqual(a[key], b[key]));
 }
 
 function allowsNull(schema: unknown): boolean {
