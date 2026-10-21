@@ -344,7 +344,7 @@ export default function GuaranteePage() {
       {!loading && !error && data && data.notRunCalls > 0 ? (
         <p className="flex items-start gap-2 text-body-13 text-02" data-testid="guarantee-not-run">
           <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-03" />
-          <span>{notRunSentence(data.notRunCalls)}</span>
+          <span>{notRunSentence(data.notRunCalls, data.notRunComplete)}</span>
         </p>
       ) : null}
 

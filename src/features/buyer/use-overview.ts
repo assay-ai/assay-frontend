@@ -96,7 +96,7 @@ function toChartNumber(money: Money | undefined | null): number {
 }
 
 /** The 7-day day-by-tool stack, from `GET /overview`'s `chart` (one summary per UTC day). */
-function chartFrom(chart: OverviewResponse["chart"]): { chart: ChartDay[]; tools: string[] } {
+export function chartFrom(chart: OverviewResponse["chart"]): { chart: ChartDay[]; tools: string[] } {
   const totals = new Map<string, number>();
   const days = (chart.days ?? []).map((day) => {
     const byTool: Record<string, number> = {};
@@ -108,7 +108,11 @@ function chartFrom(chart: OverviewResponse["chart"]): { chart: ChartDay[]; tools
     return { key: day.key, byTool };
   });
 
-  const tools = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  // A free-only tool charged nothing: no legend entry without a bar (fe-followup M4).
+  const tools = [...totals.entries()]
+    .filter(([, total]) => total > 0)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => id);
   return { chart: days, tools };
 }
 
