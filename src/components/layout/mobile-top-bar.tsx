@@ -62,12 +62,12 @@ export const MobileTopBar = React.forwardRef<HTMLElement, MobileTopBarProps>(
       <header
         ref={ref}
         className={cn(
-          "flex w-full items-center gap-3 border-b border-01 bg-01 px-4 py-2.5",
+          "flex w-full flex-wrap items-center gap-x-3 gap-y-1 border-b border-01 bg-01 px-4 py-2.5",
           className
         )}
         {...props}
       >
-        <div className="flex min-w-0 flex-1 flex-col gap-px">
+        <div className="flex min-w-[6rem] flex-1 flex-col gap-px">
           <h1 className="truncate text-label-md text-01">{title}</h1>
           {subtitle ? (
             <p className="truncate font-mono text-mono-xs text-03">
@@ -76,7 +76,7 @@ export const MobileTopBar = React.forwardRef<HTMLElement, MobileTopBarProps>(
           ) : null}
         </div>
 
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 min-[420px]:gap-2">
           {showSearch ? (
             <button
               type="button"
