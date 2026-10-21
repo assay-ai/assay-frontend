@@ -36,7 +36,7 @@ function pretty(value: unknown): string {
 /** Every word a model reads in one version, as the reviewer must read it. */
 export function ReviewedVersion({ version }: { version: ProviderToolVersion }) {
   return (
-    <article className="flex flex-col gap-3 rounded-lg border border-01 px-3.5 py-3" data-testid="reviewed-version">
+    <article className="flex min-w-0 flex-col gap-3 rounded-lg border border-01 px-3.5 py-3" data-testid="reviewed-version">
       <header className="flex flex-wrap items-center gap-1.5">
         <span className="font-mono text-mono-13 text-01">v{version.semver}</span>
         {version.isCurrent ? <Chip tone="primary">Agents get this one</Chip> : null}
