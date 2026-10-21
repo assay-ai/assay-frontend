@@ -341,9 +341,13 @@ export function stakeSummary({
     : `This tool alone needs ${fmt(needed)} (${multiplier} × ${formatMoney(price, { decimals: 6 })}).`;
 
   const overall = total && major(total).gt(major(needed)) ? total : needed;
+  const covered = Boolean(have) && major(have!).gte(major(overall));
+  // "That is all the stake you need" only reads right once the stake covers it; short, it says what is needed.
   const lead =
     overall === needed
-      ? "That is all the stake you need"
+      ? covered || !have
+        ? "That is all the stake you need"
+        : `This tool needs ${fmt(overall)} of stake`
       : `Your stake has to cover your largest paid tool${largestToolName ? `, ${largestToolName}` : ""}: ${fmt(overall)}`;
   let tail: string;
   let tone: StakeSummary["tone"];
