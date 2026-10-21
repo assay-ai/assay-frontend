@@ -39,6 +39,9 @@ export async function readAgentsWithKeys(): Promise<AgentsWithKeysPage> {
   // An agent session gets the keys of its own agent only; the other rows come
   // without them (BUG-DEMO-02). Such a row would read as "No key": it is
   // marked hidden instead, and its keys read as not shown to this session.
+  // A person's session never gets such a row from the API; if it ever did,
+  // the same quiet line shows and nothing is logged (the frontend logs no
+  // account data).
   const items = page.items ?? [];
   const hidden = items.filter((agent) => !agent.credentials || !agent.health).map((agent) => agent.agentId);
   if (hidden.length === 0) return page;
@@ -85,6 +88,8 @@ const NO_HEALTH = {
 async function readAgentsWithoutKeys(): Promise<AgentsWithKeysPage> {
   const plain = await listAgents({ limit: AGENTS_PAGE });
   return {
+    // The rest of the page as the API sent it (`pageInfo`: next cursor, has more).
+    ...(plain as unknown as Omit<AgentsWithKeysPage, "items">),
     keysHiddenFor: plain.items.map((agent) => agent.agentId),
     items: plain.items.map((agent) => ({
       ...(agent as unknown as AgentsWithKeysPage["items"][number]),

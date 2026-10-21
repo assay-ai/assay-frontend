@@ -62,7 +62,11 @@ describe("readAgentsWithKeys", () => {
   it("falls back to the plain list when the keys are refused, and marks them hidden", async () => {
     refuseInclude.error = new ApiError("AUTH_HUMAN_SESSION_REQUIRED", "needs a person", 403);
     answer.items = [{ agentId: "a-1", label: "Funded" }];
+    (answer as Record<string, unknown>).pageInfo = { nextCursor: "c-2", hasMore: true };
     const page = await readAgentsWithKeys();
+    delete (answer as Record<string, unknown>).pageInfo;
+    // Review: the page's cursor survives the fallback.
+    expect((page as unknown as { pageInfo: unknown }).pageInfo).toEqual({ nextCursor: "c-2", hasMore: true });
     expect(calls).toEqual([{ limit: 50, include: "credentials,health" }, { limit: 50 }]);
     expect(page.keysHiddenFor).toEqual(["a-1"]);
     expect(page.items.map((agent) => agent.agentId)).toEqual(["a-1"]);
