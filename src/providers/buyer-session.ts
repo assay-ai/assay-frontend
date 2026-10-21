@@ -207,6 +207,21 @@ export interface UnauthorizedInput {
   previous: string | null | undefined;
   /** A public shell is on screen (`onPublicShell()`): the 404 page, at an address that is not a public path. */
   publicShell?: boolean;
+  /** This tab holds an OAuth consent request id (`hasRequestId()` in `features/oauth/request-id.ts`). */
+  consentRequest?: boolean;
+}
+
+/**
+ * The two sign-in pages of an app connection that a signed-out visitor must
+ * still see (BUG-BUY-CONNECT-02): the error page always (it says why the app
+ * could not connect), and the consent page while it has no request to sign in
+ * for (it says the request is missing). With a request, the consent page still
+ * goes to sign-in. No other page is exempt.
+ */
+export function showsSignedOut(pathname: string, consentRequest: boolean): boolean {
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  if (path === "/connect/authorize-error") return true;
+  return path === "/connect/authorize" && !consentRequest;
 }
 
 /**
@@ -225,6 +240,7 @@ export interface UnauthorizedInput {
  */
 export function unauthorizedTarget(input: UnauthorizedInput): string {
   if (isPublicPath(input.pathname) || input.publicShell) return `${input.pathname}${input.search}`;
+  if (showsSignedOut(input.pathname, input.consentRequest === true)) return `${input.pathname}${input.search}`;
   const hadSession = typeof input.previous === "string";
   if (!hadSession && input.pathname === "/") return "/how-it-works";
   return loginHref({ next: `${input.pathname}${input.search}`, reason: hadSession ? "expired" : undefined });

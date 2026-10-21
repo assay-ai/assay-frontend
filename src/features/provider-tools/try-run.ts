@@ -61,6 +61,9 @@ export function tryErrorView(error: unknown): TryErrorView {
     }
     case "TOOL_PROVIDER_TOOL_NOT_ALLOWED":
       return { text: "Register as a provider before trying an endpoint.", problems: [], operations: [] };
+    case "PAYLOAD_TOO_LARGE":
+      // BUG-PRV-SETUP-01: the API answers an oversized paste 413 now, not 500.
+      return { text: "This is too large to try. Paste a shorter command or document, or only the operation you want to list.", problems: [], operations: [] };
     case "PROVIDER_EGRESS_RATE_LIMITED":
       return { text: "Too many test runs in a short time. Wait a minute and try again.", problems: [], operations: [] };
     default:
