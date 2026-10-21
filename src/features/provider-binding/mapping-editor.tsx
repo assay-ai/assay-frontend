@@ -1130,8 +1130,9 @@ export function MappingEditor({
     let parsed: unknown;
     try {
       parsed = JSON.parse(next) as unknown;
-    } catch (error) {
-      setJsonError(error instanceof Error ? error.message : "This is not JSON.");
+    } catch {
+      // The parser's own message differs per browser; the sentence does not.
+      setJsonError("This is not JSON.");
       return;
     }
     if (!isObject(parsed)) {
