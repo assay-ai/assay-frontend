@@ -17,7 +17,7 @@ import { chainDisplayName } from "@/services/chains.service";
 import { getSpendPolicyTyped, type SpendPolicy } from "@/services/limits.service";
 import { chainIdOfAccount } from "@/utils/chain";
 
-import { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys } from "@/features/agents/agent-list";
+import { AGENT_KEYS_HIDDEN, AGENTS_WITH_KEYS_KEY, readAgentsWithKeys } from "@/features/agents/agent-list";
 
 import { useEscrowQuery } from "./use-buyer-money";
 import { useDelegatesQuery } from "./use-delegates";
@@ -88,17 +88,26 @@ export interface AgentWithKeys extends AgentRow {
 
 export interface AgentsWithKeysPage {
   items: AgentWithKeys[];
+  /**
+   * The keys were not shown to this session (an agent-kind session, BUG-DEMO-02):
+   * the agents are the plain list, and their keys and health are unknown.
+   */
+  keysHidden?: true;
 }
 
 export { AGENTS_WITH_KEYS_KEY, readAgentsWithKeys };
 
+const KEYS_HIDDEN_ERROR = new ApiError(AGENT_KEYS_HIDDEN, "Agent keys are not shown to an agent session", 403);
+
 /** The keys map the screens read, by agent id. */
 export function keysByAgent(page: AgentsWithKeysPage): Record<string, KeyRow[]> {
+  if (page.keysHidden) return {};
   return Object.fromEntries((page.items ?? []).map((agent) => [agent.agentId, agent.credentials.items]));
 }
 
 /** Each agent's key health, by agent id. */
 export function healthByAgent(page: AgentsWithKeysPage): Record<string, AgentHealth> {
+  if (page.keysHidden) return {};
   return Object.fromEntries((page.items ?? []).map((agent) => [agent.agentId, agent.health]));
 }
 
@@ -143,7 +152,8 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
   });
   const { data: page, refetch } = query;
   const agents = React.useMemo(() => page?.items ?? [], [page]);
-  const keys = React.useMemo(() => (page ? keysByAgent(page) : undefined), [page]);
+  const keysHidden = page?.keysHidden === true;
+  const keys = React.useMemo(() => (page && !page.keysHidden ? keysByAgent(page) : undefined), [page]);
   const health = React.useMemo(() => (page ? healthByAgent(page) : {}), [page]);
   // Agents and keys come in one answer. The agents read as failed only when
   // there is nothing to show; a failed refresh (a poll) marks the keys
@@ -156,14 +166,18 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     isSuccess: page !== undefined,
     refetch,
   };
-  const keysQuery: QueryPart<Record<string, KeyRow[]>> = {
-    data: keys,
-    error: query.error,
-    isPending: query.isPending,
-    isError: query.isError,
-    isSuccess: query.isSuccess,
-    refetch,
-  };
+  // Keys not shown to this session: a failed read of the keys only, with its own
+  // sentence (plainApiError), so the agents still show (BUG-DEMO-02).
+  const keysQuery: QueryPart<Record<string, KeyRow[]>> = keysHidden
+    ? { data: undefined, error: KEYS_HIDDEN_ERROR, isPending: false, isError: true, isSuccess: false, refetch }
+    : {
+        data: keys,
+        error: query.error,
+        isPending: query.isPending,
+        isError: query.isError,
+        isSuccess: query.isSuccess,
+        refetch,
+      };
 
   const delegationOn = agents.some((a) => supportsDelegation(a.agentAccount));
   const delegatesQuery = useDelegatesQuery({ enabled: delegationOn, pollMs: poll });
@@ -188,6 +202,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
         agentAccount: agent.agentAccount,
         credentials: keys?.[agent.agentId],
         credentialsUnreadable: keysQuery.isError,
+        credentialsHidden: keysHidden,
         delegates,
         delegatesUnreadable: delegatesQuery.isError,
         escrow: escrowQuery.data,
@@ -198,7 +213,7 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
       });
     }
     return map;
-  }, [agents, keys, keysQuery.isError, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
+  }, [agents, keys, keysQuery.isError, keysHidden, delegates, delegatesQuery.isError, escrowQuery.data, escrowQuery.isError, policyQuery.data, freeOnlyChainName, debtOwed]);
 
   return {
     agentsQuery,
@@ -214,6 +229,8 @@ export function useAgentsAndKeys(options: { pollMs?: number | false } = {}) {
     readiness,
     /** The escrow's chain name when it serves free calls only, else `null`. */
     freeOnlyChainName: freeOnlyChainName(escrowQuery.data?.account),
+    /** The keys are not shown to this session (agent-kind): say so, offer no retry. */
+    keysHidden,
     refetchKeys: () => void refetch(),
     refetchDelegates: () => void delegatesQuery.refetch(),
   };

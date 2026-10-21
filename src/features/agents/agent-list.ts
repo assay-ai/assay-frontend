@@ -4,7 +4,7 @@ import { useQuery, type QueryFunctionContext } from "@tanstack/react-query";
 
 import type { AgentsWithKeysPage } from "@/components/buyer-money/use-agents";
 import type { CursorPage } from "@/interfaces";
-import { ApiError } from "@/libs/ApiClient";
+import { ACCOUNT_BLOCKED_CODES, ApiError } from "@/libs/ApiClient";
 import { listAgents, type Agent } from "@/services/account.service";
 
 /**
@@ -29,7 +29,13 @@ export const AGENTS_WITH_KEYS_KEY = ["agents", "with-keys"] as const;
  * `private, no-cache`, so an unchanged list costs a 304.
  */
 export async function readAgentsWithKeys(): Promise<AgentsWithKeysPage> {
-  const page = (await listAgents({ limit: AGENTS_PAGE, include: "credentials,health" })) as unknown as AgentsWithKeysPage;
+  let page: AgentsWithKeysPage;
+  try {
+    page = (await listAgents({ limit: AGENTS_PAGE, include: "credentials,health" })) as unknown as AgentsWithKeysPage;
+  } catch (error) {
+    if (!keysRefused(error)) throw error;
+    return readAgentsWithoutKeys();
+  }
   // A row without its keys would read as "No key": refuse it as a failed read instead.
   if ((page.items ?? []).some((agent) => !agent.credentials || !agent.health)) {
     throw new ApiError("AGENT_KEYS_MISSING", "The agents came back without their keys", 0);
@@ -37,6 +43,48 @@ export async function readAgentsWithKeys(): Promise<AgentsWithKeysPage> {
   return page;
 }
 
+
+/** The code `useAgentsAndKeys` reports when the keys were not shown to this session. */
+export const AGENT_KEYS_HIDDEN = "AGENT_KEYS_HIDDEN";
+
+/**
+ * The include was refused (403), not the list: an agent-kind session may not
+ * read the keys (`AUTH_HUMAN_SESSION_REQUIRED`), while the plain list is open
+ * to it (BUG-DEMO-02). A blocked account's refusal is not this case.
+ */
+function keysRefused(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 403 && !ACCOUNT_BLOCKED_CODES.has(error.code);
+}
+
+const NO_HEALTH = {
+  evaluatedAt: "",
+  liveKeyCount: 0,
+  unrevokedKeyCount: 0,
+  keyBound: false,
+  boundKeyCount: 0,
+  firstCallSeen: false,
+  lastUsedAt: null,
+  earliestLastUsedAt: null,
+  lastUsedAtAnyKey: null,
+};
+
+/**
+ * The plain list, marked `keysHidden`: the agents show, their keys and health
+ * read as "not shown to this session" (`keysByAgent`/`healthByAgent` give
+ * nothing for it), never as "no key". The empty `credentials` and `health`
+ * only keep the row's shape.
+ */
+async function readAgentsWithoutKeys(): Promise<AgentsWithKeysPage> {
+  const plain = await listAgents({ limit: AGENTS_PAGE });
+  return {
+    keysHidden: true,
+    items: plain.items.map((agent) => ({
+      ...(agent as unknown as AgentsWithKeysPage["items"][number]),
+      credentials: { items: [], hasMore: false },
+      health: NO_HEALTH,
+    })),
+  };
+}
 
 /**
  * The plain list, unless the screen is reading the richer one anyway: then it
