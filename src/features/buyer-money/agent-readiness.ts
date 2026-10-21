@@ -115,7 +115,8 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       grant: null,
       boundCredentials: [],
       freeOnly: Boolean(input.freeOnlyChain),
-      loading: !input.credentialsUnreadable,
+      // Hidden keys are settled, not pending: never a skeleton that never ends.
+      loading: !input.credentialsUnreadable && !input.credentialsHidden,
       status: "checking",
       sentence: input.credentialsHidden
         ? input.freeOnlyChain

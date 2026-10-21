@@ -38,6 +38,8 @@ describe("agent readiness while its data loads", () => {
     const hidden = { credentials: undefined, credentialsUnreadable: true, credentialsHidden: true, delegates: [], escrow, paused: false };
     const r = agentReadiness({ agentAccount: evm, ...hidden }, now);
     expect(r.loading).toBe(false);
+    // Review I1: a hidden agent among readable ones (the keys read itself succeeded) settles too.
+    expect(agentReadiness({ agentAccount: evm, ...hidden, credentialsUnreadable: false }, now).loading).toBe(false);
     expect(r.status).not.toBe("no-key");
     expect(r.sentence).toBe("Its keys show when you sign in as yourself, not with an agent key. This does not change what it can call.");
     const solana = agentReadiness({ agentAccount: "solana:x:abc", ...hidden, freeOnlyChain: "Solana devnet" }, now);

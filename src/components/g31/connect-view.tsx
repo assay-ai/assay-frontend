@@ -64,7 +64,10 @@ export function ConnectView() {
       setNarrowing(true);
     }
   }, []);
-  const agent = data.agents[0] ?? null;
+  // An agent session is shown its own agent's keys only (BUG-DEMO-02): this page is about that agent.
+  const agent = data.agents.find((a) => !data.keysHiddenFor.has(a.agentId)) ?? data.agents[0] ?? null;
+  // Its keys not shown to this session: unknown, never "no key".
+  const keysHidden = agent !== null && data.keysHiddenFor.has(agent.agentId);
   const servers = useAgentServers(agent?.agentId, { pollMs: poll });
   // Keys, last call and prefix all belong to the one agent this page hands URLs and keys out for.
   const live = (agent ? (data.keys[agent.agentId] ?? []) : [])
@@ -83,7 +86,7 @@ export function ConnectView() {
   const firstCallSeen = agent ? data.health[agent.agentId]?.firstCallSeen === true : false;
   const done = waitingOnRoot ? false : rootCalled || firstCallSeen;
   React.useEffect(() => setPoll(done ? false : POLL_MS), [done]);
-  const failed = data.agentsQuery.isError || data.keysQuery.isError;
+  const failed = data.agentsQuery.isError || data.keysQuery.isError || keysHidden;
   const recordConnect = useRecordConnect(agent?.agentId);
     const url = mcpEndpointUrl();
 
@@ -119,7 +122,7 @@ export function ConnectView() {
           client={client}
           onClientChange={setClient}
           onCopy={(c, copied) => agent && recordConnect.mutate({ url: copied ?? urlForClient(c, url), serverName: "assay", client: c })}
-          onCreateKey={agent ? () => create.mutate() : undefined}
+          onCreateKey={agent && !keysHidden ? () => create.mutate() : undefined}
           agentName={agent?.label ?? null}
           creatingKey={create.isPending}
           createKeyError={create.isError ? createKeyErrorText(create.error) : null}

@@ -110,6 +110,27 @@ describe("the agent card while its keys load", () => {
     expect(out).not.toMatch(/no live key|could not be loaded/i);
   });
 
+  // Review I1: be-g3b nests keys for the session's own agent only, so another agent's are hidden.
+  it("with two agents and one hidden, shows one normal card and one keys-hidden card, no skeleton", () => {
+    const OTHER = "22222222-2222-2222-2222-222222222222";
+    const html = render((client) =>
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, {
+        ...demoAgentsWithKeys({
+          items: [
+            { agentId: AGENT, label: "My agent", agentAccount: ACCOUNT },
+            { agentId: OTHER, label: "Other agent", agentAccount: ACCOUNT },
+          ],
+        }),
+        keysHiddenFor: [OTHER],
+      }),
+    );
+    const out = text(html);
+    expect(html.match(/data-testid="agent-card"/g)?.length).toBe(2);
+    expect(html.match(/data-testid="keys-hidden"/g)?.length).toBe(1);
+    expect(html).not.toContain("agent-card-loading");
+    expect(out).toContain("No live key");
+  });
+
   it("on a failed first read, the page says it could not load the agents", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
     client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
