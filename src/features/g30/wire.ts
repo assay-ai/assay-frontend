@@ -95,6 +95,12 @@ export interface Receipt {
   debt?: CallDebt | null;
   /** The recorded cause behind `forfeited` or `debt`, e.g. `uncollected:DelegateIsRevoked`. */
   chargeNote?: string | null;
+  /**
+   * SETTLED, and an upheld report cancelled the charge (`debt` VOIDED,
+   * `chargeNote` `voided:DISPUTE_UPHELD`). Absent on older servers, which
+   * only leave the note.
+   */
+  refundedByReport?: boolean;
   verdict: ReceiptVerdict;
   stages: ReceiptStage[];
   policy: ReceiptPolicy;

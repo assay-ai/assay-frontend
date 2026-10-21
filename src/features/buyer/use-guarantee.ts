@@ -9,6 +9,7 @@ import { listVerdicts, type VerdictRow } from "@/services/guarantee.service";
 import { plain } from "@/libs/plain-language";
 import { notCharged, toDecimal } from "@/utils/money";
 
+import { neverRan } from "./call-outcome";
 import { bucketOfStatus } from "./not-charged";
 import { monthPeriod, recentMonths, sumMoney, type Period } from "./period";
 import { readWithheld, type SummaryWire, type WithheldForAsset } from "./wire";
@@ -115,6 +116,11 @@ export interface GuaranteeData {
   reasonsComplete: boolean;
   months: MonthRow[];
   freeTier: FreeTier | null;
+  /**
+   * EXPIRED calls that never held money (`withheld` zero): they never ran, so
+   * they are in no not-charged line or total. Told apart, never as a reason.
+   */
+  notRunCalls: number;
 }
 
 export interface GuaranteeState {
@@ -151,7 +157,9 @@ function notCollected(call: ToolCall): boolean {
  *  - EXPIRED: did not finish in time;
  *  - SETTLED, forfeited or debt voided: not collected.
  * Each row also carries its bucket, so the screen nests reasons under the
- * same lines as the totals.
+ * same lines as the totals. An EXPIRED call that never held money (newer
+ * servers send `withheld` zero) never ran: it is in no line (`GET /withheld`
+ * leaves it out too), so it is no reason either.
  */
 export function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureReason[] {
   const reasonByIntent = new Map(verdicts.map((v) => [v.intentId, v.reasonCode]));
@@ -171,6 +179,7 @@ export function foldReasons(verdicts: VerdictRow[], calls: ToolCall[]): FailureR
   for (const call of calls) {
     if (!(NOT_CHARGED_STATUSES.has(call.status) || notCollected(call)) || !toDecimal(call.charged).isZero()) continue;
     if (toDecimal(call.price).isZero()) continue; // free-tier calls are counted separately
+    if (neverRan(call)) continue; // nothing was held: not in any not-charged line
     const bucket = bucketOfStatus(call.status) ?? "PROVIDER_OR_PLATFORM_ERROR";
     const { key: reason, label } = reasonOf(call, reasonByIntent.get(call.intentId) ?? null);
     // Keyed by bucket too: a late FAIL that voided a debt is not collected, not a refund.
@@ -319,6 +328,7 @@ export function useGuarantee(anchor: Date, monthsBack = 3, assetKey: string | nu
         const calls = callR.status === "fulfilled" ? callR.value : { items: [], complete: true };
         const monthRows = monthR.status === "fulfilled" ? monthR.value : [];
         const freeCalls = calls.items.filter((c) => toDecimal(c.price).isZero());
+        const notRunCalls = calls.items.filter((c) => !toDecimal(c.price).isZero() && neverRan(c)).length;
 
         setData({
           period,
@@ -339,6 +349,7 @@ export function useGuarantee(anchor: Date, monthsBack = 3, assetKey: string | nu
             freeCalls.length > 0
               ? { calls: freeCalls.length, listed: sumMoney(freeCalls.map((c) => c.price), null) }
               : null,
+          notRunCalls,
         });
         // Only a total failure is the page's error; a partial one is a section's.
         setError(

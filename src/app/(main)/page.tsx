@@ -524,7 +524,7 @@ export default function OverviewPage() {
                                   ? `${formatMoney(call.price, { decimals: 4 })} owed`
                                   : formatMoney(call.charged, { decimals: 4 })}
                           </span>
-                          {toDecimal(uncharged).gt(0) && outcome !== "checking" && outcome !== "owed" ? (
+                          {toDecimal(uncharged).gt(0) && outcome !== "checking" && outcome !== "owed" && outcome !== "not-run" ? (
                             <span className="font-mono text-mono-xs text-teal-600">
                               {formatMoney(uncharged, { decimals: 4 })} not charged
                             </span>

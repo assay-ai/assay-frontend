@@ -46,7 +46,20 @@ export function isRefundedByReport(chargeNote: string | null | undefined): boole
   return voidedOutcome(chargeNote) === "DISPUTE_UPHELD";
 }
 
-export function collectionView(state: CollectionState, receipt: Pick<Receipt, "listedPrice" | "chargeNote">): CollectionView {
+/**
+ * Whether an upheld report cancelled this call's charge: the server's own
+ * `refundedByReport` when it sends one (receipt and call row), else the
+ * `voided:DISPUTE_UPHELD` note an older server leaves (BUG-X-01).
+ */
+export function receiptRefundedByReport(receipt: {
+  refundedByReport?: boolean | null;
+  chargeNote?: string | null;
+}): boolean {
+  if (typeof receipt.refundedByReport === "boolean") return receipt.refundedByReport;
+  return isRefundedByReport(receipt.chargeNote);
+}
+
+export function collectionView(state: CollectionState, receipt: Pick<Receipt, "listedPrice" | "chargeNote" | "refundedByReport">): CollectionView {
   const listed = formatMoney(receipt.listedPrice, { decimals: 4 });
   const cause = receipt.chargeNote ? debtCauseText(receipt.chargeNote) : null;
   switch (state) {
@@ -71,7 +84,7 @@ export function collectionView(state: CollectionState, receipt: Pick<Receipt, "l
         timeline: { label: "Written off: hold released, provider not paid", meta: `${listed} still owed by you` },
       };
     case "DEBT_VOIDED": {
-      if (isRefundedByReport(receipt.chargeNote)) {
+      if (receiptRefundedByReport(receipt)) {
         return {
           owed: false,
           headline: "Refunded: your report was accepted",
