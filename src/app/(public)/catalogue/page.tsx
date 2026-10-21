@@ -401,16 +401,19 @@ export default function CataloguePage() {
             kind="empty"
             title={needle ? `Nothing matches “${query.trim()}”` : freeOnly ? "No tool has free calls right now" : "No tool of this kind yet"}
             description={
-              view === "tools"
+              view === "tools" && topic && !needle && !freeOnly && kind === "all"
+                ? "No tool is filed under this topic yet."
+                : view === "tools"
                 ? `Search looks at a tool's name and description${freeOnly ? ", among tools with free calls" : ""}.`
                 : "Search looks at a provider's name."
             }
             action={{
-              label: (freeOnly || kind !== "all") && view === "tools" ? "Show all tools" : "Clear the search",
+              label: (freeOnly || kind !== "all" || topic) && view === "tools" ? "Show all tools" : "Clear the search",
               onClick: () => {
                 setQuery("");
                 setFreeOnly(false);
                 setKind("all");
+                setTopic(null);
               },
             }}
           />
