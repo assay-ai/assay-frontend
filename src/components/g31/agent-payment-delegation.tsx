@@ -395,7 +395,7 @@ export function PayerDelegationsPanel({
                 </span>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <StatusPill
                 label={
                   delegation.status === "EXPIRED" ? "EXPIRED" : "CAN PAY"
@@ -1228,12 +1228,13 @@ export function GrantActions({
       ? { node: budgetNote, dirty: false, validate: () => true, save: async () => undefined }
       : undefined;
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-2">
       {showChange ? (
         <Button
           variant="secondary"
           size="sm"
           type="button"
+          className="max-w-full"
           data-testid="edit-agent-delegate"
           disabled={!escrowCanDelegate(ctx.escrowQuery.data)}
           onClick={() => setEditing({ delegateAccount: delegation.delegate, boundAt, current: delegation })}
@@ -1246,7 +1247,7 @@ export function GrantActions({
           variant="secondary"
           size="sm"
           type="button"
-          className="text-danger-600"
+          className="max-w-full text-danger-600"
           data-testid="revoke-agent-delegate"
           onClick={() => setRevoking(delegation)}
         >
