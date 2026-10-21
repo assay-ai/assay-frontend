@@ -164,6 +164,18 @@ describe("wallet prompt text", () => {
     });
   });
 
+  it("leaves the counter out after a step that may need no prompt (review M7)", async () => {
+    const seen: unknown[] = [];
+    await runWalletSteps([
+      { id: "approve", label: "Approve USDG", cost: "gas", mayNotPrompt: true, run: async ({ prompt }) => void seen.push(prompt) },
+      { id: "deposit", label: "Deposit 20 USDG", cost: "gas", promptDescription: "Into your escrow.", run: async ({ prompt }) => void seen.push(prompt) },
+    ]);
+    expect(seen).toEqual([
+      { title: "Approve USDG", description: "Signature 1 of 2." },
+      { title: "Deposit 20 USDG", description: "Into your escrow." },
+    ]);
+  });
+
   it("hands each step its prompt", async () => {
     const seen: unknown[] = [];
     await runWalletSteps([

@@ -51,7 +51,6 @@ export function withdrawPauseWarning(chainName: string | null): string {
   return `While this request is open (about 1 h), every agent's paid calls on ${chainName ?? "this chain"} stop, even for a partial amount. Free calls keep working.`;
 }
 
-/** The tick that confirms the pause and the payout, beside the warning. */
 /**
  * True only when `GET /escrow` says the withdrawal path is frozen (the last
  * reconciliation was CRITICAL, lot 1 D16). Unknown (`null`) and an older
@@ -70,6 +69,7 @@ function FrozenBanner() {
   );
 }
 
+/** The tick that confirms the pause and the payout, beside the warning. */
 export function withdrawAcknowledgement(chainName: string | null): string {
   return `I understand paid calls on ${chainName ?? "this chain"} stop until I claim or cancel this, and I may receive less than I ask for.`;
 }

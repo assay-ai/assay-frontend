@@ -7,13 +7,14 @@ import { debtRefusalSentence } from "@/libs/buyer-debt";
 import { isRailNotOffered, railNotOfferedText } from "@/libs/chains/paid-rails";
 import { knowsError, plainApiError, plainError } from "@/libs/plain-language";
 
+/** Said up front when `GET /escrow` reports `withdrawalsFrozen`, and on the refusal itself. */
+export const WITHDRAWALS_FROZEN_TEXT =
+  "Withdrawals are paused for everyone while we check a reconciliation difference. Nothing was taken from your escrow. Try again later.";
+
 /**
  * One sentence for a failed money action (deposit, caps, withdraw, claim,
  * pay permission). The raw message stays under SignAction's Details.
  */
-/** Said up front when `GET /escrow` reports `withdrawalsFrozen`, and on the refusal itself. */
-export const WITHDRAWALS_FROZEN_TEXT =
-  "Withdrawals are paused for everyone while we check a reconciliation difference. Nothing was taken from your escrow. Try again later.";
 
 const ESCROW_REFUSALS: Record<string, string> = {
   SETTLEMENT_WITHDRAWALS_FROZEN: WITHDRAWALS_FROZEN_TEXT,

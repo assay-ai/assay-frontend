@@ -58,9 +58,18 @@ export interface WalletStepPrompt {
   description?: string;
 }
 
-/** The prompt text of step `index` of `count`. */
-export function stepPrompt(step: Pick<WalletStep, "label" | "promptTitle" | "promptDescription">, index: number, count: number): WalletStepPrompt {
-  const description = [count > 1 ? `Signature ${index + 1} of ${count}.` : null, step.promptDescription ?? null]
+/**
+ * The prompt text of step `index` of `count`. `afterOptional`: an earlier step
+ * may have needed no prompt, so "Signature n of m" could be wrong and is left
+ * out (review M7).
+ */
+export function stepPrompt(
+  step: Pick<WalletStep, "label" | "promptTitle" | "promptDescription">,
+  index: number,
+  count: number,
+  afterOptional = false,
+): WalletStepPrompt {
+  const description = [count > 1 && !afterOptional ? `Signature ${index + 1} of ${count}.` : null, step.promptDescription ?? null]
     .filter(Boolean)
     .join(" ");
   return { title: step.promptTitle ?? step.label, ...(description ? { description } : {}) };
@@ -185,7 +194,7 @@ export async function runWalletSteps(
       onChange?.(running);
     };
     try {
-      const prompt = stepPrompt(steps[index]!, index, steps.length);
+      const prompt = stepPrompt(steps[index]!, index, steps.length, steps.slice(0, index).some((s) => s.mayNotPrompt));
       const result = await steps[index]!.run({ results: [...results], report, previousAttempt, prompt });
       results[index] = { explorerUrl: submitted?.explorerUrl, ...(result ?? {}) };
     } catch (error) {
@@ -212,7 +221,6 @@ export function lastExplorerUrl(results: readonly (WalletStepResult | undefined)
   return undefined;
 }
 
-/** "Signature 1 of 2" — the tracker headline. Single-step flows get no counter. */
 /**
  * Said under the button before a flow with more than one wallet prompt starts
  * (lot 1 D14), so the second signature never comes as a surprise.
@@ -223,6 +231,7 @@ export function signatureCountNote(steps: readonly Pick<WalletStep, "mayNotPromp
   return `${upTo}${steps.length} signatures in your wallet, one after the other`;
 }
 
+/** "Signature 1 of 2" — the tracker headline. Single-step flows get no counter. */
 export function trackerHeadline(count: number, state: WalletRunState, noun = "Signature"): string | null {
   if (count <= 1) return null;
   if (state.phase === "success") return `${count} of ${count} done`;
