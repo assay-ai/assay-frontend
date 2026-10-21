@@ -326,9 +326,11 @@ function EntriesEditor({ set }: { set: Toolset }) {
       )}
 
       {save.isError ? (
-        <p role="alert" className="flex items-start gap-1.5 text-body-13 text-danger-700" data-testid="entries-save-error">
+        <p className="flex items-start gap-1.5 text-body-13 text-danger-700" data-testid="entries-save-error">
           <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-          {errorText(save.error, "The change could not be saved")}
+          {save.error instanceof ApiError && save.error.code === "TOOLSET_INVALID"
+            ? "This change could not be saved: the tool set does not accept this rule."
+            : errorText(save.error, "The change could not be saved")}
         </p>
       ) : null}
 
@@ -538,7 +540,7 @@ export function RuleEditor({
         {providerTool ? (
           // One maker's own tool has one provider, which the server only accepts as "Any".
           <p className="text-body-xs text-03" data-testid="provider-tool-note">
-            This is one maker&apos;s own tool, so it has one provider and there is nothing to choose.
+            One maker&apos;s own tool: it has one provider, so there is nothing to choose.
           </p>
         ) : (
           <Segmented
