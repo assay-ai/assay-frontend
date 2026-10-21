@@ -9,11 +9,15 @@
  * the backend refuses it with `TOOL_MAPPING_NULL_VALUE` (BUG-J-POST-04).
  * This check stops that first run before it starts, and names the fields.
  *
- * Only the two refusals the input schema decides for certain are caught here:
- * a required field that is absent or `null`, and a `null` the schema does not
- * allow (`nullable: true` or a `"null"` type member allows it). Everything else
- * — types, ranges — stays the backend's, whose run report says it better.
- * Without a schema (the catalogue did not load) only the `null` rule applies.
+ * The refusals the input schema decides for certain are caught here: a
+ * required field that is absent or `null`, a `null` the schema does not allow
+ * (`nullable: true` or a `"null"` type member allows it), and — so a value the
+ * tool refuses is never dialled at the real upstream (BUG-PRV-CATALOG-07) — a
+ * top-level number outside `minimum`/`maximum` (exclusive ones too), a string
+ * outside `minLength`/`maxLength`, and a value not in `enum`. Types are checked
+ * where the text is read (`argumentsFromText`); anything deeper stays the
+ * backend's. Without a schema (the catalogue did not load) only the `null`
+ * rule applies.
  */
 export function argumentsProblem(
   args: Record<string, unknown>,
@@ -36,7 +40,52 @@ export function argumentsProblem(
     return `${list(nulls)} cannot be null: enter a value or remove ${nulls.length === 1 ? "it" : "them"}.`;
   }
 
+  for (const [name, value] of Object.entries(args)) {
+    const problem = boundsProblem(name, value, properties[name]);
+    if (problem) return problem;
+  }
+
   return null;
+}
+
+/** The range, length and enum rules of one top-level field, in words. */
+function boundsProblem(name: string, value: unknown, schema: unknown): string | null {
+  if (!isRecord(schema) || value === null || value === undefined) return null;
+  const field = `“${name}”`;
+  if (Array.isArray(schema.enum) && !schema.enum.some((option) => sameValue(option, value))) {
+    const options = schema.enum.filter((option) => typeof option === "string" || typeof option === "number").map(String);
+    return options.length > 0 && options.length <= 8
+      ? `${field} must be one of ${options.join(", ")}.`
+      : `${field} is not one of the values the tool takes.`;
+  }
+  if (typeof value === "number") {
+    const min = numberOr(schema.minimum);
+    const max = numberOr(schema.maximum);
+    // Draft 4 marks the bound exclusive with a boolean; later drafts give the bound itself.
+    const exclusiveMin = numberOr(schema.exclusiveMinimum) ?? (schema.exclusiveMinimum === true ? min : null);
+    const exclusiveMax = numberOr(schema.exclusiveMaximum) ?? (schema.exclusiveMaximum === true ? max : null);
+    if (exclusiveMin !== null && value <= exclusiveMin) return `${field} must be more than ${exclusiveMin}.`;
+    if (exclusiveMax !== null && value >= exclusiveMax) return `${field} must be less than ${exclusiveMax}.`;
+    if (min !== null && value < min) return `${field} must be at least ${min}.`;
+    if (max !== null && value > max) return `${field} must be at most ${max}.`;
+  }
+  if (typeof value === "string") {
+    const length = [...value].length;
+    const minLength = numberOr(schema.minLength);
+    const maxLength = numberOr(schema.maxLength);
+    if (minLength !== null && length < minLength) return `${field} must be at least ${minLength} character${minLength === 1 ? "" : "s"}.`;
+    if (maxLength !== null && length > maxLength) return `${field} must be at most ${maxLength} character${maxLength === 1 ? "" : "s"}.`;
+  }
+  return null;
+}
+
+function numberOr(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  return typeof a === "object" && typeof b === "object" && JSON.stringify(a) === JSON.stringify(b);
 }
 
 function allowsNull(schema: unknown): boolean {
