@@ -33,6 +33,18 @@ describe("agent readiness while its data loads", () => {
     expect(r.next).toBeNull();
   });
 
+  // BUG-DEMO-02: an agent-kind session sees the agent, not its keys.
+  it("says the keys are not shown to an agent session, with the free-calls-only line where it applies", () => {
+    const hidden = { credentials: undefined, credentialsUnreadable: true, credentialsHidden: true, delegates: [], escrow, paused: false };
+    const r = agentReadiness({ agentAccount: evm, ...hidden }, now);
+    expect(r.loading).toBe(false);
+    expect(r.status).not.toBe("no-key");
+    expect(r.sentence).toBe("Its keys show when you sign in as yourself, not with an agent key. This does not change what it can call.");
+    const solana = agentReadiness({ agentAccount: "solana:x:abc", ...hidden, freeOnlyChain: "Solana devnet" }, now);
+    expect(solana.sentence).toMatch(/^Free calls only: Solana devnet serves free calls only/);
+    expect(solana.freeOnly).toBe(true);
+  });
+
   it("says 'No key' only once the keys are read and there are none", () => {
     const r = agentReadiness({ agentAccount: evm, credentials: [], delegates: [], escrow, paused: false }, now);
     expect(r.loading).toBe(false);

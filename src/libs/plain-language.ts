@@ -315,6 +315,7 @@ const ERRORS: Record<string, string> = {
   AUTH_ORGANIZATION_SUSPENDED: "Your account is blocked by Assay. Contact support.",
   AUTH_HUMAN_SESSION_REQUIRED: "Sign in as yourself to do this; an agent key cannot.",
   ACCOUNT_BLOCKED: "This account is blocked. Contact support.",
+  AGENT_KEYS_HIDDEN: "Agent keys show when you sign in as yourself; an agent key cannot list them.",
   SPEND_LIMIT_EXCEEDED: "This call would go over your spend limit.",
   VELOCITY_LIMIT_EXCEEDED: "Spending too fast: this call was refused. Calls are allowed again in a moment.",
   POLICY_AGENT_PAUSED: "This agent is paused by its budget.",
