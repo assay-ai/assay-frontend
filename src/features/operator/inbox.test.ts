@@ -11,6 +11,8 @@ import {
   needsYouCount,
   needsYouWork,
   oldestCallDisputeDue,
+  RECONCILIATION_STALE_SECONDS,
+  reconciliationIssues,
   overdueToolRequests,
   staleChainData,
   staleChainSentence,
@@ -137,5 +139,35 @@ describe("D16: when Home may not look calm", () => {
     );
     expect(calmStateBlocker({ stale: null, unreadable: true })).toMatch(/^Can't confirm: chain data freshness could not be read/);
     expect(calmStateBlocker({ stale: null, unreadable: false })).toBeNull();
+  });
+});
+
+/* Lot 1 D16: operator Home says "All systems normal" only when reconciliation is OK and fresh. */
+describe("reconciliationIssues", () => {
+  const row = (severity: string, ageSeconds = 60) => ({
+    asset: "eip155:46630/erc20:0xabc",
+    differenceDisplay: 0,
+    severity,
+    ageSeconds,
+    gate: null,
+  });
+
+  it("is quiet when every asset is OK and fresh, and before the rows are read", () => {
+    expect(reconciliationIssues([row("OK")])).toEqual([]);
+    expect(reconciliationIssues(undefined)).toEqual([]);
+  });
+
+  it("names a critical or warning asset, a stale run, no run and an unreadable answer", () => {
+    expect(reconciliationIssues([row("CRITICAL")]).map((i) => i.text)).toEqual([
+      "Reconciliation critical on eip155:46630: withdrawals are frozen",
+    ]);
+    expect(reconciliationIssues([row("WARN")], { assetName: () => "Robinhood" }).map((i) => i.text)).toEqual([
+      "Reconciliation warning on Robinhood",
+    ]);
+    expect(reconciliationIssues([row("OK", RECONCILIATION_STALE_SECONDS + 60)]).map((i) => i.text)).toEqual([
+      "Reconciliation on eip155:46630 last ran 16 min ago",
+    ]);
+    expect(reconciliationIssues([]).map((i) => i.id)).toEqual(["recon:none"]);
+    expect(reconciliationIssues(undefined, { unreadable: true }).map((i) => i.id)).toEqual(["recon:unreadable"]);
   });
 });

@@ -8,7 +8,7 @@ import type {
   ChangeOperatorBody, CreateAccountBlockBody, ListAccountBlocksQuery, ListOverrideLogQuery,
   OperatorApproval, OperatorApprovalStatus, OperatorChallenge, OperatorDirectoryEntry,
   OperatorSignIn, OperatorStatus, OverrideLogEntry, RemoveOperatorBody, UnblockAccountBody,
-  CompensationIntent, OperatorCaseBrief, OperatorIdentity, PlatformHealth,
+  CompensationIntent, OperatorCaseBrief, OperatorDashboardData, OperatorIdentity, PlatformHealth,
   ListOperatorCasesQuery, OperatorCaseListRow,
   RecordCompensationBody,
   ManualCaseActionBody, ManualCaseActionResult,
@@ -53,6 +53,11 @@ export function getOperatorIdentity(): Promise<OperatorIdentity> {
 /** `GET /operator/health` — the six tiles. */
 export function getPlatformHealth(): Promise<PlatformHealth> {
   return operatorApi.get<PlatformHealth>("/operator/health");
+}
+
+/** `GET /operator/dashboard/data.json` — any operator; the console reads its reconciliation rows. */
+export function getOperatorDashboardData(): Promise<OperatorDashboardData> {
+  return operatorApi.get<OperatorDashboardData>("/operator/dashboard/data.json");
 }
 
 /**

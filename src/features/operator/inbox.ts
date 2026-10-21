@@ -4,6 +4,7 @@ import type {
   OperatorDirectoryEntry,
   OperatorIdentity,
   PlatformHealth,
+  ReconciliationAssetRow,
 } from "@/interfaces/operator";
 
 import { approveBlockedBecause, approverRolesFor, isOwnRequest } from "./approvals";
@@ -257,6 +258,38 @@ export function healthIssues(health: PlatformHealth): HealthIssue[] {
         id: `stale:${chain.chainId}`,
         text: chain.lagSeconds === null ? "Chain indexer has not caught up" : `Chain indexer ${lagText(chain.lagSeconds)} behind`,
       });
+    }
+  }
+  return issues;
+}
+
+/** The reconciliation job runs every 5 minutes; three missed runs and its answer is too old to call normal. */
+export const RECONCILIATION_STALE_SECONDS = 15 * 60;
+
+/**
+ * What the latest reconciliation runs say against "All systems normal" (lot 1
+ * D16): one issue per CRITICAL or WARN asset, one when a run is too old, one
+ * when none has run, and one when the rows could not be read. Empty only when
+ * every asset is OK and fresh. `assetName` turns a CAIP-19 id into a name.
+ */
+export function reconciliationIssues(
+  rows: readonly ReconciliationAssetRow[] | undefined,
+  options: { unreadable?: boolean; assetName?: (asset: string) => string } = {},
+): HealthIssue[] {
+  if (options.unreadable) return [{ id: "recon:unreadable", text: "Reconciliation could not be read" }];
+  if (!rows) return [];
+  if (rows.length === 0) return [{ id: "recon:none", text: "Reconciliation has not run yet" }];
+  // The asset's chain (CAIP-2, before the "/"), unless the caller names it better.
+  const name = options.assetName ?? ((asset: string) => asset.split("/")[0] ?? asset);
+  const issues: HealthIssue[] = [];
+  for (const row of rows) {
+    if (row.severity === "CRITICAL") {
+      issues.push({ id: `recon:critical:${row.asset}`, text: `Reconciliation critical on ${name(row.asset)}: withdrawals are frozen` });
+    } else if (row.severity !== "OK") {
+      issues.push({ id: `recon:warn:${row.asset}`, text: `Reconciliation warning on ${name(row.asset)}` });
+    }
+    if (row.ageSeconds > RECONCILIATION_STALE_SECONDS) {
+      issues.push({ id: `recon:stale:${row.asset}`, text: `Reconciliation on ${name(row.asset)} last ran ${lagText(row.ageSeconds)} ago` });
     }
   }
   return issues;

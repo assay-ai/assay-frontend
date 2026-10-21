@@ -209,6 +209,11 @@ export default function OperatorHome() {
     refetchInterval: 60_000,
     retry: 0,
   });
+  // "All systems normal" only when the latest reconciliation of every asset is OK and fresh (lot 1 D16).
+  const reconciliation = useQuery({
+    ...operatorQueries.reconciliation(),
+    refetchInterval: 60_000,
+  });
   const activeBlocks = useQuery({
     queryKey: ["operator", "blocks", "active-count"],
     queryFn: () => listAccountBlocks({ active: true, limit: 100 }),
@@ -586,7 +591,11 @@ export default function OperatorHome() {
       </section>
 
       {/* One line, closed by default, under the inbox: the figures are context, not tasks. */}
-      <HealthStrip health={health.data} error={health.isError} />
+      <HealthStrip
+        health={health.data}
+        error={health.isError}
+        reconciliation={{ rows: reconciliation.data, error: reconciliation.isError }}
+      />
     </>
   );
 }
