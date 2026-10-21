@@ -9,6 +9,7 @@ import {
   cursorDeeplink,
   installCommand,
   installText,
+  isInstallableUrl,
   KEY_PLACEHOLDER,
   KEY_PREFIX_VISIBLE_LENGTH,
   keyMode,
@@ -230,5 +231,20 @@ describe("a hosted connector gets one URL: copied, recorded and previewed", () =
       }
     }
     expect(urlForClient("claude-code", "https://mcp.goassay.ai/")).toBe("https://mcp.goassay.ai/");
+  });
+});
+
+// BUG-BUY-CONNECT-03: /connect/preview asks the same question the commands do.
+describe("isInstallableUrl", () => {
+  it("refuses a fragment, a space, '<' and credentials", () => {
+    for (const url of ["http://localhost:3200/#x", "http://localhost:3200/a b", "http://localhost:3200/<a", "http://u:p@localhost:3200/", "ftp://localhost/", "/relative"]) {
+      expect(isInstallableUrl(url)).toBe(false);
+    }
+  });
+
+  it("takes a canonical MCP URL", () => {
+    for (const url of ["http://localhost:3200/", "https://mcp.assay.ai/?tools=weather.get,geo.lookup", "https://mcp.assay.ai/t/acme"]) {
+      expect(isInstallableUrl(url)).toBe(true);
+    }
   });
 });
