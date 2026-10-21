@@ -297,6 +297,13 @@ export interface OperatorCaseBrief {
   /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;
   /**
+   * Why the last chain attempt failed (`chain_last_error`): a program error
+   * name, a local refusal code such as `PROVIDER_STAKE_AUTHORITY_UNPROVEN`, or
+   * `transport`. Null when the last attempt did not fail; absent from an older
+   * backend.
+   */
+  chainLastError?: string | null;
+  /**
    * B18: the three operator actions for a case stuck behind a requested
    * cancel the backend's sweep cannot settle, each with whether its guard
    * holds on the brief's own live chain read. The action reads the chain

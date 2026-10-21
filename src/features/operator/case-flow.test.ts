@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { OperatorCaseBrief, OperatorIdentity } from "@/interfaces/operator";
 
-import { caseAuthority, caseFacts, caseNextStep, caseTimelineSteps, cancelDeadlineSentence } from "./case-flow";
+import { caseAuthority, caseFacts, caseNextStep, caseTimelineSteps, cancelDeadlineSentence, chainErrorText } from "./case-flow";
 import { cancelDeadlineNotice } from "./state";
 
 /**
@@ -219,5 +219,47 @@ describe("not on chain past its computed dates", () => {
     const facts = caseFacts(b, NOW);
     expect(facts.notOnChainForDays).toBeNull();
     expect(caseNextStep(facts, caseAuthority(b, ADMIN, facts), fmt).title).toBe("Going on chain");
+  });
+});
+
+describe("a proposal whose last chain attempt failed (BUG-OPS-CASES-02)", () => {
+  const stuck = (chainLastError: string | null | undefined, executableAt = iso(NOW + DAY)) => ({
+    ...brief({ status: "PROPOSED", chainStatus: "PROPOSING", chainRecord: "GONE", executableAt }),
+    chainLastError,
+  });
+
+  it("names the plain reason instead of a healthy wait", () => {
+    const b = stuck("PROVIDER_STAKE_AUTHORITY_UNPROVEN");
+    const facts = caseFacts(b, NOW);
+    expect(facts.chainFailure).toMatch(/no proved stake wallet/);
+    const next = caseNextStep(facts, caseAuthority(b, ADMIN, facts), fmt);
+    expect(next.title).toBe("Not on chain yet: the last attempt failed");
+    expect(next.description).toMatch(/^The provider has no proved stake wallet on this chain/);
+    expect(next.description).toMatch(/tries again on its next pass/);
+  });
+
+  it("keeps the day count when its dates have passed", () => {
+    const b = stuck("transport", iso(NOW - 2 * DAY));
+    const facts = caseFacts(b, NOW);
+    expect(caseNextStep(facts, caseAuthority(b, ADMIN, facts), fmt).title).toBe("Not on chain after 5 days: the last attempt failed");
+    expect(facts.chainFailure).toMatch(/could not reach the chain/);
+  });
+
+  it("names an unknown code as it is", () => {
+    expect(chainErrorText("ProposalAlreadyExists")).toBe("The chain refused it (ProposalAlreadyExists).");
+  });
+
+  it("says Going on chain as before when no failure is sent (older backend) or it is null", () => {
+    for (const value of [undefined, null]) {
+      const b = stuck(value);
+      const facts = caseFacts(b, NOW);
+      expect(facts.chainFailure).toBeNull();
+      expect(caseNextStep(facts, caseAuthority(b, ADMIN, facts), fmt).title).toBe("Going on chain");
+    }
+  });
+
+  it("ignores a stored error once the penalty is on chain", () => {
+    const b = { ...brief({ status: "PROPOSED", chainStatus: "PENDING", chainRecord: "STANDING", executableAt: iso(NOW + DAY) }), chainLastError: "transport" };
+    expect(caseFacts(b, NOW).chainFailure).toBeNull();
   });
 });
