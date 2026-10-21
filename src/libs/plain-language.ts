@@ -1,4 +1,4 @@
-import { tooManyRequestsSentence } from "@/libs/ApiClient";
+import { tooManyRequestsSentenceAt } from "@/libs/ApiClient";
 import { NOTIFICATION_EVENT_LABEL } from "@/components/g31/notification-catalogue";
 
 /**
@@ -470,17 +470,22 @@ export function plainError(code: string | null | undefined, status?: number): st
 
 /**
  * `plainError` for an error object. A 429 carries the wait the server named
- * (`retryAfterSeconds`), so the sentence says it; every other code is
- * `plainError(code, status)`.
+ * (`retryAt`, from `Retry-After`), so the sentence says the seconds still
+ * left at `nowMs`; every other code is `plainError(code, status)`. A screen
+ * that keeps the sentence up uses `ApiErrorSentence`, which counts it down.
  */
-export function plainApiError(error: {
-  code?: string | null;
-  status?: number;
-  retryAfterSeconds?: number | null;
-  message?: string;
-  context?: Readonly<Record<string, unknown>>;
-}): string {
-  if (error.code === "TOO_MANY_REQUESTS") return tooManyRequestsSentence(error.retryAfterSeconds);
+export function plainApiError(
+  error: {
+    code?: string | null;
+    status?: number;
+    retryAfterSeconds?: number | null;
+    retryAt?: number | null;
+    message?: string;
+    context?: Readonly<Record<string, unknown>>;
+  },
+  nowMs: number = Date.now(),
+): string {
+  if (error.code === "TOO_MANY_REQUESTS") return tooManyRequestsSentenceAt(error, nowMs);
   if (error.code === "ACCOUNT_BLOCKED" && namesOwnAccount(error.message, error.context)) return OWN_ACCOUNT_BLOCKED;
   return plainError(error.code, error.status);
 }

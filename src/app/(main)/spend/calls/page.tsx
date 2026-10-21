@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { PageHeader } from "@/components/g31/chrome";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { EntityName } from "@/components/patterns/entity-name";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
 import { REFUNDABLE_ROW } from "@/features/buyer-money/funding-lines";
@@ -31,7 +32,7 @@ import {
 } from "@/features/buyer/call-outcome";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { listToolCalls } from "@/services/tool-calls.service";
 import { cn } from "@/utils";
@@ -176,7 +177,7 @@ function CallsList() {
       ) : query.isError ? (
         <PageState
           kind="error"
-          description={query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
+          description={query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
           onRetry={() => void query.refetch()}
           code={query.error instanceof ApiError ? query.error.code : null}
           details={query.error.message}

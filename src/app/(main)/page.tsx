@@ -10,6 +10,7 @@ import { ALERT_ICON, presentAlert, useAlertLimitContext, useMarkAlertsRead } fro
 import { AgentHealthList } from "@/components/buyer-money/agent-health";
 import { GetStarted, useGetStartedShown } from "@/components/buyer-money/get-started";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { Button } from "@/components/ui/button";
 import { EntityName } from "@/components/patterns/entity-name";
 import { UtcTime } from "@/components/patterns/utc-time";
@@ -47,7 +48,6 @@ import { ATTENTION_SHOWN, useOverview } from "@/features/buyer/use-overview";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -244,7 +244,7 @@ export default function OverviewPage() {
         <PageState
           kind="error"
           title="The overview could not be loaded"
-          description={plainApiError(error)}
+          description={<ApiErrorSentence error={error} />}
           onRetry={reload}
           code={error.code}
           details={error.message}
