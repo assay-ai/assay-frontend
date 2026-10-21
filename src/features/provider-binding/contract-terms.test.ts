@@ -171,7 +171,7 @@ describe("the publish check, one tester row per major", () => {
     const check: Pick<PublishCheck, "requirements"> = {
       requirements: [
         { requirement: "TESTER_RUN", met: true, code: null, detail: "Contract v1: Run at revision 3.", major: 1 },
-        { requirement: "TESTER_RUN", met: false, code: "no_run", detail: "Contract v2: needs a new passing test", major: 2 },
+        { requirement: "TESTER_RUN", met: false, code: "no_run", detail: "Contract v2: No test has run at revision 3 yet.", major: 2 },
         { requirement: "TESTER_PASSED", met: true, code: null, detail: "Contract v1: Every layer passed.", major: 1 },
         { requirement: "TESTER_PASSED", met: false, code: "no_run", detail: "Contract v2: Run a passing test first.", major: 2 },
         stake,
