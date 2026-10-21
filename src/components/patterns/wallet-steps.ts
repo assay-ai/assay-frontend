@@ -43,6 +43,27 @@ export interface WalletStepContext {
    * `previousAttempt.data` (the tx hash) and resolve or throw from that.
    */
   previousAttempt?: WalletStepReport;
+  /**
+   * What the wallet's own confirmation should say for this step (lot 1 D14):
+   * the step's `promptTitle` (default its label) and its `promptDescription`,
+   * with "Signature 2 of 2." in front when the flow has more than one. Hand
+   * it to `withWalletPrompt` on the step's signer.
+   */
+  prompt?: WalletStepPrompt;
+}
+
+/** The text of a wallet prompt; the same shape as `WalletPromptText` in `useSigner`. */
+export interface WalletStepPrompt {
+  title?: string;
+  description?: string;
+}
+
+/** The prompt text of step `index` of `count`. */
+export function stepPrompt(step: Pick<WalletStep, "label" | "promptTitle" | "promptDescription">, index: number, count: number): WalletStepPrompt {
+  const description = [count > 1 ? `Signature ${index + 1} of ${count}.` : null, step.promptDescription ?? null]
+    .filter(Boolean)
+    .join(" ");
+  return { title: step.promptTitle ?? step.label, ...(description ? { description } : {}) };
 }
 
 export interface WalletStep {
@@ -57,6 +78,15 @@ export interface WalletStep {
    * never promises a prompt that does not come.
    */
   skip?: boolean;
+  /** The wallet prompt's title, with the amount; default `label`. */
+  promptTitle?: string;
+  /** One sentence for the wallet prompt: what this signature does, with the amount. */
+  promptDescription?: string;
+  /**
+   * This step may finish without a prompt (an approval the allowance already
+   * covers), so the sheet says "up to N signatures".
+   */
+  mayNotPrompt?: boolean;
   /**
    * Opens the wallet and resolves when this step is done (confirmed). Throw
    * (or reject) to stop the sequence. See `WalletStepContext` for `report`.
@@ -155,7 +185,8 @@ export async function runWalletSteps(
       onChange?.(running);
     };
     try {
-      const result = await steps[index]!.run({ results: [...results], report, previousAttempt });
+      const prompt = stepPrompt(steps[index]!, index, steps.length);
+      const result = await steps[index]!.run({ results: [...results], report, previousAttempt, prompt });
       results[index] = { explorerUrl: submitted?.explorerUrl, ...(result ?? {}) };
     } catch (error) {
       const state: WalletRunState =
@@ -182,6 +213,16 @@ export function lastExplorerUrl(results: readonly (WalletStepResult | undefined)
 }
 
 /** "Signature 1 of 2" — the tracker headline. Single-step flows get no counter. */
+/**
+ * Said under the button before a flow with more than one wallet prompt starts
+ * (lot 1 D14), so the second signature never comes as a surprise.
+ */
+export function signatureCountNote(steps: readonly Pick<WalletStep, "mayNotPrompt">[]): string | null {
+  if (steps.length <= 1) return null;
+  const upTo = steps.some((step) => step.mayNotPrompt) ? "Up to " : "";
+  return `${upTo}${steps.length} signatures in your wallet, one after the other`;
+}
+
 export function trackerHeadline(count: number, state: WalletRunState, noun = "Signature"): string | null {
   if (count <= 1) return null;
   if (state.phase === "success") return `${count} of ${count} done`;
@@ -203,6 +244,7 @@ export function simulatedSteps(steps: readonly WalletStep[], delayMs = 700): Wal
     label: step.label,
     cost: step.cost,
     skip: step.skip,
+    mayNotPrompt: step.mayNotPrompt,
     run: async ({ report }) => {
       report({ stage: "wallet" });
       await wait(delayMs);
