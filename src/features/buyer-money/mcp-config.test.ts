@@ -123,7 +123,7 @@ describe("install commands equal the proxy's vectors, byte for byte", () => {
   });
 
   it("the Cursor deeplink decodes to the stdio entry", () => {
-    const input = { V: "1.2.3", url: "https://mcp.assay.ai/my/weather", name: "assay-weather" };
+    const input = { V: "1.2.3", url: "https://mcp.goassay.ai/my/weather", name: "assay-weather" };
     const link = new URL(cursorDeeplink(input));
     expect(link.searchParams.get("name")).toBe("assay-weather");
     const config = JSON.parse(Buffer.from(link.searchParams.get("config")!, "base64").toString("utf8"));
@@ -131,14 +131,14 @@ describe("install commands equal the proxy's vectors, byte for byte", () => {
   });
 
   it("the VS Code link decodes to name, type, command and args", () => {
-    const input = { V: "1.2.3", url: "https://mcp.assay.ai/", name: "assay" };
+    const input = { V: "1.2.3", url: "https://mcp.goassay.ai/", name: "assay" };
     const decoded = JSON.parse(decodeURIComponent(vscodeDeeplink(input).slice("vscode:mcp/install?".length)));
     expect(decoded).toEqual({ name: "assay", type: "stdio", command: "npx", args: ["-y", "@goassay-ai/mcp@1.2.3", "--name", "assay"] });
   });
 
   it("refuses a version that is not exact", () => {
     for (const bad of ["", "1", "^1.2.3", "latest", "1.2"]) {
-      expect(() => installCommand("claude-code", { V: bad, url: "https://mcp.assay.ai/", name: "assay" })).toThrow();
+      expect(() => installCommand("claude-code", { V: bad, url: "https://mcp.goassay.ai/", name: "assay" })).toThrow();
     }
   });
 });
@@ -147,7 +147,7 @@ describe("the pinned version comes from the build environment", () => {
   it("reads NEXT_PUBLIC_ASSAY_MCP_VERSION", () => {
     vi.stubEnv("NEXT_PUBLIC_ASSAY_MCP_VERSION", "2.0.1");
     expect(assayMcpVersion()).toBe("2.0.1");
-    expect(installCommand("codex", { url: "https://mcp.assay.ai/", name: "assay" })).toContain("@goassay-ai/mcp@2.0.1");
+    expect(installCommand("codex", { url: "https://mcp.goassay.ai/", name: "assay" })).toContain("@goassay-ai/mcp@2.0.1");
     vi.unstubAllEnvs();
   });
 
@@ -155,7 +155,7 @@ describe("the pinned version comes from the build environment", () => {
     for (const bad of ["", "^1.0.0", "latest"]) {
       vi.stubEnv("NEXT_PUBLIC_ASSAY_MCP_VERSION", bad);
       expect(() => assayMcpVersion()).toThrow();
-      expect(() => installCommand("claude-code", { url: "https://mcp.assay.ai/", name: "assay" })).toThrow();
+      expect(() => installCommand("claude-code", { url: "https://mcp.goassay.ai/", name: "assay" })).toThrow();
     }
     vi.unstubAllEnvs();
   });
@@ -163,24 +163,24 @@ describe("the pinned version comes from the build environment", () => {
 
 describe("the API-key snippet", () => {
   it("is a remote entry with the key in a header, and only here", () => {
-    const out = JSON.parse(apiKeyConfig({ url: "https://mcp.assay.ai/", token: "assay_sk_live_k1" }));
-    expect(out.mcpServers.assay).toEqual({ type: "http", url: "https://mcp.assay.ai/", headers: { Authorization: "Bearer assay_sk_live_k1" } });
-    expect(apiKeyConfig({ url: "https://mcp.assay.ai/", token: null })).toContain(KEY_PLACEHOLDER);
+    const out = JSON.parse(apiKeyConfig({ url: "https://mcp.goassay.ai/", token: "assay_sk_live_k1" }));
+    expect(out.mcpServers.assay).toEqual({ type: "http", url: "https://mcp.goassay.ai/", headers: { Authorization: "Bearer assay_sk_live_k1" } });
+    expect(apiKeyConfig({ url: "https://mcp.goassay.ai/", token: null })).toContain(KEY_PLACEHOLDER);
   });
 });
 
 describe("hostile input produces no command and no deeplink", () => {
-  const good = { V: "1.2.3", url: "https://mcp.assay.ai/", name: "assay" };
+  const good = { V: "1.2.3", url: "https://mcp.goassay.ai/", name: "assay" };
   const names = ["x&config=AAAA", "a b", "A", "1a", "a_b", "a'b", "$(id)", "assay;rm", "n\u00e4me", "", "a".repeat(57)];
   const urls = [
-    "https://user:secret@mcp.assay.ai/my/x",
-    "https://mcp.assay.ai/#tok",
-    "https://mcp.assay.ai/a b",
-    'https://mcp.assay.ai/a"b',
-    "https://mcp.assay.ai/a'b",
+    "https://user:secret@mcp.goassay.ai/my/x",
+    "https://mcp.goassay.ai/#tok",
+    "https://mcp.goassay.ai/a b",
+    'https://mcp.goassay.ai/a"b',
+    "https://mcp.goassay.ai/a'b",
     "javascript:alert(1)",
-    "ftp://mcp.assay.ai/",
-    "https://mcp.assay.ai/caf\u00e9",
+    "ftp://mcp.goassay.ai/",
+    "https://mcp.goassay.ai/caf\u00e9",
     "not a url",
     "",
   ];
@@ -219,7 +219,7 @@ describe("hostile input produces no command and no deeplink", () => {
 describe("a hosted connector gets one URL: copied, recorded and previewed", () => {
   it("carries free=1 for claude.ai and ChatGPT, from the single source", () => {
     for (const client of ["claude-ai", "chatgpt"] as const) {
-      for (const base of ["https://mcp.assay.ai/", "https://mcp.assay.ai/my/weather", "https://mcp.assay.ai/?tools=a_b&free=1"]) {
+      for (const base of ["https://mcp.goassay.ai/", "https://mcp.goassay.ai/my/weather", "https://mcp.goassay.ai/?tools=a_b&free=1"]) {
         const u = urlForClient(client, base);
         expect(new URL(u).searchParams.get("free")).toBe("1");
         expect(urlForClient(client, u)).toBe(u);
@@ -229,6 +229,6 @@ describe("a hosted connector gets one URL: copied, recorded and previewed", () =
         expect(recorded).toBe(copied);
       }
     }
-    expect(urlForClient("claude-code", "https://mcp.assay.ai/")).toBe("https://mcp.assay.ai/");
+    expect(urlForClient("claude-code", "https://mcp.goassay.ai/")).toBe("https://mcp.goassay.ai/");
   });
 });
