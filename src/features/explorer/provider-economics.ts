@@ -106,3 +106,11 @@ export function setupHref(mode: ListingMode, price: string, calls: string): stri
   if (parseCalls(calls).value) params.set("calls", calls.trim().replace(/[,\s_]/g, ""));
   return `/provider/setup?${params.toString()}`;
 }
+
+/** "≈ 1.7 days of earnings", "≈ 2.5 years of earnings", or "more than 10 years of earnings" when absurd. */
+export function coverTimeText(days: string): string {
+  const n = new Decimal(days);
+  if (n.gt(3650)) return "more than 10 years of earnings";
+  if (n.gt(365)) return `≈ ${n.div(365).toDecimalPlaces(1, Decimal.ROUND_UP).toString()} years of earnings`;
+  return `≈ ${formatDecimal(n, { decimals: 1, exact: false, symbol: "" })} days of earnings`;
+}
