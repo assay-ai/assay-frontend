@@ -11,6 +11,7 @@ import { Chip } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
 import { DECISION_NOTE_MAX, DECISION_NOTE_MIN, disputeErrorText, REFUND_PLAN_TEXT, shortRef, slaMarks } from "@/features/call-disputes/model";
 import { DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes/ui";
+import { collectionLabel } from "@/features/operator/dispute-money";
 import { mayDecideCallDisputes } from "@/features/operator/provider-tool-review";
 import { ResultCard } from "@/features/operator/result-card";
 import { useOperatorSession } from "@/features/operator/session-context";
@@ -35,19 +36,6 @@ const INTENT_STATUS: Readonly<Record<string, string>> = {
   VOIDED: "Voided (not charged)",
   EXPIRED: "Expired (not charged)",
 };
-const COLLECTION_STATE: Readonly<Record<string, string>> = {
-  HELD: "Held: not the provider's until decided",
-  NORMAL: "Collected for the provider",
-  DEBT_OUTSTANDING: "Buyer owes it (debt)",
-  WRITTEN_OFF: "Written off (provider unpaid)",
-  REFUNDED: "Refunded to the buyer",
-};
-/** The API's collection state never says "held"; the refund plan does. */
-function collectionKey(intent: { collectionState: string; refundPlan?: string | null }): string {
-  if (intent.refundPlan === "RELEASE_HELD") return "HELD";
-  if (intent.refundPlan === "ALREADY_REFUNDED") return "REFUNDED";
-  return intent.collectionState;
-}
 
 function DisputeScreen() {
   const id = useSearchParam("id");
@@ -141,7 +129,7 @@ function DisputeScreen() {
               ["Call", INTENT_STATUS[d.intent.status] ?? d.intent.status],
               ["Payment", d.intent.rail === "RAIL_B_VOUCHER" ? "Escrow voucher" : "Paid at call time"],
               ["Price", formatMoney(d.intent.price, { decimals: 4 })],
-              ["Collection", COLLECTION_STATE[collectionKey(d.intent)] ?? d.intent.collectionState],
+              ["Collection", collectionLabel(d.intent, d.state)],
             ].map(([label, value]) => (
               <div key={label} className="flex min-w-0 flex-col gap-0.5">
                 <dt className="text-body-xs text-03">{label}</dt>
