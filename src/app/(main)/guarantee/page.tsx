@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Fragment, useMemo } from "react";
 
 import { DisplayAssetSelect, useDisplayAssetPick } from "@/components/display-asset-select";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
+import { plainError } from "@/libs/plain-language";
 import { MoneySplit, type MoneyTone } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -35,7 +37,6 @@ import { MATCHES_SENTENCE, ReconcileNote } from "@/features/buyer/reconcile-note
 import { useGuarantee, type FailureReason, type MonthRow } from "@/features/buyer/use-guarantee";
 import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { SUPPORT_URL } from "@/libs/support";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
@@ -228,7 +229,7 @@ export default function GuaranteePage() {
         <PageState
           kind="error"
           title="These figures could not be loaded"
-          description={plainApiError(error)}
+          description={<ApiErrorSentence error={error} fallback={plainError(undefined)} />}
           onRetry={reload}
           code={error.code}
           details={error.message}
@@ -344,7 +345,7 @@ export default function GuaranteePage() {
       {!loading && !error && data && data.notRunCalls > 0 ? (
         <p className="flex items-start gap-2 text-body-13 text-02" data-testid="guarantee-not-run">
           <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-03" />
-          <span>{notRunSentence(data.notRunCalls)}</span>
+          <span>{notRunSentence(data.notRunCalls, data.notRunComplete)}</span>
         </p>
       ) : null}
 

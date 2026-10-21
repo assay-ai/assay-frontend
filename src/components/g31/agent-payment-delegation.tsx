@@ -54,7 +54,7 @@ import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refu
 import { assayMcpRun } from "@/features/buyer-money/mcp-config";
 import { useChains } from "@/hooks/useChains";
 import { isRailNotOffered, railNotOfferedText } from "@/libs/chains/paid-rails";
-import { isUserRejection, type Signer, useSigner } from "@/hooks/useSigner";
+import { isUserRejection, type Signer, useSigner, withWalletPrompt } from "@/hooks/useSigner";
 import type { BuyerEscrow, DelegateIntent, EscrowDelegate } from "@/interfaces";
 import { isTypedDataRequest } from "@/interfaces/chain-transaction";
 import { ApiError } from "@/libs/ApiClient";
@@ -618,7 +618,14 @@ function RevokeSheet({
     setBusy(true);
     setRevokeNote(null);
     try {
-      await stopPaymentKeyOnChain(delegate, signer(), domain(escrow));
+      await stopPaymentKeyOnChain(
+        delegate,
+        withWalletPrompt(signer(), {
+          title: agentName ? `Stop ${agentName} paying` : "Stop this key paying",
+          description: "Removes its permission to pay from your escrow. Its API key still works for free calls. Free, no gas.",
+        }),
+        domain(escrow),
+      );
       toast.success(
         `${agentName ?? "That key"} can no longer pay. ${agentName ? "Its API key still works for free calls." : ""}`.trim(),
       );
@@ -932,10 +939,17 @@ function AuthorizeSheet({
     // Exactly what the sheet shows this second, computed on the server's clock.
     const body = preview.body;
     const acknowledged = acknowledgeUnsettled ? { acknowledgeUnsettled: true } : {};
+    // What Privy's confirmation names (lot 1 D14): the limits as the sheet shows them.
+    const limit = (atomic: string | number) =>
+      formatLimit({ amount: String(atomic), asset: escrow.maxVoucherAmount?.asset ?? "", decimals: escrow.maxVoucherAmount?.decimals ?? 6 });
+    const prompt = {
+      title: editing ? `Change ${agentName ?? "this key"}'s limits` : `Let ${agentName ?? "this agent"} pay`,
+      description: `At most ${limit(body.maxVoucherAmount)} a call and ${limit(body.maxPerWindow)} in 24 hours from your escrow, until ${formatDate(Number(body.validUntil) * 1000)}. It cannot withdraw. Free, no gas.`,
+    };
     const sign = (intent: DelegateIntent) =>
       submitRelayedDelegation(
         intent,
-        signer(),
+        withWalletPrompt(signer(), prompt),
         { ...body, delegate, domain: domain(escrow) },
         (signed) => {
           setHeld(signed);

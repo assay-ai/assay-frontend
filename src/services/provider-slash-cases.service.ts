@@ -2,6 +2,8 @@ import type {
   SlashProposalCaseDetail,
   SlashRequestLookup,
 } from "@/interfaces/provider-slash-cases";
+import type { CursorPage } from "@/interfaces/api";
+import type { SlashProposalSummary } from "@/interfaces/provider-disputes";
 import type { DisputeSlashRequestsBody, SlashContractCall } from "@/interfaces/slash-dispute";
 
 import { api } from "./api";
@@ -17,6 +19,21 @@ export function getSlashProposalCaseDetail(proposalId: string): Promise<SlashPro
   return api.get<SlashProposalCaseDetail>(
     `/providers/me/slash-proposals/${encodeURIComponent(proposalId)}`
   );
+}
+
+/**
+ * `GET /providers/me/slash-proposals` — the provider's proposals as Assay
+ * records them, newest first (lot 1 B8). `onChain: false` keeps those with no
+ * on-chain record yet (chain status NONE or PROPOSING), which the chain-read
+ * Penalties list cannot show. An older backend has no such route (404).
+ */
+export function listSlashProposals(query: {
+  onChain?: boolean;
+  status?: string[];
+  limit?: number;
+  cursor?: string;
+}): Promise<CursorPage<SlashProposalSummary>> {
+  return api.get<CursorPage<SlashProposalSummary>>("/providers/me/slash-proposals", query as Record<string, unknown>);
 }
 
 /** The most ids `POST /providers/me/slash-requests/lookup` takes in one call. */

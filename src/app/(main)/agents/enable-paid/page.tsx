@@ -228,7 +228,8 @@ export default function EnablePaidPage() {
     !escrow?.exists || !spendable || (chosen !== null && BigInt(spendable.amount || "0") < BigInt(chosen.maxPerWindow));
   // Shown, not used for the caps: a deposit the chain has not finalised is not spendable yet (BUG-A-06).
   const ledgerRow = escrowLedgerRow(money.balancesQuery.data?.balances, money.chainId);
-  const shownBalance = readyForPaidCalls(escrow?.balance ?? null, ledgerRow);
+  // Uncredited on-chain money is not shown as usable (lot 1 A3).
+  const shownBalance = readyForPaidCalls(escrow?.balance ?? null, ledgerRow, escrow?.uncreditedOnChain);
   const blocker: React.ReactNode | null =
     money.chainId && money.chainId !== state.chainId
       ? "This payment key is for another network than your escrow."

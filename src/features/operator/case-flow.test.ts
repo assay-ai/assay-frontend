@@ -247,6 +247,10 @@ describe("a proposal whose last chain attempt failed (BUG-OPS-CASES-02)", () => 
 
   it("names an unknown code as it is", () => {
     expect(chainErrorText("ProposalAlreadyExists")).toBe("The chain refused it (ProposalAlreadyExists).");
+    // fe-followup M6: a local refusal is not blamed on the chain.
+    expect(chainErrorText("SLASH_EVIDENCE_STALE")).toBe("Assay did not send it (SLASH_EVIDENCE_STALE).");
+    expect(chainErrorText("PROVIDER_STAKE_TOO_LOW")).toBe("Assay did not send it (PROVIDER_STAKE_TOO_LOW).");
+    expect(chainErrorText("RPC_TIMEOUT")).toBe("The last attempt failed (RPC_TIMEOUT).");
   });
 
   it("says Going on chain as before when no failure is sent (older backend) or it is null", () => {

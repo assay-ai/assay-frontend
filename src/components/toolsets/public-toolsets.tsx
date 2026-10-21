@@ -7,6 +7,7 @@ import * as React from "react";
 import { useSignedIn } from "@/components/explorer/start-free";
 import { PageHeader } from "@/components/g31/chrome";
 import { ExploreNav } from "@/components/g31/explore-nav";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { PageState, Skeleton } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
@@ -175,7 +176,7 @@ export function ToolsetCatalogue({ query, onClearQuery }: { query: string; onCle
         <PageState
           kind="error"
           title="The tool sets could not be loaded"
-          description={list.error instanceof ApiError ? plainApiError(list.error) : plainError("ERR_NETWORK")}
+          description={list.error instanceof ApiError ? <ApiErrorSentence error={list.error} /> : plainError("ERR_NETWORK")}
           onRetry={() => void list.refetch()}
         />
       ) : cards.length === 0 ? (
@@ -599,7 +600,7 @@ export function PublicHandleView() {
         kind={missing ? "empty" : "error"}
         titleAsH1
         title="Not found"
-        description={missing ? "No one uses this public name." : profile.error instanceof ApiError ? plainApiError(profile.error) : plainError("ERR_NETWORK")}
+        description={missing ? "No one uses this public name." : profile.error instanceof ApiError ? <ApiErrorSentence error={profile.error} /> : plainError("ERR_NETWORK")}
         {...(missing ? { action: { label: "See all tool sets", href: "/catalogue?view=toolsets" } } : { onRetry: () => void profile.refetch() })}
       />,
     );

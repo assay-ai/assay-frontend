@@ -106,11 +106,19 @@ describe("spend CSV", () => {
       labelOf: () => "search, web",
       assetLabel: "USDG on Robinhood",
     });
-    expect(csv.split("\n")[0]).toBe("Tool,Tool id,Asset,Calls,Listed,Charged,Not charged,Not charged calls,Owed,Owed calls");
-    expect(csv.split("\n")[1]).toBe('"search, web",t1,USDG on Robinhood,10,0.001500,0.001000,0.000500,1,0.000000,0');
+    expect(csv.split("\n")[0]).toBe("Tool,Tool id,Asset,Calls,Listed,Charged,Not charged,Not charged calls,Owed,Owed calls,Free calls");
+    expect(csv.split("\n")[1]).toBe('"search, web",t1,USDG on Robinhood,10,0.001500,0.001000,0.000500,1,0.000000,0,0');
     expect(spendCsvFilename("tool", "2026-10-09T10:00:00.000Z", "2026-10-16T00:00:00.000Z")).toBe(
       "spend-by-tool_2026-10-09_2026-10-15.csv",
     );
+  });
+});
+
+describe("spend CSV, free-only group (fe-followup M5)", () => {
+  it("counts the free calls, never '0 calls'", () => {
+    const g = { ...group("t1", "0", "0", 0), freeCalls: 4 };
+    const csv = spendCsv([g], { dimensionHeader: "Tool", labelOf: (k) => k, assetLabel: "USDG" });
+    expect(csv.split("\n")[1]).toBe("t1,t1,USDG,4,0.000000,0.000000,0.000000,0,0.000000,0,4");
   });
 });
 
@@ -122,6 +130,6 @@ describe("owed (buyer debt) is its own bucket", () => {
     expect(row!.owedPct).toBeGreaterThan(0);
     const csv = spendCsv([g], { dimensionHeader: "Tool", labelOf: (k) => k, assetLabel: "USDG" });
     expect(csv.split("\n")[0]).toContain("Owed,Owed calls");
-    expect(csv.split("\n")[1]!.endsWith(",0.000250,1")).toBe(true);
+    expect(csv.split("\n")[1]!.endsWith(",0.000250,1,0")).toBe(true);
   });
 });

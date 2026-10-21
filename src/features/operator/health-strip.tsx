@@ -5,11 +5,12 @@ import * as React from "react";
 
 import { MetricTile } from "@/components/ui/metric-tile";
 import { DASH, count, percent } from "@/features/g34a/stats";
-import type { PlatformHealth } from "@/interfaces/operator";
+import { useChainName } from "@/hooks/useChainName";
+import type { PlatformHealth, ReconciliationAssetRow } from "@/interfaces/operator";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { healthIssues, lagText } from "./inbox";
+import { healthIssues, lagText, reconciliationIssues } from "./inbox";
 
 function age(seconds: number | null | undefined): string {
   if (seconds === null || seconds === undefined) return DASH;
@@ -22,9 +23,30 @@ function age(seconds: number | null | undefined): string {
  * stays closed even when red, so the inbox above it is never pushed below the
  * fold (operator review E): the figures are context, not tasks.
  */
-export function HealthStrip({ health, error }: { health: PlatformHealth | undefined; error?: boolean }) {
-  const issues = health ? healthIssues(health) : [];
+export function HealthStrip({
+  health,
+  error,
+  reconciliation,
+}: {
+  health: PlatformHealth | undefined;
+  error?: boolean;
+  /**
+   * The latest reconciliation per asset (lot 1 D16). "All systems normal" is
+   * said only once these are read and every one is OK and fresh; left out
+   * entirely (`undefined`), the strip reads health alone, as before.
+   */
+  reconciliation?: { rows: readonly ReconciliationAssetRow[] | undefined; error: boolean };
+}) {
+  const chainName = useChainName();
+  const reconIssues = reconciliation
+    ? reconciliationIssues(reconciliation.rows, {
+        unreadable: reconciliation.error,
+        assetName: (asset) => chainName(asset.split("/")[0]),
+      })
+    : [];
+  const issues = [...(health ? healthIssues(health) : []), ...reconIssues];
   const red = issues.length > 0;
+  const reconPending = Boolean(reconciliation && !reconciliation.error && reconciliation.rows === undefined);
   const [open, setOpen] = React.useState(false);
 
   if (error) {
@@ -61,6 +83,8 @@ export function HealthStrip({ health, error }: { health: PlatformHealth | undefi
               {" · "}
               {issues.map((issue) => issue.text).join(" · ")}
             </>
+          ) : reconPending ? (
+            "Checking reconciliation…"
           ) : (
             "All systems normal"
           )}
