@@ -68,6 +68,17 @@ export function parseRetryAfter(value: unknown, nowMs: number = Date.now()): num
   return Math.min(MAX_RETRY_AFTER_SECONDS, Math.max(1, seconds));
 }
 
+/**
+ * The wait a rate limiter's own sentence names ("Try again in 44 s."), for a 429
+ * whose `Retry-After` header could not be read (a proxy that drops it, a
+ * browser that does not expose it). `null` when the sentence names none.
+ */
+export function retryAfterFromMessage(message: unknown): number | null {
+  if (typeof message !== "string") return null;
+  const match = /\bin (\d+)\s*(?:s|seconds?)\b/i.exec(message);
+  return match ? parseRetryAfter(match[1]) : null;
+}
+
 /** What a person reads for a rate limit. */
 export function tooManyRequestsSentence(retryAfterSeconds: number | null | undefined): string {
   return retryAfterSeconds
@@ -565,7 +576,9 @@ class ApiClient {
         */
         if ((error.response?.status ?? apiError.status) === 429) {
           const headers = error.response?.headers as { get?: (name: string) => unknown; [name: string]: unknown } | undefined;
-          const retryAfter = parseRetryAfter(typeof headers?.get === "function" ? headers.get("retry-after") : headers?.["retry-after"]);
+          const retryAfter =
+            parseRetryAfter(typeof headers?.get === "function" ? headers.get("retry-after") : headers?.["retry-after"]) ??
+            (apiError.code === TOO_MANY_REQUESTS ? retryAfterFromMessage(apiError.message) : null);
           const bodyHadCode = Boolean((error.response?.data as Partial<ApiErrorBody> | undefined)?.error?.code);
           const limited = withRateLimit(apiError, retryAfter, bodyHadCode);
           if (retryAfter !== null && config && (config.method ?? "get").toUpperCase() === "GET") {

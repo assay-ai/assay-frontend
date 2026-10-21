@@ -7,6 +7,7 @@ import ApiClient, {
   onUnauthorized,
   onWalletNotLinked,
   parseRetryAfter,
+  retryAfterFromMessage,
   registerSessionTokenProvider,
   sessionRequestsSentAs,
   sessionTokenSubject,
@@ -344,6 +345,12 @@ describe("429 Too Many Requests", () => {
     expect(parseRetryAfter("Tue, 20 Oct 2026 00:00:45 GMT", now)).toBe(45);
     expect(parseRetryAfter("soon", now)).toBeNull();
     expect(parseRetryAfter(undefined, now)).toBeNull();
+  });
+
+  it("reads the wait from the limiter's own sentence when the header is unreadable", () => {
+    expect(retryAfterFromMessage("Too many requests. Try again in 44 s.")).toBe(44);
+    expect(retryAfterFromMessage("Wait a moment and try again.")).toBeNull();
+    expect(retryAfterFromMessage(undefined)).toBeNull();
   });
 
   it("fails at once with the wait in the sentence, and is never retried", async () => {
