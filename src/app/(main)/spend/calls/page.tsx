@@ -31,7 +31,7 @@ import {
 } from "@/features/buyer/call-outcome";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { listToolCalls } from "@/services/tool-calls.service";
 import { cn } from "@/utils";
@@ -176,7 +176,7 @@ function CallsList() {
       ) : query.isError ? (
         <PageState
           kind="error"
-          description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+          description={query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
           onRetry={() => void query.refetch()}
           code={query.error instanceof ApiError ? query.error.code : null}
           details={query.error.message}
@@ -283,7 +283,7 @@ function CallsList() {
                                   ? `${formatMoney(call.price, { decimals: 4 })} owed`
                                   : formatMoney(call.charged, { decimals: 4 })}
                       </span>
-                      {outcome !== "checking" && outcome !== "owed" && toDecimal(uncharged).gt(0) ? (
+                      {outcome !== "checking" && outcome !== "owed" && outcome !== "not-run" && toDecimal(uncharged).gt(0) ? (
                         <span className="font-mono text-mono-xs text-teal-600">
                           {formatMoney(uncharged, { decimals: 4 })} not charged
                         </span>

@@ -39,7 +39,7 @@ import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import type { BindingAuthMode, ToolBindingDetail, UpdateToolBindingBody } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { updateToolBinding } from "@/services/provider-tool-bindings.service";
 import { formatMoney } from "@/utils/money";
@@ -152,7 +152,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
       setAuthMode(saved.authMode);
       toast.success(saved.hasUnpublishedChanges ? "Saved. Publish the changes to make them live." : "Saved");
     } catch (caught) {
-      setError(caught instanceof ApiError ? plainError(caught.code) : "Your changes could not be saved. Try again.");
+      setError(caught instanceof ApiError ? plainApiError(caught) : "Your changes could not be saved. Try again.");
       throw caught;
     } finally {
       setSaving(false);

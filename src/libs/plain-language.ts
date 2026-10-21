@@ -1,3 +1,4 @@
+import { tooManyRequestsSentence } from "@/libs/ApiClient";
 import { NOTIFICATION_EVENT_LABEL } from "@/components/g31/notification-catalogue";
 
 /**
@@ -310,9 +311,11 @@ const INELIGIBILITY: Record<string, string> = {
 const ERRORS: Record<string, string> = {
   AUTH_WALLET_NOT_LINKED: "Your wallet is still being linked to your account. Try again in a minute.",
   AUTH_AGENT_SUSPENDED: "This agent is suspended.",
-  AUTH_ORGANIZATION_SUSPENDED: "Your organization is suspended.",
+  // Suspension left the product (2026-10-20): an org the old code still names is a blocked one (BUG-X-02).
+  AUTH_ORGANIZATION_SUSPENDED: "Your account is blocked by Assay. Contact support.",
   AUTH_HUMAN_SESSION_REQUIRED: "Sign in as yourself to do this; an agent key cannot.",
   ACCOUNT_BLOCKED: "This account is blocked. Contact support.",
+  AGENT_KEYS_HIDDEN: "Agent keys show when you sign in as yourself; an agent key cannot list them.",
   SPEND_LIMIT_EXCEEDED: "This call would go over your spend limit.",
   VELOCITY_LIMIT_EXCEEDED: "Spending too fast: this call was refused. Calls are allowed again in a moment.",
   POLICY_AGENT_PAUSED: "This agent is paused by its budget.",
@@ -436,6 +439,14 @@ const ERRORS: Record<string, string> = {
   CREDENTIALS_REQUIRED_FOR_AUTH_MODE: "Add your API key headers for the live address first, then switch to API key.",
   CREDENTIAL_ORIGIN_LIVE: "Your live tool uses these headers. Publish a new address first, then remove them.",
   URL_NOT_RECOGNISED: "We couldn't read this URL. Start a new one.",
+  // Codes added by the e2e run 2 group-3 backend fixes (be-g3a / be-g3b).
+  PAYLOAD_TOO_LARGE: "This is too large to send. Make it shorter and try again.",
+  ACCOUNT_AGENT_NOT_FOUND: "This agent was not found in your account. It may have been deleted.",
+  STAKE_INSUFFICIENT_BONDED: "That is more than your staked amount. Enter at most what is staked.",
+  STAKE_NOTHING_WITHDRAWABLE:
+    "Nothing is ready to withdraw yet: unstaked money can be withdrawn once its waiting period ends.",
+  TOO_MANY_MAPPING_HEADERS: "This mapping has too many headers. Remove some and try again.",
+  TOOLSET_ORGANIZATION_NOT_FOUND: "No organization has this id. Check it and try again.",
   MCP_URL_NOT_FOUND: "This server URL does not serve anything (yet).",
 };
 
@@ -455,6 +466,41 @@ export function plainError(code: string | null | undefined, status?: number): st
   if (status !== undefined && status >= 500) return serverErrorSentence(status);
   if (!code) return "Something went wrong. Try again.";
   return "Something went wrong. Try again, and if it keeps happening, contact support.";
+}
+
+/**
+ * `plainError` for an error object. A 429 carries the wait the server named
+ * (`retryAfterSeconds`), so the sentence says it; every other code is
+ * `plainError(code, status)`.
+ */
+export function plainApiError(error: {
+  code?: string | null;
+  status?: number;
+  retryAfterSeconds?: number | null;
+  message?: string;
+  context?: Readonly<Record<string, unknown>>;
+}): string {
+  if (error.code === "TOO_MANY_REQUESTS") return tooManyRequestsSentence(error.retryAfterSeconds);
+  if (error.code === "ACCOUNT_BLOCKED" && namesOwnAccount(error.message, error.context)) return OWN_ACCOUNT_BLOCKED;
+  return plainError(error.code, error.status);
+}
+
+const OWN_ACCOUNT_BLOCKED = "Your account is blocked by Assay. Contact support.";
+
+/**
+ * `ACCOUNT_BLOCKED` names either this account ("Your account is blocked by
+ * Assay…", BUG-X-02) or another party of the request ("This account is blocked
+ * (payee)…"); only the first may say "your".
+ *
+ * The blocked role decides when the body carries it (`context.role`,
+ * `ORGANIZATION` = the caller's own organization). Today the backend keeps
+ * the role out of the body (the error has no `publicContext`), so the
+ * backend's fixed organization sentence is the fallback.
+ */
+export function namesOwnAccount(message: string | null | undefined, context?: Readonly<Record<string, unknown>> | null): boolean {
+  const role = context?.role;
+  if (typeof role === "string" && role !== "") return role.toUpperCase() === "ORGANIZATION";
+  return typeof message === "string" && /^your account is blocked\b/i.test(message.trim());
 }
 
 /** An unknown 5xx: Assay's side, and what to do. */

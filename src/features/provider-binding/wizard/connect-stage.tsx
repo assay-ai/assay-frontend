@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import type { BindingAuthMode, BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping } from "@/interfaces";
 import type { CredentialHeaderInput } from "@/interfaces/provider-bindings";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { testToolBinding } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 
@@ -170,6 +170,10 @@ export function ConnectStage({
     setEmptyAck(false);
   }
   const [runGuard] = React.useState(createRunGuard);
+  // The mappings as typed when they were last saved. The server stores them in its canonical form
+  // (`$from` + `$item`), which differs from the shorthand typed in the JSON editor, so a saved
+  // shorthand must not read as "changed since the test".
+  const [sent, setSent] = React.useState<{ version: number; request: ToolMapping; response: ToolMapping } | null>(null);
 
   const parsedEndpoint = parseEndpoint(endpoint);
   const urlKeys = credentialQueryKeys(endpoint);
@@ -218,7 +222,7 @@ export function ConnectStage({
     }
     setError(
       caught instanceof ApiError
-        ? plainError(caught.code, caught.status)
+        ? plainApiError(caught)
         : caught instanceof Error && caught.message
           ? caught.message
           : "That did not work. Check your connection and try again.",
@@ -233,6 +237,7 @@ export function ConnectStage({
     try {
       setPhase(then ? "exiting" : "saving-only");
       const saved = await onSave(draft);
+      setSent({ version: saved.version, request: draft.requestMapping, response: draft.responseMapping });
       writeTestInput(saved.id, args);
       then?.();
     } catch (caught) {
@@ -260,6 +265,7 @@ export function ConnectStage({
     try {
       setPhase("saving");
       const saved = await onSave(draft);
+      setSent({ version: saved.version, request: draft.requestMapping, response: draft.responseMapping });
       writeTestInput(saved.id, args);
       setPhase("testing");
       // One run per contract version served: each must pass before publishing.
@@ -283,12 +289,16 @@ export function ConnectStage({
     }
   };
 
+  const mappingSaved = (field: "request" | "response") =>
+    !binding ||
+    documentsEqual(field === "request" ? binding.requestMapping : binding.responseMapping, mappings[field]) ||
+    (sent !== null && sent.version === binding.version && documentsEqual(sent[field], mappings[field]));
   const dirty =
     !binding ||
     binding.endpoint !== endpoint.trim() ||
     binding.authMode !== authMode ||
-    !documentsEqual(binding.requestMapping, mappings.request) ||
-    !documentsEqual(binding.responseMapping, mappings.response) ||
+    !mappingSaved("request") ||
+    !mappingSaved("response") ||
     termsDirty;
   const stale = runs && binding ? runs.some((r) => isStaleRun(r.report, binding.version)) || dirty : false;
   const gates = runs?.map((r) => testGate(testPipeline(r.report), { stale: Boolean(stale), emptyAcknowledged: emptyAck })) ?? null;

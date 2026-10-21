@@ -149,6 +149,21 @@ function checkUrl(url: string): void {
   if (!URL_CHARS.test(url)) throw new InstallInputError("the URL has characters a canonical URL never has");
 }
 
+/**
+ * Whether `url` passes the same check every install command runs (absolute
+ * http(s), no credentials, no fragment, only canonical URL characters). A
+ * page that says "This is an MCP server URL" asks this first, so it never
+ * says it about a URL the Connect sheet then refuses (BUG-BUY-CONNECT-03).
+ */
+export function isInstallableUrl(url: string): boolean {
+  try {
+    checkUrl(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function shellQuote(word: string): string {
   return SHELL_SAFE.test(word) ? word : `'${word.replace(/'/g, `'\\''`)}'`;
 }

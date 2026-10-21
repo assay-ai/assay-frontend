@@ -211,8 +211,8 @@ export default function PenaltiesPage() {
 
       {caseParam && !requested && !penalties.isLoading && !penalties.isError ? (
         <p role="status" className="w-full rounded-lg border border-01 bg-01 px-4 py-3 text-body-13 text-02">
-          That link points to a penalty that is not on your stake, so there is nothing to open. Your own penalties are
-          listed below.{" "}
+          We cannot open that penalty: it is not on your stake on the chain, which is where this page reads penalties
+          from. If it was proposed just now, it can take a moment to appear there.{" "}
           <button type="button" className="text-primary-600 underline-offset-2 hover:underline" onClick={() => setQuery({ case: null })}>
             Dismiss
           </button>
@@ -225,7 +225,7 @@ export default function PenaltiesPage() {
         <PageState
           kind="empty"
           title="No stake wallet yet"
-          description="Penalties can only be proposed against stake. You have no stake wallet, so there are none."
+          description="This page lists the penalties on your stake wallet, read from the chain. You have no stake wallet yet, so it has nothing to list."
           action={{ label: "Go to Stake", href: "/provider/capital" }}
         />
       ) : penalties.isError ? (

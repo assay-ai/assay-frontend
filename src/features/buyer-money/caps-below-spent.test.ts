@@ -10,6 +10,12 @@ describe("ceilingBelowSpentNote", () => {
       "Your agents already spent $15.75 in this 24-hour window, more than the new $5.00: paid calls stop until the window refills.",
     );
   });
+  it("prints the spent amount with its own formatter, so it matches the meters", () => {
+    const up = (atomic: string) => `$${(Math.ceil(Number(atomic) / 1e4) / 100).toFixed(2)}`;
+    expect(ceilingBelowSpentNote({ amount: "103126", decimals: 6 }, "50000", "2026-10-18T00:00:00.000Z", fmt, up)).toBe(
+      "Your agents already spent $0.11 in this 24-hour window, more than the new $0.05: paid calls stop until the window refills.",
+    );
+  });
   it("says nothing when it still fits, the window is not running, or the spend is unknown", () => {
     expect(ceilingBelowSpentNote({ amount: "1000000", decimals: 6 }, "5000000", "2026-10-18T00:00:00.000Z", fmt)).toBeNull();
     expect(ceilingBelowSpentNote({ amount: "15750000", decimals: 6 }, "5000000", null, fmt)).toBeNull();

@@ -27,7 +27,7 @@ import {
 import { chainsText } from "@/features/toolsets/provider-fit";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getCatalogueProvider } from "@/services/catalogue.service";
 import { formatMoney } from "@/utils/money";
@@ -94,7 +94,7 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
         <PageState
           kind="error"
           title="This provider could not be loaded"
-          description={plainError(entry.error instanceof ApiError ? entry.error.code : "ERR_NETWORK")}
+          description={entry.error instanceof ApiError ? plainApiError(entry.error) : plainError("ERR_NETWORK")}
           onRetry={() => void entry.refetch()}
           code={entry.error instanceof ApiError ? entry.error.code : null}
         />

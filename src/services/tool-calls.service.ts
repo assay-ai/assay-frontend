@@ -14,6 +14,13 @@ export interface ToolCall {
    */
   charged: Money;
   /**
+   * What the refund guarantee kept back, the receipt's `withheld`: the listed
+   * price of a call that held money and was not charged, else zero. Zero for
+   * an EXPIRED call that never held anything (it never ran). Absent on older
+   * servers.
+   */
+  withheld?: Money;
+  /**
    * SETTLED, but the provider caused the payment to fail and forfeited it:
    * not charged, nobody paid.
    */

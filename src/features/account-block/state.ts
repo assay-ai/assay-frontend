@@ -14,17 +14,24 @@
  *    that *this* account is blocked, and the banner words it accordingly until
  *    the block status confirms it.
  *
+ * Since BUG-X-02 the backend refuses a blocked organization with
+ * `ACCOUNT_BLOCKED` "Your account is blocked by Assay…": that wording is about
+ * this account too (`isOwnAccountRefusal`), like the old suspension code.
+ *
  * Neither ever signs anyone out. See `ACCOUNT_BLOCKED_CODES` in `ApiClient`.
  *
  * A module store rather than React state because `ApiClient` — a module-level
  * singleton — feeds it from its interceptor and reads it in its write guard.
  */
 import { ApiError } from "@/libs/ApiClient";
+import { namesOwnAccount } from "@/libs/plain-language";
 import type { AccountBlockStatus, AccountBlockStatusEntry } from "@/interfaces/account-block";
 
 export interface BlockedRefusal {
   readonly code: string;
   readonly message: string;
+  /** `context.role` of the refusal, when the body carries it (`namesOwnAccount`). */
+  readonly role?: string;
 }
 
 interface Snapshot {
@@ -66,11 +73,12 @@ export function setAccountBlockConfirmed(confirmed: boolean): void {
 let refusalAt = 0;
 
 /** Fed from `ApiClient`'s interceptor, for every blocked refusal. */
-export function reportBlockedRefusal(error: Pick<ApiError, "code" | "message">): void {
+export function reportBlockedRefusal(error: Pick<ApiError, "code" | "message"> & { readonly context?: ApiError["context"] }): void {
   refusalAt = Date.now();
+  const role = typeof error.context?.role === "string" ? error.context.role : undefined;
   const current = snapshot.refusal;
-  if (current && current.code === error.code && current.message === error.message) return;
-  set({ refusal: { code: error.code, message: error.message } });
+  if (current && current.code === error.code && current.message === error.message && current.role === role) return;
+  set({ refusal: role ? { code: error.code, message: error.message, role } : { code: error.code, message: error.message } });
 }
 
 export function dismissBlockedRefusal(): void {
@@ -97,7 +105,19 @@ export function settleBlockStatus(blocked: boolean, requestedAt: number): void {
   if (blocked) return;
   const { refusal, confirmed } = snapshot;
   if (!refusal || requestedAt < refusalAt) return;
-  if (confirmed || refusal.code === "AUTH_ORGANIZATION_SUSPENDED") set({ refusal: null });
+  if (confirmed || isOwnAccountRefusal(refusal)) set({ refusal: null });
+}
+
+/**
+ * Whether a blocked refusal is about this account itself: the old
+ * `AUTH_ORGANIZATION_SUSPENDED`, or `ACCOUNT_BLOCKED` with the backend's
+ * "Your account is blocked by Assay" wording for the caller's organization.
+ */
+export function isOwnAccountRefusal(refusal: BlockedRefusal): boolean {
+  return (
+    refusal.code === "AUTH_ORGANIZATION_SUSPENDED" ||
+    (refusal.code === "ACCOUNT_BLOCKED" && namesOwnAccount(refusal.message, refusal.role ? { role: refusal.role } : null))
+  );
 }
 
 /**
@@ -185,8 +205,8 @@ export type BlockBannerState =
 /**
  * What the banner says, from the block status and the latest refusal.
  *
- * `AUTH_ORGANIZATION_SUSPENDED` is always this account's own organization, so
- * it reads as blocked even before the status confirms it.
+ * A refusal about this account itself (`isOwnAccountRefusal`) reads as
+ * blocked even before the status confirms it.
  */
 export function bannerStateFor(
   status: AccountBlockStatus | undefined,
@@ -194,7 +214,7 @@ export function bannerStateFor(
 ): BlockBannerState {
   if (status?.blocked) return { kind: "blocked", blocks: status.blocks ?? [] };
   if (!refusal) return { kind: "none" };
-  if (refusal.code === "AUTH_ORGANIZATION_SUSPENDED") return { kind: "blocked", blocks: [] };
+  if (isOwnAccountRefusal(refusal)) return { kind: "blocked", blocks: [] };
   return { kind: "refused", refusal };
 }
 

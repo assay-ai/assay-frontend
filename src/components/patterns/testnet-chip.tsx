@@ -61,7 +61,8 @@ export function TestnetChip({
       data-testid="testnet-chip"
     >
       <FlaskConical aria-hidden="true" className="size-3" />
-      {compact ? "Testnet" : "Testnet · test money"}
+      {/* Narrow bars (under 420 px) keep the flask and the screen-reader text only. */}
+      <span className={compact ? "max-[419px]:sr-only" : undefined}>{compact ? "Testnet" : "Testnet · test money"}</span>
       <span className="sr-only">. {title}</span>
     </span>
   );

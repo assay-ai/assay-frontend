@@ -287,9 +287,12 @@ export function majorTestRows(check: Pick<PublishCheck, "requirements">, majors:
   return [...byMajor.values()].sort((a, b) => a.major - b.major);
 }
 
-/** "Contract v2: tested and passed" / "Contract v2: No test run at this revision." */
+/**
+ * "Contract v2: tested and passed" / "Contract v2: needs a new test". The server's own detail
+ * ("No mapping-tester run for revision 6") names internals, so it is not shown.
+ */
 export function majorTestText(row: MajorTestRow): string {
-  return row.met ? `Contract v${row.major}: tested and passed` : `Contract v${row.major}: ${row.detail ?? "needs a passing test"}`;
+  return row.met ? `Contract v${row.major}: tested and passed` : `Contract v${row.major}: needs a new passing test`;
 }
 
 /** "Serves contract v1 · also returns uv_index · also accepts units" — the Overview line. */

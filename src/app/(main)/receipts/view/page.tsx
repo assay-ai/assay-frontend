@@ -57,7 +57,7 @@ import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
 import { responseClassLabel } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney } from "@/utils/money";
 
@@ -208,7 +208,7 @@ function ReceiptPageContent() {
           <PageState
             kind="error"
             title="This receipt could not be loaded"
-            description={plainError(err?.code ?? "ERR_NETWORK")}
+            description={(err ? plainApiError(err) : plainError("ERR_NETWORK"))}
             onRetry={() => void receiptQuery.refetch()}
             code={err?.code ?? null}
             details={err?.message ?? null}

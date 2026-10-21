@@ -200,11 +200,13 @@ export function ceilingBelowSpentNote(
   nextMaxPerWindow: string | null | undefined,
   refillAt: string | null,
   format: (atomic: string) => string,
+  /** How the spent amount reads; the meters' rule (`shownUsed`), so every screen agrees. Defaults to `format`. */
+  formatSpent: (atomic: string) => string = format,
 ): string | null {
   if (!spentInWindow || !nextMaxPerWindow || refillAt === null) return null;
   if (BigInt(nextMaxPerWindow) >= BigInt(spentInWindow.amount)) return null;
   return (
-    `Your agents already spent ${format(spentInWindow.amount)} in this 24-hour window, more than the new ` +
+    `Your agents already spent ${formatSpent(spentInWindow.amount)} in this 24-hour window, more than the new ` +
     `${format(nextMaxPerWindow)}: paid calls stop until the window refills.`
   );
 }

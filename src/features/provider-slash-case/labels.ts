@@ -185,6 +185,12 @@ export function eventSummary(summary: string, context: EventSummaryContext): str
           binding === context.bindingId ? context.toolName : "your binding"
         }`,
     )
+    // Newer backends write the amount in dollars and no binding id (BUG-OPS-CASES-03).
+    .replace(/^Penalty of (\$\S+) proposed$/, (_, amount: string) => `Penalty of ${amount} proposed against ${context.toolName}`)
+    .replace(
+      /^Penalty of (\$\S+) is below the de-minimis floor; recorded, not levied$/,
+      (_, amount: string) => `Penalty of ${amount} is below the minimum penalty; it is recorded but not charged`,
+    )
     .replace(
       /^Penalty of (\d+) is below the de-minimis floor; recorded, not levied$/,
       (_, amount: string) =>

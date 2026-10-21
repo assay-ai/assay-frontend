@@ -332,7 +332,11 @@ function suggestFit(name: string, longestTool: number, rule: NameRule): string |
   return fitsServerName("assay", longestTool, rule) ? "assay" : null;
 }
 
-/** `assay` for the root; `assay-{slug}` otherwise, dropping trailing words, then `assay`. */
+/**
+ * `assay` for the root; `assay-{slug}` otherwise, dropping trailing words, then `assay`.
+ * The backend mirrors this rule for the provider tool preview (`previewServerNameFor`
+ * in its provider-tools service): change both together.
+ */
 export function defaultServerNameFor(
   root: boolean,
   slugWords: readonly string[],

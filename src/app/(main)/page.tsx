@@ -47,7 +47,7 @@ import { ATTENTION_SHOWN, useOverview } from "@/features/buyer/use-overview";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -244,7 +244,7 @@ export default function OverviewPage() {
         <PageState
           kind="error"
           title="The overview could not be loaded"
-          description={plainError(error.code)}
+          description={plainApiError(error)}
           onRetry={reload}
           code={error.code}
           details={error.message}
@@ -524,7 +524,7 @@ export default function OverviewPage() {
                                   ? `${formatMoney(call.price, { decimals: 4 })} owed`
                                   : formatMoney(call.charged, { decimals: 4 })}
                           </span>
-                          {toDecimal(uncharged).gt(0) && outcome !== "checking" && outcome !== "owed" ? (
+                          {toDecimal(uncharged).gt(0) && outcome !== "checking" && outcome !== "owed" && outcome !== "not-run" ? (
                             <span className="font-mono text-mono-xs text-teal-600">
                               {formatMoney(uncharged, { decimals: 4 })} not charged
                             </span>
