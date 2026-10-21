@@ -145,6 +145,17 @@ describe("plain (any key)", () => {
 });
 
 describe("plainApiError", () => {
+  // BUG-X-02: a blocked organization reads "Your account is blocked", another party's block does not.
+  it("says the account is blocked in the backend's wording for the caller's own organization", () => {
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "Your account is blocked by Assay; contact support" })).toBe(
+      "Your account is blocked by Assay. Contact support.",
+    );
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "This account is blocked (payee); contact support" })).toBe(
+      "This account is blocked. Contact support.",
+    );
+    expect(plainApiError({ code: "AUTH_ORGANIZATION_SUSPENDED", status: 403 })).toBe("Your account is blocked by Assay. Contact support.");
+  });
+
   it("names the wait of a 429", () => {
     expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 26 })).toBe("Too many requests. Try again in 26 s.");
   });
