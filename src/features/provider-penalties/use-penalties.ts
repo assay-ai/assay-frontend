@@ -35,7 +35,10 @@ export const caseKey = (proposalId: string) => ["provider", "slash-proposal-case
  * convenience only: the chain read replaces them as soon as it lands, and an
  * unreadable store just means no head start.
  */
-const LAST_KNOWN_KEY = (address: string) => `assay.provider.penalties.v1:${address.toLowerCase()}`;
+const LAST_KNOWN_KEY = (address: string) =>
+  `assay.provider.penalties.v2:${PENALTY_DEPLOYMENT.chainId}:${PENALTY_DEPLOYMENT.stakeContract.toLowerCase()}:${address.toLowerCase()}`;
+/** The first version keyed by wallet only, so it could show rows of a contract that no longer exists. */
+const LEGACY_KEY = (address: string) => `assay.provider.penalties.v1:${address.toLowerCase()}`;
 
 export function readLastKnown(address: string, nowSeconds: number): PenaltyRow[] | null {
   try {
@@ -53,8 +56,9 @@ export function readLastKnown(address: string, nowSeconds: number): PenaltyRow[]
   }
 }
 
-function writeLastKnown(address: string, rows: readonly PenaltyRow[]): void {
+export function writeLastKnown(address: string, rows: readonly PenaltyRow[]): void {
   try {
+    window.localStorage.removeItem(LEGACY_KEY(address));
     window.localStorage.setItem(LAST_KNOWN_KEY(address), JSON.stringify(rows));
   } catch {
     // Private window or blocked storage: nothing to keep.
@@ -157,7 +161,12 @@ export function usePenalties(options: { withCases?: "open" | "all" | "none" } = 
     setLastKnown(!demo && ownAddress ? readLastKnown(ownAddress, Math.floor(Date.now() / 1000)) : null);
   }, [demo, ownAddress]);
   React.useEffect(() => {
-    if (!demo && ownAddress && chain.data && index?.status === "checked") writeLastKnown(ownAddress, liveRows);
+    // The chain read is authoritative: it overwrites the cache, an empty read included.
+    // Rows are matched to Assay's cases only when that lookup was checked, so a
+    // non-empty list waits for it; an empty one has nothing to match.
+    if (!demo && ownAddress && chain.data && (index?.status === "checked" || liveRows.length === 0)) {
+      writeLastKnown(ownAddress, liveRows);
+    }
   }, [demo, ownAddress, chain.data, index, liveRows]);
   const updating = !demo && !chainRows && chain.isLoading && lastKnown !== null;
   const rows = updating ? lastKnown! : liveRows;

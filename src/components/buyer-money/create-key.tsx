@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { nextKeyName } from "@/features/buyer-money/agent-label";
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { createCredential } from "@/services/account.service";
 
 import { McpConfigTabs } from "./mcp-config-tabs";
@@ -49,7 +49,7 @@ export function newKeyPaysNote(payingKey?: string | null): string {
 
 /** Plain words for a failed create. */
 export function createKeyErrorText(error: unknown): string {
-  return error instanceof ApiError ? plainError(error.code) : "The key could not be created. Try again.";
+  return error instanceof ApiError ? plainApiError(error) : "The key could not be created. Try again.";
 }
 
 /**

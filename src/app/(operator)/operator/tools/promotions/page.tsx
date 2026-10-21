@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { standardToolNameProblem } from "@/features/operator/contract-editor";
 import { mayPromote, toolReviewErrorText } from "@/features/operator/provider-tool-review";
 import { OperatorToolsTabs } from "@/features/operator/provider-tool-ui";
 import { useOperatorSession } from "@/features/operator/session-context";
@@ -27,8 +28,6 @@ import { toast } from "@/utils/toast";
  * from their own endpoint. The standard tool reaches traffic only through the
  * two-person publish in the contract editor.
  */
-
-const NAME_RE = /^[a-z][a-z0-9_]{1,47}$/;
 
 function localOf(name: string): string {
   return name.includes("__") ? name.split("__").slice(1).join("__") : name;
@@ -53,7 +52,7 @@ function PromoteSheet({ group, source, onClose }: { group: PromotionGroup | null
       router.push(routes.operatorTool(result.tool.id));
     },
   });
-  const nameProblem = name && !NAME_RE.test(name.trim()) ? "snake_case, starting with a letter, no “__”, at most 48 characters." : null;
+  const nameProblem = standardToolNameProblem(name);
   return (
     <Sheet open={source !== null} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <SheetContent className="tablet:max-w-[560px]">

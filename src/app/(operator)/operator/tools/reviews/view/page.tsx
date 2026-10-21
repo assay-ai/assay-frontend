@@ -147,7 +147,7 @@ function ReviewScreen() {
         </div>
       ) : null}
 
-      <section aria-labelledby="covered-title" className="flex w-full flex-col gap-2">
+      <section aria-labelledby="covered-title" className="flex w-full min-w-0 flex-col gap-2">
         <h2 id="covered-title" className="text-label-md text-01">
           {review.kind === "CHANGE" ? "The change under review" : "Everything it serves"}
         </h2>
@@ -166,7 +166,7 @@ function ReviewScreen() {
 
       <Checklist rows={checklistRows(review.checklist)} checks={checks} onCheck={canDecide ? (item, value) => setChecks((c) => ({ ...c, [item]: value })) : undefined} />
 
-      <section aria-labelledby="gate-title" className="flex w-full flex-col gap-2">
+      <section aria-labelledby="gate-title" className="flex w-full min-w-0 flex-col gap-2">
         <h2 id="gate-title" className="text-label-md text-01">
           Publish checks, now
         </h2>
@@ -242,7 +242,7 @@ function GateList({ rows }: { rows: ReturnType<typeof gateRows> }) {
       {rows.map((row) => (
         <li key={row.requirement} className="flex items-start gap-2 px-3.5 py-2.5 text-body-13">
           {row.met ? <Check aria-hidden="true" className="mt-0.5 size-3.5 text-success-700" /> : <X aria-hidden="true" className="mt-0.5 size-3.5 text-danger-700" />}
-          <span className={row.met ? "text-02" : "text-01"}>
+          <span className={cn("min-w-0 [overflow-wrap:anywhere]", row.met ? "text-02" : "text-01")}>
             {row.label}
             {!row.met && row.detail ? <span className="block text-body-xs text-03">{row.detail}</span> : null}
           </span>
@@ -254,13 +254,13 @@ function GateList({ rows }: { rows: ReturnType<typeof gateRows> }) {
 
 function Checklist({ rows, checks, onCheck }: { rows: ChecklistRow[]; checks: Record<string, ManualCheck>; onCheck?: (item: string, value: ManualCheck) => void }) {
   return (
-    <section aria-labelledby="checklist-title" className="flex w-full flex-col gap-2">
+    <section aria-labelledby="checklist-title" className="flex w-full min-w-0 flex-col gap-2">
       <h2 id="checklist-title" className="text-label-md text-01">
         Review checklist
       </h2>
       <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01 bg-01" data-testid="review-checklist">
         {rows.map((row) => (
-          <li key={row.item} className="flex flex-col gap-1.5 px-3.5 py-3">
+          <li key={row.item} className="flex min-w-0 flex-col gap-1.5 px-3.5 py-3 [overflow-wrap:anywhere]">
             <span className="flex flex-wrap items-center gap-2">
               <span className="text-label-13 text-01">{row.label}</span>
               <Chip tone={row.verdict === "PASS" ? "success" : row.verdict === "FAIL" ? "danger" : "warning"}>{row.verdictLabel}</Chip>

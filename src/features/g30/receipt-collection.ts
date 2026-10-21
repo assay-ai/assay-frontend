@@ -31,13 +31,35 @@ export interface CollectionView {
 }
 
 /** The late verdict that voided a debt, from its `voided:<OUTCOME>` note; `null` when not recorded. */
-export function voidedOutcome(chargeNote: string | null | undefined): "REFUND" | "VOID" | null {
+export function voidedOutcome(chargeNote: string | null | undefined): "REFUND" | "VOID" | "DISPUTE_UPHELD" | null {
   if (!chargeNote?.startsWith("voided:")) return null;
   const outcome = chargeNote.slice("voided:".length).trim().toUpperCase();
-  return outcome === "VOID" ? "VOID" : outcome === "REFUND" ? "REFUND" : null;
+  return outcome === "VOID" || outcome === "REFUND" || outcome === "DISPUTE_UPHELD" ? outcome : null;
 }
 
-export function collectionView(state: CollectionState, receipt: Pick<Receipt, "listedPrice" | "chargeNote">): CollectionView {
+/**
+ * A served call refunded because the buyer's report was upheld: the backend marks
+ * it `voided:DISPUTE_UPHELD`. Nothing lapsed and no check failed, so it must not
+ * be told as a cancelled debt.
+ */
+export function isRefundedByReport(chargeNote: string | null | undefined): boolean {
+  return voidedOutcome(chargeNote) === "DISPUTE_UPHELD";
+}
+
+/**
+ * Whether an upheld report cancelled this call's charge: the server's own
+ * `refundedByReport` when it sends one (receipt and call row), else the
+ * `voided:DISPUTE_UPHELD` note an older server leaves (BUG-X-01).
+ */
+export function receiptRefundedByReport(receipt: {
+  refundedByReport?: boolean | null;
+  chargeNote?: string | null;
+}): boolean {
+  if (typeof receipt.refundedByReport === "boolean") return receipt.refundedByReport;
+  return isRefundedByReport(receipt.chargeNote);
+}
+
+export function collectionView(state: CollectionState, receipt: Pick<Receipt, "listedPrice" | "chargeNote" | "refundedByReport">): CollectionView {
   const listed = formatMoney(receipt.listedPrice, { decimals: 4 });
   const cause = receipt.chargeNote ? debtCauseText(receipt.chargeNote) : null;
   switch (state) {
@@ -62,6 +84,15 @@ export function collectionView(state: CollectionState, receipt: Pick<Receipt, "l
         timeline: { label: "Written off: hold released, provider not paid", meta: `${listed} still owed by you` },
       };
     case "DEBT_VOIDED": {
+      if (receiptRefundedByReport(receipt)) {
+        return {
+          owed: false,
+          headline: "Refunded: your report was accepted",
+          explain: "The call was served, but you reported a bad result and the report was accepted. The hold went back to you and the provider was not paid.",
+          cause: null,
+          timeline: { label: "Refunded: your report was accepted", meta: "not charged" },
+        };
+      }
       // `voided:REFUND` is a failed check; `voided:VOID` is no usable result
       // (assay-backend `voidLateRejectedDebt`, `not-charged-reason.ts`).
       const noResult = voidedOutcome(receipt.chargeNote) === "VOID";

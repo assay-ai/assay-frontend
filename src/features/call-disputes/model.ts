@@ -1,7 +1,7 @@
 import type { StatusTimelineStep } from "@/components/patterns/status-timeline";
 import type { Money } from "@/interfaces/api";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import type { CallDispute, CallDisputeReason } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { formatClock, formatDate } from "@/libs/utc-time";
@@ -244,6 +244,15 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
     steps.push({ id: "reply", label: "No reply needed: provider blocked", state: "skipped" });
   } else if (withdrawn) {
     steps.push({ id: "reply", label: side === "buyer" ? "Withdrawn before a reply" : "Withdrawn by the buyer", state: "skipped" });
+  } else if (decided && decidedBeforeReplyDue(dispute, replyDue)) {
+    // Decided inside the reply window: it never closed, so never "Window closed" with a future date (BUG-RETEST-R5a-03).
+    steps.push({
+      id: "reply",
+      label: "No reply needed: decided before the reply window ended",
+      state: "skipped",
+      date: replyDue,
+      dateLabel: "Would have closed",
+    });
   } else if (decided || replyClosed) {
     steps.push({
       id: "reply",
@@ -482,6 +491,12 @@ export function bySlaUrgency<T extends Pick<CallDispute, "createdAt">>(rows: rea
   return [...rows].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
 }
 
+/** Whether the dispute was decided before the provider's reply window ended. */
+function decidedBeforeReplyDue(dispute: CallDispute, replyDue: string): boolean {
+  const decidedAt = Date.parse(dispute.resolvedAt ?? dispute.updatedAt);
+  return Number.isFinite(decidedAt) && decidedAt < Date.parse(replyDue);
+}
+
 /** What an upheld decision would do now, from `intent.refundPlan`. */
 export const REFUND_PLAN_TEXT: Readonly<Record<string, string>> = {
   RELEASE_HELD: "Upholding returns the held payment to the buyer's escrow. Nobody is credited.",
@@ -489,8 +504,19 @@ export const REFUND_PLAN_TEXT: Readonly<Record<string, string>> = {
   NOT_CHARGED: "The buyer was not charged; upholding only counts against the provider.",
   COLLECTION_IN_PROGRESS: "The payment is moving right now. Wait a minute before deciding.",
   COLLECTED: "The payment was already collected; upholding counts against quality, but a refund is not guaranteed.",
-  ALREADY_REFUNDED: "The refund has already landed (a decision being retried); deciding again moves no money.",
+  // No retry is in progress when this plan is read: the money simply went back already (BUG-RETEST-R5a-02).
+  ALREADY_REFUNDED: "Refunded to the buyer. Deciding again moves no money.",
 };
+
+/**
+ * The refund plan in words for this dispute. ALREADY_REFUNDED on a dispute
+ * still open (its provider was blocked, so the hold went back early) is not
+ * "deciding again": the decision still follows and moves no money.
+ */
+export function refundPlanText(plan: string, disputeState: string): string {
+  if (plan === "ALREADY_REFUNDED" && disputeState === "OPEN") return "Already refunded to the buyer. Deciding moves no money.";
+  return REFUND_PLAN_TEXT[plan] ?? plan;
+}
 
 /* ----------------------------------------------------------------- errors */
 
@@ -516,6 +542,6 @@ export function disputeErrorText(error: unknown): string {
     case "DISPUTE_NOT_FOUND":
       return "This report could not be found.";
     default:
-      return plainError(error.code);
+      return plainApiError(error);
   }
 }

@@ -224,6 +224,14 @@ describe("consent view: the agent", () => {
     expect(view(request()).limitsLine).toBe("$0.50 a call · $5 a day · 100 free calls a day · All tools");
   });
 
+  it("limits line follows the chosen agent, from that agent's own limits in the request (BUG-BUY-CONNECT-05)", () => {
+    const req = request({
+      agents: [agent(), agent({ id: "agt-2", label: "ops", limits: { perCall: usd("10000"), perDay: null, freeCallsPerDay: 100 } })],
+    });
+    expect(view(req, "agt-1").limitsLine).toBe("$0.50 a call · $5 a day · 100 free calls a day · All tools");
+    expect(view(req, "agt-2").limitsLine).toBe("$0.01 a call · No daily limit · 100 free calls a day · All tools");
+  });
+
   it("limits line with no ceilings says so", () => {
     expect(limitsLine(agent({ limits: { perCall: null, perDay: null, freeCallsPerDay: 100 } }))).toBe(
       "No limit a call · No daily limit · 100 free calls a day · All tools",

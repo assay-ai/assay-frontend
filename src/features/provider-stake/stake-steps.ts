@@ -24,7 +24,7 @@ import {
 } from "@/libs/chains/evm/deposit-transaction";
 import { pinnedDeployment } from "@/libs/chains/evm/signing-guard";
 import { explorerTxUrl } from "@/libs/chains/explorer";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import {
   createStakeAuthorityChallenge,
   proveStakeAuthority,
@@ -55,7 +55,7 @@ function need(signer: Signer | null): Signer {
 
 /** One sentence for whatever a stake step threw. The raw message stays under Details. */
 export function describeStakeError(error: unknown): string {
-  if (error instanceof ApiError) return plainError(error.code);
+  if (error instanceof ApiError) return plainApiError(error);
   if (error instanceof Error && error.message === NOT_READY) return NOT_READY;
   if (error instanceof Error && /reverted/i.test(error.message)) {
     return "The chain refused the transaction. Your stake did not change; the network fee may have been spent.";

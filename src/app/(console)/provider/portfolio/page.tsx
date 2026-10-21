@@ -8,7 +8,7 @@ import { useMemo } from "react";
 import { Banner } from "@/components/ui/banner";
 import { PageState } from "@/components/patterns/page-state";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
   Panel,
@@ -266,7 +266,7 @@ export default function ProviderPortfolioPage() {
         <Banner
           tone="danger"
           title="The portfolio could not be loaded"
-          description={plainError(error.code)}
+          description={plainApiError(error)}
         />
       ) : null}
 

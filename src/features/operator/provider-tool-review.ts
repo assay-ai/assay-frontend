@@ -2,7 +2,7 @@ import type { SectionTab } from "@/components/layout/nav-config";
 import type { OperatorRole } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { CUTOFF_LATE_HOURS } from "@/libs/dispute-deadlines";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import type { ModerationCutoff, ReviewChecklistItem, ReviewQueueItem } from "@/services/operator-provider-tools.service";
 
 /**
@@ -250,7 +250,7 @@ export function toolReviewErrorText(error: unknown): string {
     case "OPERATOR_ROLE_REQUIRED":
       return "Your role can't do this.";
     default:
-      return plainError(error.code);
+      return plainApiError(error);
   }
 }
 

@@ -28,13 +28,14 @@ import {
 import { CardRow } from "@/components/ui/card-row";
 import { OwedSummaryAction } from "@/features/buyer-debt/owed-row-action";
 import { Table, type TableColumn } from "@/components/ui/table";
+import { nothingWithheldHeading, notRunSentence, partOfLine } from "@/features/buyer/guarantee-copy";
 import { listedSplit, notChargedLines, type ListedSplitSegment } from "@/features/buyer/not-charged";
 import { formatCount, isZeroMoney, sharePercent } from "@/features/buyer/period";
 import { MATCHES_SENTENCE, ReconcileNote } from "@/features/buyer/reconcile-note";
 import { useGuarantee, type FailureReason, type MonthRow } from "@/features/buyer/use-guarantee";
 import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { SUPPORT_URL } from "@/libs/support";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
@@ -227,7 +228,7 @@ export default function GuaranteePage() {
         <PageState
           kind="error"
           title="These figures could not be loaded"
-          description={plainError(error.code)}
+          description={plainApiError(error)}
           onRetry={reload}
           code={error.code}
           details={error.message}
@@ -258,7 +259,7 @@ export default function GuaranteePage() {
 
       {!loading && !error && nothingWithheld && !noCallsAtAll ? (
         <section className="flex w-full flex-col gap-1.5 rounded-xl border border-teal-20 bg-teal-10 p-5 tablet:p-6">
-          <h2 className="text-heading-sm text-teal-600">Every call this month passed</h2>
+          <h2 className="text-heading-sm text-teal-600">{nothingWithheldHeading(data?.notRunCalls ?? 0)}</h2>
           <p className="max-w-[720px] text-body-md text-02">
             When a call fails our checks, you are not charged and the amount appears here. Your balance never moves for
             it: the money was only held, then released.
@@ -340,6 +341,13 @@ export default function GuaranteePage() {
         </p>
       ) : null}
 
+      {!loading && !error && data && data.notRunCalls > 0 ? (
+        <p className="flex items-start gap-2 text-body-13 text-02" data-testid="guarantee-not-run">
+          <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-03" />
+          <span>{notRunSentence(data.notRunCalls)}</span>
+        </p>
+      ) : null}
+
       {!loading && !error && (reasonLines.length > 0 || anyMonthHasCalls) ? (
         <div className="flex w-full flex-col gap-4 desktop:flex-row desktop:items-start">
           {reasonLines.length > 0 ? (
@@ -373,7 +381,7 @@ export default function GuaranteePage() {
                                 href={routes.calls({ status: "not-charged", tool: r.mostlyToolId ?? undefined })}
                                 label={r.label}
                                 sub={
-                                  plural(r.calls, "call") +
+                                  partOfLine(r.calls, line.calls) +
                                   (r.mostlyToolId ? ` · mostly ${names.name("tool", r.mostlyToolId)}` : "") +
                                   (names.lookup("provider", r.mostlyProviderId)
                                     ? ` from ${names.lookup("provider", r.mostlyProviderId)}`

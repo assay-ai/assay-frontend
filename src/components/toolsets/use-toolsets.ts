@@ -4,7 +4,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 
 import type { McpClient } from "@/features/buyer-money/mcp-config";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import {
   getPublicHandle,
   getPublicToolset,
@@ -196,7 +196,7 @@ export function useUpdateAccess(agentId: string | null | undefined) {
       void queryClient.invalidateQueries({ queryKey: toolsetKeys.servers(next.agentId) });
       void queryClient.invalidateQueries({ queryKey: ["spend-policy-history"] });
     },
-    onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "The change could not be saved"),
+    onError: (error) => toast.error(error instanceof ApiError ? plainApiError(error) : "The change could not be saved"),
   });
 }
 
@@ -215,5 +215,5 @@ export function useRecordConnect(agentId: string | null | undefined) {
 
 /** The plain sentence for a failed request. */
 export function errorText(error: unknown, fallback = "Something went wrong. Try again."): string {
-  return error instanceof ApiError ? plainError(error.code) : fallback;
+  return error instanceof ApiError ? plainApiError(error) : fallback;
 }

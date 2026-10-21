@@ -67,7 +67,19 @@ export interface SpendPolicy {
   createdAt: string;
   /** Omitted, not `null`, when it could not be computed. */
   usage?: SpendPolicyUsage;
+  /**
+   * `GET` only, newer servers: the agent whose limits these are (the asked
+   * `agentId` when it was read, else the session's own agent), also when the
+   * policy is the organization default (`scope`).
+   */
+  subjectAgentId?: string;
+  /**
+   * `GET` only, newer servers: an `agentId` was asked for and not read; the
+   * limits are then the session's own, never the asked agent's.
+   */
+  requestedAgentIgnored?: boolean;
 }
+
 
 /** `SpendPolicyHistoryEntryDto`. `supersededAt` is null on exactly one row. */
 export interface SpendPolicyHistoryEntry {

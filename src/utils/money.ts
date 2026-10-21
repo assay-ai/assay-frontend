@@ -192,14 +192,22 @@ export interface ParsedAmount {
  *
  *   parseAmountInput("20", { decimals: 6, min: "5" })   → { value: 20, atomic: "20000000", error: null }
  *   parseAmountInput("1.2.3", { decimals: 6 })          → { error: "Enter an amount like 20 or 20.50." }
+ *   parseAmountInput("1,5", { decimals: 6 })            → { error: "Enter an amount like 20 or 20.50." }
  */
 export function parseAmountInput(
   raw: string,
   options: { decimals: number; min?: string; max?: string; required?: boolean; symbol?: string },
 ): ParsedAmount {
   const { decimals, min, max, required = true, symbol = "$" } = options;
-  const text = raw.trim().replace(/,/g, "");
-  if (text === "") return { value: null, atomic: null, error: required ? "Enter an amount." : null };
+  // A leading "$" (pasted from a price) is fine; a comma only as a thousands
+  // separator ("1,000"), never as a decimal point ("1,5" is not 15).
+  const trimmed = raw.trim().replace(/^\$\s*/, "");
+  if (trimmed === "") return { value: null, atomic: null, error: required ? "Enter an amount." : null };
+  // The first group never starts with 0: "0,500" is a decimal comma, not 500.
+  if (trimmed.includes(",") && !/^[1-9]\d{0,2}(,\d{3})+(\.\d*)?$/.test(trimmed)) {
+    return { value: null, atomic: null, error: "Enter an amount like 20 or 20.50." };
+  }
+  const text = trimmed.replace(/,/g, "");
   if (!/^\d*\.?\d*$/.test(text) || text === ".") {
     return { value: null, atomic: null, error: "Enter an amount like 20 or 20.50." };
   }

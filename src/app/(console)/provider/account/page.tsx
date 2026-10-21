@@ -32,7 +32,7 @@ import { PROVIDER_EXPLAINER } from "@/components/layout/provider-nav-config";
 import { useOrgHandle } from "@/components/toolsets/use-toolsets";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { credentialLabel, type CredentialLike } from "@/features/buyer-money/mcp-config";
 import { termsVersionLabel } from "@/features/m41/terms";
 import { useAgentList } from "@/features/agents/agent-list";
@@ -385,7 +385,10 @@ export default function ProviderAccountPage() {
             // attach one to, so the control says it cannot act instead of
             // failing on the click.
             disabled={agentIds.length === 0}
-            onClick={() => setCreating(true)}
+            onClick={() => {
+              createMutation.reset();
+              setCreating(true);
+            }}
           >
             New API key
           </Button>
@@ -406,16 +409,8 @@ export default function ProviderAccountPage() {
           description={
             registrationError.code === "PROVIDER_NOT_FOUND"
               ? "Finish setup to add your contacts and accept the terms."
-              : plainError(registrationError.code)
+              : plainApiError(registrationError)
           }
-        />
-      ) : null}
-
-      {createMutation.error instanceof ApiError ? (
-        <Banner
-          tone="danger"
-          title="The API key could not be created"
-          description={plainError(createMutation.error.code)}
         />
       ) : null}
 
@@ -612,8 +607,17 @@ export default function ProviderAccountPage() {
               placeholder="CI deploy"
               value={name}
               onChange={(event) => setName(event.target.value)}
+              maxLength={128}
               hint="For a deploy pipeline or a script that manages your tools."
             />
+            {/* Inside the sheet: a banner on the page would sit behind the overlay. */}
+            {createMutation.error instanceof ApiError ? (
+              <Banner
+                tone="danger"
+                title="The API key could not be created"
+                description={plainApiError(createMutation.error)}
+              />
+            ) : null}
             <Button
               type="button"
               loading={createMutation.isPending}

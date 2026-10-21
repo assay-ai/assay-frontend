@@ -120,6 +120,13 @@ describe("eventSummary", () => {
     );
   });
 
+  it("reads the newer dollar summaries and keeps against <tool> (BUG-OPS-CASES-03)", () => {
+    expect(eventSummary("Penalty of $28.47 proposed", context)).toBe("Penalty of $28.47 proposed against Weather forecast");
+    expect(eventSummary("Penalty of $5.00 is below the de-minimis floor; recorded, not levied", context)).toBe(
+      "Penalty of $5.00 is below the minimum penalty; it is recorded but not charged",
+    );
+  });
+
   it("formats the other amounts and timestamps", () => {
     expect(eventSummary("Penalty of 28470000 taken from stake", context)).toBe(
       "Penalty of $28.47 taken from stake",

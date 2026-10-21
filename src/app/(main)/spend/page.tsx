@@ -33,7 +33,7 @@ import { useChains } from "@/hooks/useChains";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getReceiptsSummary, getWithheld } from "@/services";
 import { cn } from "@/utils";
@@ -228,7 +228,7 @@ export default function SpendPage() {
         <PageState
           kind="error"
           title="Your spend could not be loaded"
-          description={plainError(query.error.code)}
+          description={plainApiError(query.error)}
           onRetry={() => void query.refetch()}
           code={query.error.code}
           details={query.error.message}

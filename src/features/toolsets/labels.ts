@@ -110,3 +110,23 @@ const SETTING_LABELS: Record<string, string> = {
 export function settingLabel(setting: string): string {
   return SETTING_LABELS[setting] ?? setting.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
 }
+
+/** The notice on a tool set entry whose tool Assay took down (BUG-X-05). */
+export const TAKEN_DOWN_LABEL = "Removed by Assay";
+export const TAKEN_DOWN_NOTE = "Assay took this tool down, so agents no longer see it. Remove it from the set, or keep it in case it comes back.";
+
+/** The tool ids of a set's entries that Assay took down (`takenDown`; none on an older server). */
+export function takenDownToolIds(entries: readonly { toolId: string; takenDown?: boolean }[]): Set<string> {
+  return new Set(entries.filter((e) => e.takenDown === true).map((e) => e.toolId));
+}
+
+/**
+ * "· 2 tools" on the Draft, without the taken-down tools agents no longer see:
+ * "· 1 tool · 1 removed by Assay".
+ */
+export function draftToolCountText(toolCount: number, entries: readonly { toolId: string; takenDown?: boolean }[]): string {
+  const removed = takenDownToolIds(entries).size;
+  const live = Math.max(0, toolCount - removed);
+  const base = `${live} tool${live === 1 ? "" : "s"}`;
+  return removed > 0 ? `${base} · ${removed} removed by Assay` : base;
+}

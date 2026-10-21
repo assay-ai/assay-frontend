@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changePercent, previousTotal, rankRows, spendCsv, spendCsvFilename } from "./spend-view";
+import { changePercent, paidGroups, previousTotal, rankRows, spendCsv, spendCsvFilename } from "./spend-view";
 import type { SummaryGroup } from "./wire";
 
 const m = (amount: string) => ({ amount, asset: "eip155:1/erc20:0x1", decimals: 6 });
@@ -69,6 +69,33 @@ describe("rankRows", () => {
     expect(rows[0]!.delta).toBe("▲ +$0.0003");
     expect(rows[1]!.delta).toBeNull();
     expect(rows[2]!.free).toBe(true);
+  });
+  it("marks a free-tier-only group (calls 0, freeCalls > 0) as free and counts its free calls", () => {
+    const freeOnly = { ...group("free", "0", "0", 0), freeCalls: 4 };
+    const [row] = rankRows([freeOnly], (k) => k);
+    expect(row!.free).toBe(true);
+    expect(row!.calls).toBe(4);
+  });
+  it("does not count a zero-price intent twice (in calls and in freeCalls)", () => {
+    const [row] = rankRows([{ ...group("free", "0", "0", 2), freeCalls: 5 }], (k) => k);
+    expect(row!.calls).toBe(5);
+  });
+  it("keeps an empty group (no calls, no free calls) not free, as before", () => {
+    const [row] = rankRows([group("none", "0", "0", 0)], (k) => k);
+    expect(row!.free).toBe(false);
+    expect(row!.calls).toBe(0);
+  });
+  it("keeps a paid row's count as its paid calls", () => {
+    const [row] = rankRows([{ ...group("paid", "100", "100", 3), freeCalls: 9 }], (k) => k);
+    expect(row!.free).toBe(false);
+    expect(row!.calls).toBe(3);
+  });
+});
+
+describe("paidGroups", () => {
+  it("leaves out a free-tier-only group (calls 0) and keeps paid ones", () => {
+    const groups = [group("paid", "100", "100", 2), { ...group("free", "0", "0", 0), freeCalls: 3 }];
+    expect(paidGroups(groups).map((g) => g.key)).toEqual(["paid"]);
   });
 });
 

@@ -31,7 +31,7 @@ import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import type { EscrowDelegate } from "@/interfaces";
 import { formatDate } from "@/libs/utc-time";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { shortAddress } from "@/libs/chains/format";
 import { firstDepositOpensEscrow } from "@/libs/chains/registry";
 import { renameAgent, revokeCredential } from "@/services/account.service";
@@ -334,7 +334,7 @@ export function AgentsView() {
         <PageState
           kind="error"
           title="Your agents could not be loaded"
-          description={data.agentsQuery.error instanceof ApiError ? plainError(data.agentsQuery.error.code) : undefined}
+          description={data.agentsQuery.error instanceof ApiError ? plainApiError(data.agentsQuery.error) : undefined}
           code={data.agentsQuery.error instanceof ApiError ? data.agentsQuery.error.code : null}
           onRetry={() => void data.agentsQuery.refetch()}
         />
@@ -355,6 +355,7 @@ export function AgentsView() {
             keys={data.keys[agent.agentId]}
             keysPending={data.keysQuery.isPending}
             keysFailed={data.keysQuery.isError}
+            keysHidden={data.keysHiddenFor.has(agent.agentId)}
             onRetryKeys={data.refetchKeys}
             readiness={data.readiness[agent.agentId]!}
             escrowReady={
@@ -393,7 +394,7 @@ export function AgentsView() {
         tightenDelaySeconds={data.delegatesQuery.data?.tightenDelaySeconds}
         onRevoke={() => revokeCredential(lastRevoke!.agent.agentId, lastRevoke!.key.id)}
         onStopOnChain={() => stopPaymentKey(lastRevoke!.key.delegateAccount!)}
-        describeRevokeError={(error) => (error instanceof ApiError ? plainError(error.code) : "It could not be revoked. Nothing changed; try again.")}
+        describeRevokeError={(error) => (error instanceof ApiError ? plainApiError(error) : "It could not be revoked. Nothing changed; try again.")}
         describeStopError={explainStopFailure}
         onDone={(outcome, keyState) => {
           refresh();
@@ -667,6 +668,7 @@ function AgentCard({
   keys,
   keysPending,
   keysFailed,
+  keysHidden = false,
   onRetryKeys,
   readiness,
   escrowReady,
@@ -685,6 +687,8 @@ function AgentCard({
   keysPending: boolean;
   /** The keys could not be read: say so, never "no key". */
   keysFailed: boolean;
+  /** The keys are not shown to this session (agent-kind, BUG-DEMO-02): say so, no retry. */
+  keysHidden?: boolean;
   onRetryKeys: () => void;
   readiness: AgentReadiness;
   escrowReady: boolean;
@@ -759,7 +763,11 @@ function AgentCard({
       </header>
 
       <SubRow n={1} title="Keys">
-        {keysFailed ? (
+        {keysHidden ? (
+          <p className="text-body-13 text-02" data-testid="keys-hidden">
+            {plainError("AGENT_KEYS_HIDDEN")} This does not change what it can call.
+          </p>
+        ) : keysFailed ? (
           <div className="flex flex-wrap items-center gap-2" role="alert" data-testid="keys-unreadable">
             <p className="text-body-13 text-02">We could not read this agent&apos;s keys. This does not change what it can call.</p>
             <Button size="sm" variant="secondary" type="button" onClick={onRetryKeys}>
@@ -982,7 +990,7 @@ function AgentName({ agent }: { agent: AgentRow }) {
             ? problem
             : rename.isError
               ? rename.error instanceof ApiError
-                ? plainError(rename.error.code)
+                ? plainApiError(rename.error)
                 : "The name could not be saved. Try again."
               : undefined
         }
