@@ -54,7 +54,7 @@ In the repository settings, create two environments, `develop` and
 | Variable | `NEXT_PUBLIC_BASE_URL`     | the app's public URL, e.g. `https://app.example.com` |
 | Variable | `NEXT_PUBLIC_API_BASE_URL` | the backend API, e.g. `https://api.example.com/api/v1` |
 | Variable | `NEXT_PUBLIC_PRIVY_APP_ID` | the Privy app id (25 characters)                |
-| Variable | `NEXT_PUBLIC_MCP_URL`      | the MCP host root, e.g. `https://mcp.assay.ai/`; required: without it the Connect page shows no command |
+| Variable | `NEXT_PUBLIC_MCP_URL`      | the MCP host root, e.g. `https://mcp.goassay.ai/`; required: without it the Connect page shows no command |
 | Variable | `NEXT_PUBLIC_ASSAY_MCP_VERSION` | the exact `@goassay-ai/mcp` version install commands pin (no range, no tag); the build fails without it |
 | Variable | `NEXT_PUBLIC_DEMO_CHAINS`  | `demo` environment only: `robinhood`. Leave it unset in the others; the workflow refuses it there |
 | Variable | `NEXT_PUBLIC_SHOW_KITCHEN_SINK` | optional: `1` keeps `/kitchen-sink` in the build |

@@ -1,5 +1,5 @@
 /**
- * The MCP host an agent connects to, e.g. `https://mcp.assay.ai/`.
+ * The MCP host an agent connects to, e.g. `https://mcp.goassay.ai/`.
  *
  * Read from `NEXT_PUBLIC_MCP_URL` (inlined at build time — see
  * `.env.local.example`). Every MCP URL sits at the root of that host: `/` is
@@ -14,7 +14,7 @@
 export const MCP_HOST_PLACEHOLDER = "https://<your-mcp-host>";
 export const MCP_URL_PLACEHOLDER = `${MCP_HOST_PLACEHOLDER}/`;
 
-/** The MCP host's origin, with no trailing slash: `https://mcp.assay.ai`. */
+/** The MCP host's origin, with no trailing slash: `https://mcp.goassay.ai`. */
 export function mcpHost(configured: string | undefined = process.env.NEXT_PUBLIC_MCP_URL): string {
   const raw = configured?.trim();
   if (!raw) return MCP_HOST_PLACEHOLDER;
@@ -25,7 +25,7 @@ export function mcpHost(configured: string | undefined = process.env.NEXT_PUBLIC
   }
 }
 
-/** The root MCP URL, `https://mcp.assay.ai/`: the whole catalogue. What the first run hands out. */
+/** The root MCP URL, `https://mcp.goassay.ai/`: the whole catalogue. What the first run hands out. */
 export function mcpEndpointUrl(configured: string | undefined = process.env.NEXT_PUBLIC_MCP_URL): string {
   return `${mcpHost(configured)}/`;
 }
