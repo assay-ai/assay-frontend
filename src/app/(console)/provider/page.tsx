@@ -11,10 +11,11 @@ import { SetupChecklist, type SetupStep } from "@/components/patterns/setup-chec
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
+import { PROVIDER_EXPLAINER } from "@/components/layout/provider-nav-config";
+import { foldDrafts, priceLine } from "@/features/provider-binding/listing-copy";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { FirstRunCard } from "@/features/provider-home/first-run-card";
-import { callPrice } from "@/features/provider-home/format";
-import { NeedsActionStrip } from "@/features/provider-home/needs-action-strip";
+import { NeedsActionStrip, WatchList } from "@/features/provider-home/needs-action-strip";
 import { useProviderNeedsAction } from "@/features/provider-home/use-needs-action";
 import {
   useListingProgress,
@@ -22,6 +23,7 @@ import {
   useProviderRegistration,
 } from "@/features/provider-home/use-listing-progress";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
+import { stakeStatus } from "@/features/provider-stake/stake-status";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { earningsSplit, homeUnpaidNotes } from "@/features/provider-earnings/earned-tile";
 import type { BindingStatus, Money, ProviderEarnings, ToolBindingSummary } from "@/interfaces";
@@ -29,6 +31,7 @@ import { routes } from "@/libs/routes";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { getToolBinding } from "@/services/provider-tool-bindings.service";
 import { formatMoney, toDecimal } from "@/utils/money";
+import { earningsKey, last30DaysWindow, monthWindow } from "@/features/provider-home/report-windows";
 
 /**
  * Provider home — "what do I do next?" in five seconds.
@@ -51,17 +54,6 @@ const BINDING_CHIP: Record<BindingStatus, StatusChipKey> = {
   SUSPENDED: "blocked",
 };
 
-function monthWindow(now: Date) {
-  return {
-    from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
-    to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString(),
-  };
-}
-
-function lastDays(now: Date, days: number) {
-  return { from: new Date(now.getTime() - days * 86_400_000).toISOString(), to: new Date(now.getTime() + 60_000).toISOString() };
-}
-
 function byTool(earnings: ProviderEarnings | undefined) {
   return new Map((earnings?.groups ?? []).map((group) => [group.key, group]));
 }
@@ -69,7 +61,8 @@ function byTool(earnings: ProviderEarnings | undefined) {
 export default function ProviderHomePage() {
   const now = React.useMemo(() => new Date(), []);
   const month = React.useMemo(() => monthWindow(now), [now]);
-  const recent = React.useMemo(() => lastDays(now, 30), [now]);
+  // The same 30-day window Portfolio asks about, so the two share one request.
+  const recent = React.useMemo(() => last30DaysWindow(now), [now]);
   const [stakeOpen, setStakeOpen] = React.useState(false);
 
   const registration = useProviderRegistration();
@@ -82,7 +75,7 @@ export default function ProviderHomePage() {
   const live = items.filter((binding) => binding.status === "ACTIVE");
 
   const earningsMonth = useQuery({
-    queryKey: ["provider", "earnings", "tool", month.from, month.to],
+    queryKey: earningsKey(month),
     queryFn: () => getProviderEarnings({ ...month, groupBy: "tool" }),
     enabled: items.length > 0,
     retry: false,
@@ -90,7 +83,7 @@ export default function ProviderHomePage() {
 
   // The first-run listener: polls while a live tool has not served a call yet.
   const recentEarnings = useQuery({
-    queryKey: ["provider", "earnings", "tool", "first-call", recent.from],
+    queryKey: earningsKey(recent),
     queryFn: () => getProviderEarnings({ ...recent, groupBy: "tool" }),
     enabled: live.length > 0,
     retry: false,
@@ -113,7 +106,7 @@ export default function ProviderHomePage() {
   const record = registration.data?.registration;
   const title = record?.legalName ?? "Welcome";
 
-  const { attention, loading: attentionLoading } = useProviderNeedsAction();
+  const { attention, watch, loading: attentionLoading } = useProviderNeedsAction();
 
   const steps: SetupStep[] = progress.steps.map((step) => ({
     id: step.id,
@@ -134,10 +127,12 @@ export default function ProviderHomePage() {
       ),
   }));
 
+  // One stake status for Home, Stake, the Inbox and the Add stake sheet (D21).
+  const stakeHealth = stakeStatus(stake);
   const subtitle = [
     live.length > 0 ? `${live.length} tool${live.length === 1 ? "" : "s"} live` : null,
-    stake.staked && stake.required
-      ? `stake ${formatMoney(stake.staked, { decimals: 2 })} of ${formatMoney(stake.required, { decimals: 2 })} needed`
+    stake.staked && stake.required && stakeHealth.label
+      ? `stake ${formatMoney(stake.staked, { decimals: 2 })} · ${stakeHealth.label} (${formatMoney(stake.required, { decimals: 2 })} minimum)`
       : null,
   ]
     .filter(Boolean)
@@ -145,10 +140,16 @@ export default function ProviderHomePage() {
 
   return (
     <>
-      <header className="flex w-full flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+      {/* Stacked below tablet: in a wrapping row, `flex-1` (basis 0) never
+          wrapped, so at 390px the name and status shrank to a ~60px column
+          beside the buttons (V1-10). */}
+      <header className="flex w-full flex-col gap-3 tablet:flex-row tablet:flex-wrap tablet:items-center tablet:justify-between" data-testid="provider-home-header">
+        <div className="flex w-full min-w-0 flex-col gap-0.5 tablet:w-auto tablet:flex-1">
           <h1 className="truncate text-heading-sm text-01 desktop:text-heading-md">{title}</h1>
           {subtitle ? <p className="text-body-13 text-03 tablet:truncate">{subtitle}</p> : null}
+          <Link href={PROVIDER_EXPLAINER.href} className="inline-flex min-h-10 items-center self-start text-body-13 text-primary-600 hover:underline">
+            {PROVIDER_EXPLAINER.label}
+          </Link>
         </div>
         {record ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -189,7 +190,10 @@ export default function ProviderHomePage() {
           />
         )
       ) : (
-        <NeedsActionStrip items={attention} onOpenStake={() => setStakeOpen(true)} loading={attentionLoading} />
+        <>
+          <NeedsActionStrip items={attention} onOpenStake={() => setStakeOpen(true)} loading={attentionLoading} />
+          <WatchList items={watch} />
+        </>
       )}
 
       {showFirstRun && firstLive ? (
@@ -214,11 +218,7 @@ export default function ProviderHomePage() {
         open={stakeOpen}
         onOpenChange={setStakeOpen}
         amount={stake.shortfall}
-        reason={
-          stake.required
-            ? `Your paid tools need ${formatMoney(stake.required, { decimals: 2 })} of stake in total.`
-            : "Stake backs the failure rate you promise on paid tools."
-        }
+        reason={stake.required ? stakeHealth.sentence : "Stake backs the failure rate you promise on paid tools."}
         onStaked={() => void stake.refetch()}
       />
     </>
@@ -317,44 +317,55 @@ function ToolsPanel({
   label: (binding: ToolBindingSummary) => string;
 }) {
   const groups = byTool(earnings);
+  // Live first; drafts fold into one row, so they never push a live listing down.
+  const { shown, drafts } = foldDrafts(items);
   return (
     <Panel className="w-full">
       <PanelHeader>
         <PanelTitles>
-          <PanelTitle>Your tools</PanelTitle>
+          <PanelTitle>Your listings</PanelTitle>
           <PanelDescription>open one for its settings, quality and calls</PanelDescription>
         </PanelTitles>
         <Button size="sm" variant="ghost" asChild>
-          <Link href="/provider/bindings">All tools</Link>
+          <Link href="/provider/bindings">All listings</Link>
         </Button>
       </PanelHeader>
       <PanelBody className="p-2">
         <ul className="flex w-full flex-col">
-          {items.map((binding) => {
+          {shown.map((binding) => {
             const group = groups.get(binding.toolId);
-            const href = binding.status === "DRAFT" ? routes.bindingWizard(binding.id) : routes.binding(binding.id);
             return (
               <li key={binding.id}>
                 <Link
-                  href={href}
+                  href={routes.binding(binding.id)}
                   className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
                 >
                   <span className="min-w-0 flex-1 basis-40 truncate text-label-13 text-01">{label(binding)}</span>
                   <StatusChip status={BINDING_CHIP[binding.status]} />
-                  <span className="w-28 text-right font-mono text-mono-12 text-02">
-                    {binding.pricingMode === "FREE" ? "Free" : `${callPrice(binding.price)} / call`}
-                  </span>
+                  <span className="w-36 text-right text-body-13 text-02">{priceLine(binding)}</span>
                   {group ? (
                     <span className="w-36 text-right text-body-xs text-03">
                       {group.calls.toLocaleString("en-US")} calls · {formatMoney(group.earned, { decimals: 2 })}
                     </span>
-                  ) : binding.status === "DRAFT" ? (
-                    <span className="w-36 text-right text-body-xs text-primary-600">Continue setup</span>
                   ) : null}
                 </Link>
               </li>
             );
           })}
+          {drafts.length > 0 ? (
+            <li>
+              <Link
+                href={drafts.length === 1 ? routes.bindingWizard(drafts[0]!.id) : "/provider/bindings"}
+                className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"
+              >
+                <span className="min-w-0 flex-1 basis-40 truncate text-label-13 text-01">
+                  {drafts.length === 1 ? `Draft: ${label(drafts[0]!)}` : `Drafts (${drafts.length})`}
+                </span>
+                <StatusChip status="draft" />
+                <span className="w-36 text-right text-body-xs text-primary-600">Continue setup</span>
+              </Link>
+            </li>
+          ) : null}
         </ul>
       </PanelBody>
     </Panel>

@@ -15,9 +15,9 @@ export interface ToolCall {
   charged: Money;
   /**
    * SETTLED, but the provider caused the payment to fail and forfeited it:
-   * not charged, nobody paid. Optional: older backends do not send it.
+   * not charged, nobody paid.
    */
-  forfeited?: boolean;
+  forfeited: boolean;
   /**
    * Buyer debt: `OUTSTANDING` — the payment could not be collected, the price
    * stays held and the payer must sign a replacement voucher before paid calls
@@ -26,10 +26,21 @@ export interface ToolCall {
    * calls stay refused until it is signed; `VOIDED` — the call failed
    * verification after it had become debt: not charged, provider not paid.
    */
-  debt?: CallDebt | null;
+  debt: CallDebt | null;
+  /**
+   * SETTLED, and refunded because the buyer's report of a bad result was
+   * upheld (`debt` is `VOIDED`).
+   */
+  refundedByReport: boolean;
   /** Wider than the OpenAPI enum, and nullable. See @/utils/verdict. */
   verdict: WireVerdict;
   createdAt: string;
+  /**
+   * Only on `refundable=true`: until when a report filed now is refunded in
+   * full (the receipt's `refundableIfReportedUntil`). Null when the payment is
+   * not collected yet (its hour starts then).
+   */
+  refundableIfReportedUntil?: string | null;
 }
 
 export interface ListToolCallsQuery extends ListQuery {
@@ -40,6 +51,11 @@ export interface ListToolCallsQuery extends ListQuery {
   from?: string;
   to?: string;
   search?: string;
+  /**
+   * Only calls a report filed now would refund in full: the backend's own
+   * predicate (the receipt's `refundableIfReportedNow`), never a clock rule.
+   */
+  refundable?: boolean;
 }
 
 /** GET /tool-calls — the recent-calls list on the Overview and the spine of the Spend explorer. */

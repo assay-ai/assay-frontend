@@ -52,8 +52,7 @@ describe("the operator session store", () => {
     expect(storage.getItem(OPERATOR_SESSION_KEY)).toBeNull();
   });
 
-  it("drops the old pasted-token key and an unreadable record", () => {
-    storage.setItem("operatorAccessToken", "pasted");
+  it("drops an unreadable record", () => {
     storage.setItem(OPERATOR_SESSION_KEY, "{not json");
     expect(readOperatorSession()).toBeNull();
     expect(storage.dump()).toEqual({});

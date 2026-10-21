@@ -1,19 +1,35 @@
 "use client";
 
+import { AuthenticationPanel, runBlockedByCredentials, runCredentialsHint, useBindingCredentials } from "../authentication/authentication-panel";
+import { QUERY_KEY_ERROR, credentialQueryKeys, moveQueryKeys } from "../authentication/rules";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, Play } from "lucide-react";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Switch } from "@/components/ui/switch";
-import type { BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping } from "@/interfaces";
+import type { BindingAuthMode, BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping } from "@/interfaces";
+import type { CredentialHeaderInput } from "@/interfaces/provider-bindings";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { testToolBinding } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 
+import {
+  contractMismatchProblems,
+  defaultTerms,
+  majorChoices,
+  runLabel,
+  sameTerms,
+  termsOf,
+  termsProblem,
+  testTargets,
+  type ContractTerms,
+} from "../contract-terms";
+import { ContractTermsPanel } from "../contract-terms-panel";
 import { documentsEqual, MappingEditor, schemaFields } from "../mapping-editor";
 import { requestMappingSummary, responseMappingSummary } from "../mapping-summary";
 import { argumentsProblem } from "../tester-arguments";
@@ -22,13 +38,31 @@ import { TestPipelineView } from "../tester/pipeline-view";
 import { isStaleRun } from "../tester/report-view";
 import { createRunGuard } from "../tester/run-guard";
 
+import { previewRequest } from "./request-preview";
+import { readTestInput, writeTestInput } from "./test-input-store";
 import { argumentsFromText, seedArguments, seedRequestMapping, seedResponseMapping } from "./seeds";
 
 export interface ConnectDraft {
   endpoint: string;
+  authMode: BindingAuthMode;
   requestMapping: ToolMapping;
   responseMapping: ToolMapping;
+  /**
+   * T3: the contract versions served and the optional fields. null when the
+   * catalogue has no versions (a backend before T3): nothing is sent.
+   */
+  terms: ContractTerms | null;
 }
+
+/** One test run, for one contract major. */
+interface MajorRun {
+  major: number;
+  semver: string | null;
+  report: BindingTestReport;
+}
+
+/** Where "Save draft and exit" goes: the listings. */
+const LISTINGS_PATH = "/provider/bindings";
 
 export function parseEndpoint(text: string): { value: string | null; error: string | null } {
   const trimmed = text.trim();
@@ -69,7 +103,25 @@ export function ConnectStage({
   onContinue: () => void;
 }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [endpoint, setEndpoint] = React.useState(binding?.endpoint ?? initialEndpoint);
+  // No default (D10): a new listing starts with no choice, and nothing is saved until one is made.
+  const [authMode, setAuthMode] = React.useState<BindingAuthMode | null>(binding?.authMode ?? null);
+  // Moved out of the address by "Move it to an API key header"; only ever handed to the write-only form.
+  const [pendingHeaders, setPendingHeaders] = React.useState<CredentialHeaderInput[] | null>(null);
+  const credentialSets = useBindingCredentials(binding?.id ?? null, authMode);
+  // Before the first save there is nowhere to store a key, so Run (which saves) stays open.
+  const credentialGate = {
+    hasBinding: binding !== null,
+    mode: authMode,
+    loading: credentialSets.isLoading,
+    isError: credentialSets.isError,
+    sets: credentialSets.data,
+    endpoint,
+    savedEndpoint: binding?.endpoint ?? null,
+  };
+  const credentialsMissing = runBlockedByCredentials(credentialGate);
+  const credentialsHint = runCredentialsHint(credentialGate);
   const [endpointTouched, setEndpointTouched] = React.useState(false);
   const [mappings, setMappings] = React.useState<{ request: ToolMapping; response: ToolMapping }>(() => ({
     request: binding?.requestMapping ?? seedRequestMapping(tool),
@@ -84,16 +136,32 @@ export function ConnectStage({
     setAdvancedState(open);
   };
 
+  const choices = React.useMemo(() => majorChoices(tool), [tool]);
+  const versioned = choices.length > 0;
+  const storedTerms = React.useMemo(() => (binding ? termsOf(binding) : null), [binding]);
+  const [terms, setTerms] = React.useState<ContractTerms>(() => storedTerms ?? defaultTerms(tool));
+  const termsDirty = versioned && (storedTerms ? !sameTerms(storedTerms, terms) : false);
+  const termsBlocked = versioned ? termsProblem(terms, choices) : null;
+
   const fields = React.useMemo(() => schemaFields(tool.inputSchema), [tool.inputSchema]);
-  const [args, setArgs] = React.useState<Record<string, string>>(() => seedArguments(tool.inputSchema));
+  // Prefilled from the contract's own example (the current version's), so the first test can run at once.
+  // The last test input kept with this draft wins; otherwise the contract's example.
+  const [args, setArgs] = React.useState<Record<string, string>>(() => {
+    const seeded = seedArguments(tool.inputSchema, (tool.versions?.find((v) => v.isCurrent) ?? tool.versions?.[0])?.examples ?? []);
+    const kept = readTestInput(binding?.id);
+    return kept ? { ...seeded, ...Object.fromEntries(Object.entries(kept).filter(([name]) => name in seeded)) } : seeded;
+  });
 
   // Run stays off until the page has hydrated, so the first click is never lost.
   const [hydrated, setHydrated] = React.useState(false);
   React.useEffect(() => setHydrated(true), []);
 
-  const [phase, setPhase] = React.useState<"idle" | "saving" | "testing">("idle");
+  const [phase, setPhase] = React.useState<"idle" | "saving" | "testing" | "saving-only" | "exiting">("idle");
   const [error, setError] = React.useState<string | null>(null);
-  const [report, setReport] = React.useState<BindingTestReport | null>(null);
+  const [problems, setProblems] = React.useState<string[] | null>(null);
+  const [runs, setRuns] = React.useState<MajorRun[] | null>(null);
+  const [testingMajor, setTestingMajor] = React.useState<number | null>(null);
+  const report = runs?.[runs.length - 1]?.report ?? null;
   // An empty result proves nothing: Continue needs the provider to say they know. Asked again per run.
   const [emptyAck, setEmptyAck] = React.useState(false);
   const [ackFor, setAckFor] = React.useState<BindingTestReport | null>(null);
@@ -104,19 +172,80 @@ export function ConnectStage({
   const [runGuard] = React.useState(createRunGuard);
 
   const parsedEndpoint = parseEndpoint(endpoint);
+  const urlKeys = credentialQueryKeys(endpoint);
+  const endpointError = urlKeys.length > 0 ? QUERY_KEY_ERROR : parsedEndpoint.error;
   const mappingProblem = blocked.request ?? blocked.response;
 
-  const run = async () => {
+  const mappingInvalid = () => {
+    setAdvanced(true);
+    setError(`Fix the mapping first: ${mappingProblem}`);
+  };
+
+  /** Everything a save needs, or null with the reason shown. */
+  const prepare = (): ConnectDraft | null => {
     setError(null);
-    if (parsedEndpoint.error) {
+    setProblems(null);
+    if (termsBlocked) {
+      setError(termsBlocked);
+      return null;
+    }
+    if (endpointError) {
       setEndpointTouched(true);
-      return;
+      return null;
+    }
+    if (authMode === null) {
+      setError("Choose how your API knows a call is from Assay, under Authentication.");
+      return null;
     }
     if (mappingProblem) {
-      setAdvanced(true);
-      setError(`Fix the mapping first: ${mappingProblem}`);
+      mappingInvalid();
+      return null;
+    }
+    return {
+      endpoint: parsedEndpoint.value!,
+      authMode,
+      requestMapping: mappings.request,
+      responseMapping: mappings.response,
+      terms: versioned ? terms : null,
+    };
+  };
+
+  const failed = (caught: unknown) => {
+    const mismatch = contractMismatchProblems(caught);
+    if (mismatch) {
+      setProblems(mismatch);
       return;
     }
+    setError(
+      caught instanceof ApiError
+        ? plainError(caught.code, caught.status)
+        : caught instanceof Error && caught.message
+          ? caught.message
+          : "That did not work. Check your connection and try again.",
+    );
+  };
+
+  /** Saves the draft without a test call: "Save connection" and "Save draft and exit". */
+  const saveOnly = async (then?: () => void) => {
+    const draft = prepare();
+    if (!draft) return;
+    if (!runGuard.enter()) return;
+    try {
+      setPhase(then ? "exiting" : "saving-only");
+      const saved = await onSave(draft);
+      writeTestInput(saved.id, args);
+      then?.();
+    } catch (caught) {
+      failed(caught);
+    } finally {
+      setPhase("idle");
+      runGuard.leave();
+    }
+  };
+
+  const run = async () => {
+    const draft = prepare();
+    if (!draft) return;
     const built = argumentsFromText(fields, args);
     if (built.error) {
       setError(built.error);
@@ -130,25 +259,26 @@ export function ConnectStage({
     if (!runGuard.enter()) return;
     try {
       setPhase("saving");
-      const saved = await onSave({
-        endpoint: parsedEndpoint.value!,
-        requestMapping: mappings.request,
-        responseMapping: mappings.response,
-      });
+      const saved = await onSave(draft);
+      writeTestInput(saved.id, args);
       setPhase("testing");
-      const result = await testToolBinding(saved.id, { input: built.input });
-      setReport(result);
+      // One run per contract version served: each must pass before publishing.
+      const done: MajorRun[] = [];
+      for (const target of testTargets(terms, choices)) {
+        setTestingMajor(versioned ? target.major : null);
+        const result = await testToolBinding(saved.id, {
+          input: built.input,
+          ...(versioned && target.version !== undefined ? { toolVersion: target.version } : {}),
+        });
+        done.push({ major: target.major, semver: target.semver, report: result });
+        setRuns([...done]);
+      }
       void queryClient.invalidateQueries({ queryKey: ["provider", "tool-binding", saved.id, "publish-check"] });
     } catch (caught) {
-      setError(
-        caught instanceof ApiError
-          ? plainError(caught.code)
-          : caught instanceof Error && caught.message
-            ? caught.message
-            : "That did not work. Check your connection and try again.",
-      );
+      failed(caught);
     } finally {
       setPhase("idle");
+      setTestingMajor(null);
       runGuard.leave();
     }
   };
@@ -156,11 +286,20 @@ export function ConnectStage({
   const dirty =
     !binding ||
     binding.endpoint !== endpoint.trim() ||
+    binding.authMode !== authMode ||
     !documentsEqual(binding.requestMapping, mappings.request) ||
-    !documentsEqual(binding.responseMapping, mappings.response);
-  const stale = report && binding ? isStaleRun(report, binding.version) || dirty : false;
-  const gate = report ? testGate(testPipeline(report), { stale: Boolean(stale), emptyAcknowledged: emptyAck }) : null;
+    !documentsEqual(binding.responseMapping, mappings.response) ||
+    termsDirty;
+  const stale = runs && binding ? runs.some((r) => isStaleRun(r.report, binding.version)) || dirty : false;
+  const gates = runs?.map((r) => testGate(testPipeline(r.report), { stale: Boolean(stale), emptyAcknowledged: emptyAck })) ?? null;
+  // Every version served needs its own passing run.
+  const complete = runs ? runs.length === testTargets(terms, choices).length : false;
+  const gate = gates
+    ? { passed: complete && gates.every((g) => g.passed), needsEmptyAck: gates.some((g) => g.needsEmptyAck) }
+    : null;
   const passed = gate ? gate.passed : testPassedBefore && !dirty;
+  const multi = versioned && (runs?.length ?? terms.majors.length) > 1;
+  const preview = previewRequest(endpoint, mappings.request, args);
 
   return (
     <section aria-labelledby="connect-stage-title" className="flex w-full flex-col gap-5">
@@ -173,24 +312,72 @@ export function ConnectStage({
         </p>
       </div>
 
-      <Field
-        label="Your API's address"
-        placeholder="https://api.example.com/v1"
-        type="url"
-        inputMode="url"
-        value={endpoint}
-        disabled={readOnly}
-        onChange={(event) => setEndpoint(event.target.value)}
-        onBlur={() => setEndpointTouched(true)}
-        error={endpointTouched ? (parsedEndpoint.error ?? undefined) : undefined}
-        hint={initialEndpoint && !binding ? "Filled in from your account setup." : undefined}
-      />
+      <div className="flex flex-col gap-2">
+        <Field
+          label="Your API's address"
+          placeholder="https://api.example.com/v1"
+          type="url"
+          inputMode="url"
+          value={endpoint}
+          disabled={readOnly}
+          // A monospace font can draw "//" as a ligature that reads "/ /".
+          className="[font-variant-ligatures:none]"
+          onChange={(event) => setEndpoint(event.target.value)}
+          onBlur={() => setEndpointTouched(true)}
+          error={urlKeys.length > 0 || endpointTouched ? (endpointError ?? undefined) : undefined}
+          hint={
+            initialEndpoint && !binding && endpoint === initialEndpoint
+              ? "Filled in from your account setup. Change it if this tool is served elsewhere."
+              : undefined
+          }
+        />
+        {urlKeys.length > 0 && !readOnly ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="self-start"
+            onClick={() => {
+              const moved = moveQueryKeys(endpoint);
+              if (!moved) return;
+              setEndpoint(moved.endpoint);
+              setAuthMode((current) => (current === "SIGNATURE" || current === "BOTH" ? "BOTH" : "API_KEY"));
+              setPendingHeaders(moved.headers);
+            }}
+          >
+            Move it to an API key header
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">
+        <h3 className="text-label-sm text-01">Authentication</h3>
+        <AuthenticationPanel
+          bindingId={binding?.id ?? null}
+          endpoint={endpoint}
+          savedEndpoint={binding?.endpoint ?? null}
+          publishedEndpoint={binding?.publishedEndpoint ?? null}
+          mode={authMode}
+          onModeChange={setAuthMode}
+          readOnly={readOnly}
+          onSaveConnection={() => void saveOnly()}
+          savingConnection={phase === "saving-only"}
+          pendingHeaders={pendingHeaders}
+          onPendingDone={() => setPendingHeaders(null)}
+        />
+      </div>
 
       <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">
         <div className="flex min-w-0 flex-col gap-1">
           <h3 className="text-label-sm text-01">How we call your API</h3>
           <p className="text-body-13 text-02">{requestMappingSummary(mappings.request)}</p>
           <p className="text-body-13 text-02">{responseMappingSummary(mappings.response)}</p>
+          {preview ? (
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-body-xs text-03">The request for your test input below:</span>
+              <code className="break-all font-mono text-mono-xs text-01 [font-variant-ligatures:none]">{preview}</code>
+            </div>
+          ) : null}
           <p className="text-body-xs text-03">
             We filled this in from the tool&apos;s fields. If your API uses other names or paths, change them under Advanced mapping. Most
             people do not need to.
@@ -241,6 +428,19 @@ export function ConnectStage({
         ) : null}
       </div>
 
+      {versioned ? (
+        <ContractTermsPanel
+          choices={choices}
+          terms={terms}
+          changed={termsDirty}
+          disabled={readOnly}
+          onChange={(next) => {
+            setTerms(next);
+            setProblems(null);
+          }}
+        />
+      ) : null}
+
       <div className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-01 p-4">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-label-sm text-01">Test it</h3>
@@ -274,15 +474,17 @@ export function ConnectStage({
           <Button
             icon={<Play aria-hidden="true" />}
             onClick={() => void run()}
-            disabled={!hydrated || readOnly || phase !== "idle"}
-            loading={phase !== "idle"}
+            disabled={!hydrated || readOnly || phase !== "idle" || urlKeys.length > 0 || credentialsMissing}
+            loading={phase === "saving" || phase === "testing"}
           >
             {phase === "saving"
               ? binding
                 ? "Saving your changes…"
                 : "Saving your draft…"
               : phase === "testing"
-                ? "Calling your API…"
+                ? testingMajor !== null && multi
+                  ? `Testing v${testingMajor}…`
+                  : "Calling your API…"
                 : report
                   ? "Run the test again"
                   : "Save and run test"}
@@ -290,6 +492,7 @@ export function ConnectStage({
           <span aria-live="polite" className="text-body-xs text-03">
             {phase === "saving" && !binding ? "Creating your draft listing takes a few seconds." : null}
             {readOnly ? "Your account is blocked, so changes are paused." : null}
+            {!readOnly ? (authMode === null ? "Choose an option under Authentication first." : credentialsHint) : null}
           </span>
         </div>
         {error ? (
@@ -297,9 +500,37 @@ export function ConnectStage({
             {error}
           </p>
         ) : null}
+        {problems ? (
+          <div role="alert" className="flex flex-col gap-1 rounded-md border border-danger-20 bg-danger-10 px-3 py-2">
+            <p className="text-label-13 text-danger-600">This doesn&apos;t fit the tool&apos;s contract yet:</p>
+            <ul className="flex list-disc flex-col gap-0.5 pl-5 text-body-13 text-danger-600">
+              {problems.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
-        {report ? (
-          <TestPipelineView report={report} stale={Boolean(stale)} paid={binding ? binding.pricingMode !== "FREE" : false} />
+        {runs && runs.length > 0 ? (
+          <div className="flex flex-col gap-4">
+            {runs.map((r) => (
+              <div key={r.major} className="flex flex-col gap-2">
+                {versioned ? (
+                  <h4 className="flex flex-wrap items-baseline gap-x-2 text-label-13 text-01">
+                    {runLabel(r.major, r.report, r.semver)}
+                    {stale ? (
+                      <span className="text-body-xs text-warning-700">Out of date: run the test again</span>
+                    ) : (
+                      <span className={r.report.outcome === "PASSED" ? "text-body-xs text-success-700" : "text-body-xs text-danger-600"}>
+                        {r.report.outcome === "PASSED" ? "Passed" : "Failed"}
+                      </span>
+                    )}
+                  </h4>
+                ) : null}
+                <TestPipelineView report={r.report} stale={Boolean(stale)} paid={binding ? binding.pricingMode !== "FREE" : false} />
+              </div>
+            ))}
+          </div>
         ) : testPassedBefore && !dirty ? (
           <p className="text-body-13 text-success-700">Your last test passed. Run it again any time.</p>
         ) : null}
@@ -325,12 +556,23 @@ export function ConnectStage({
           Continue to Go live
           <ArrowRight aria-hidden="true" />
         </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={!hydrated || readOnly || phase !== "idle"}
+          loading={phase === "exiting"}
+          onClick={() => (binding && !dirty ? router.push(LISTINGS_PATH) : void saveOnly(() => router.push(LISTINGS_PATH)))}
+        >
+          Save draft and exit
+        </Button>
         {!passed ? (
           <span className="text-body-xs text-03">
             {gate?.needsEmptyAck
               ? "Tick the box above, or run a test that returns data."
               : report && !stale
-              ? "Get a passing test to continue."
+              ? multi
+                ? "Every version you serve needs a passing test to continue."
+                : "Get a passing test to continue."
               : "Run a test to continue. Your draft is saved when you do."}
           </span>
         ) : null}

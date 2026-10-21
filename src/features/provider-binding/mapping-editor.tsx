@@ -1,5 +1,6 @@
 "use client";
 
+import { QUERY_KEY_ERROR, SECRET_HEADER_ERROR, isCredentialQueryKey, isSecretConstantHeader } from "./authentication/rules";
 import { Plus, SlidersHorizontal } from "lucide-react";
 import * as React from "react";
 
@@ -344,11 +345,15 @@ function isPresent(row: EditorRow): boolean {
  * contract asked for, and leaving an optional output field unmapped is a
  * legitimate mapping, not a half-typed one.
  */
-function rowProblem(row: EditorRow): string | null {
+export function rowProblem(row: EditorRow): string | null {
   const target = row.target.trim();
   if (target === "") return "a row has no name, so it would not be written";
   if (row.kind === "selector" && row.text.trim() === "" && !row.fromSchema) {
     return `${target} has no selector, so it would be dropped rather than saved`;
+  }
+  if (row.kind === "constant") {
+    if (row.section === "query" && isCredentialQueryKey(target)) return QUERY_KEY_ERROR;
+    if (row.section === "headers" && isSecretConstantHeader(target)) return SECRET_HEADER_ERROR;
   }
   return null;
 }
@@ -580,7 +585,7 @@ function CellInput({
 
 function chainLabel(row: EditorRow): string {
   if (row.kind === "constant") return "constant";
-  if (row.transforms.length === 0) return "identity";
+  if (row.transforms.length === 0) return "unchanged";
   return row.transforms.map(transformStepName).join(" → ");
 }
 
@@ -1247,7 +1252,7 @@ export function MappingEditor({
             <p role="alert" className="px-1 text-body-13 text-danger-500">
               {optionalAtRequired.map((row) => row.target).join(", ")} —{" "}
               {optionalAtRequired.length === 1 ? "this field is" : "these fields are"}{" "}
-              required by the tool, so if {optionalAtRequired.length === 1 ? "it" : "they"} may be missing, give a
+              required by the tool, so if {optionalAtRequired.length === 1 ? "it" : "they"}{" "}may be missing, give a
               default value too (open the row&rsquo;s settings). Without one it cannot be saved.
             </p>
           ) : null}

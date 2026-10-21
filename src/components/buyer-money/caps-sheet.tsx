@@ -16,6 +16,7 @@ import {
 } from "@/features/delegation/unsettled";
 import { applyLimitsSubmitted } from "@/features/escrow/after-set-limits";
 import { ESCROW_SUBMITTERS, runEscrowAction } from "@/features/escrow/relayed-submission";
+import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import type { EscrowLimitsBody } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { demoEnabled } from "@/libs/demo/demo-api";
@@ -112,7 +113,7 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
   const disabledReason = readOnly
     ? "Your account is blocked, so the ceiling cannot change now."
     : !money.escrow?.exists
-      ? "Add funds first: your first deposit opens your escrow."
+      ? "Add funds first: your first deposit sets up your balance."
       : !body
         ? (parsed.perCall.error ?? parsed.perDay.error ?? "Choose a ceiling.")
         : unchanged
@@ -143,8 +144,8 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
               }
             : ESCROW_SUBMITTERS,
         );
+        // Seeds or re-reads the escrow itself; another invalidation would refetch it again.
         await applyLimitsSubmitted(queryClient, null, signed, result.kind === "relayed" ? result.relayed.escrow : null);
-        void queryClient.invalidateQueries({ queryKey: ["escrow"] });
         const hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
         return { explorerUrl: money.chain ? explorerTxUrl(money.chain, hash) : undefined };
       },
@@ -157,7 +158,7 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
       onOpenChange={onOpenChange}
       chain={money.chain}
       title="Account ceiling (on chain)"
-      description="Protects your whole escrow: the most any one call can cost, and the most all your agents together can spend in 24 hours. Nobody can go past it, Assay included. Each agent's own spending limits sit under it."
+      description="Protects your whole balance: the most any one call can cost, and the most all your agents together can spend in 24 hours. Nobody can go past it, Assay included. Each agent's own spending limits sit under it."
       steps={steps}
       label="Sign to apply (free, no gas)"
       resetKey={`${value.perCall}|${value.perDay}`}
@@ -170,6 +171,8 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
         if (demoEnabled() && body) {
           rememberDemoEscrowCaps(body);
           void queryClient.invalidateQueries({ queryKey: ["escrow"] });
+          // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
+          void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
         }
       }}
       successTitle="Account ceiling set"

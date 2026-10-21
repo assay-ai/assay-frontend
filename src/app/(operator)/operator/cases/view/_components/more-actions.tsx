@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Ban, Check, History, Layers, Link2, Lock, MoreHorizontal, PauseCircle, Undo2 } from "lucide-react";
+import { Ban, Check, History, Link2, Lock, MoreHorizontal, Undo2 } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -19,34 +19,33 @@ import {
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { approvalHref, sentForApproval, type TwoPersonAnswer } from "@/features/operator/two-person";
-import { approvalNeeds, reasonText } from "@/features/operator/approvals";
+import { approvalNeeds } from "@/features/operator/approvals";
 import { alreadyWaiting, shortWhyNot, type CaseAuthority } from "@/features/operator/case-flow";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { operatorErrorSentence } from "@/features/operator/operator-errors";
-import { DECISION_NOTE_MIN_LENGTH, REASON_CODES, SHORT_NOTE_MIN_LENGTH } from "@/features/operator/reason-codes";
+import { SHORT_NOTE_MIN_LENGTH } from "@/features/operator/reason-codes";
 import { ResultCard } from "@/features/operator/result-card";
 import { chainIdOf, runOperatorIntent, signerIsHolder } from "@/features/operator/run-operator-intent";
 import { checkAction, rolesPhrase, whoCan, type ConsoleAction } from "@/features/operator/roles";
 import { askLabel } from "@/features/operator/why-not";
-import { isSweepable, may } from "@/features/operator/state";
 import { useOperatorDirectory } from "@/features/operator/use-operator-lookups";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
 import type { Money } from "@/interfaces/api";
-import type { ArbitrationOutcome, CompensationIntent, OperatorCaseBrief, OperatorIdentity } from "@/interfaces/operator";
+import type { CompensationIntent, OperatorCaseBrief, OperatorIdentity } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
-import { createCompensationIntent, openFleetSweep, recordCompensation } from "@/services/operator.service";
+import { createCompensationIntent, recordCompensation } from "@/services/operator.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
 /**
- * The rare actions on a penalty, behind the header's ⋯ menu: suspend it,
- * block the provider, pay an executed penalty back (two-person), open a
- * fleet sweep (two-person), and its history in Activity. An action this
+ * The rare actions on a penalty, behind the header's ⋯ menu: block the
+ * provider, pay an executed penalty back (two-person), and its history in
+ * Activity. An action this
  * operator may not take is still listed, disabled, with the same one-line
  * reason as the page and an "Ask …" item under it that copies the request —
  * never hidden. An action whose two-person request already waits is held
- * back the same way, so it cannot be asked for twice. The two forms open in
- * sheets.
+ * back the same way, so it cannot be asked for twice. The pay-back form opens
+ * in a sheet.
  */
 
 const COMPENSATE_REASONS: readonly ReasonOption[] = [
@@ -55,7 +54,7 @@ const COMPENSATE_REASONS: readonly ReasonOption[] = [
   { value: "OTHER", label: "Other", hint: "Say why in the note." },
 ];
 
-type Open = "sweep" | "compensate" | null;
+type Open = "compensate" | null;
 
 export function MoreActions({
   brief,
@@ -64,7 +63,6 @@ export function MoreActions({
   authority,
   penaltyName,
   pendingActions,
-  onSuspend,
 }: {
   brief: OperatorCaseBrief;
   proposalId: string;
@@ -72,16 +70,12 @@ export function MoreActions({
   authority: CaseAuthority;
   /** "Northwind Geo's $28.47 penalty", for the Ask message. */
   penaltyName: string;
-  /** Approval actions already waiting on this penalty (`slash.suspend`, `slash.compensated`, …). */
+  /** Approval actions already waiting on this penalty (`slash.compensated`, …). */
   pendingActions: readonly string[];
-  /** Opens the suspend sheet; null when this operator may not suspend. */
-  onSuspend: (() => void) | null;
 }) {
   const [open, setOpen] = React.useState<Open>(null);
   const directory = useOperatorDirectory();
   const proposal = brief.case.proposal;
-  const outcome = proposal.outcome;
-  const canSweep = may(identity.roles, "sweep") && isSweepable(outcome);
   const providerId = proposal.providerId;
   const penalty = proposal.penaltyAmount;
   const executed = proposal.status === "EXECUTED";
@@ -94,11 +88,6 @@ export function MoreActions({
     const check = checkAction(identity, action, amount);
     return who === null || check.allowed ? null : { label: askLabel(who, rolesPhrase(check.roles)), message };
   };
-  const suspendWaiting = alreadyWaiting("slash.suspend", pendingActions);
-  const suspendWhy =
-    suspendWaiting ??
-    (authority.suspend.open && !authority.suspend.allowed ? (shortWhyNot(identity, "suspend", penalty, null) ?? authority.suspend.reason) : null);
-  const suspendAsk = suspendWaiting ? null : ask("suspend", penalty, `Can you suspend ${penaltyName}?`);
   const blockWhy = authority.block ? null : shortWhyNot(identity, "block", null, null);
   const blockAsk = ask("block", null, `Can you block the provider behind ${penaltyName}?`);
   const compensateWaiting = alreadyWaiting("slash.compensated", pendingActions);
@@ -115,15 +104,6 @@ export function MoreActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[300px] border border-01">
-          {authority.suspend.open ? (
-            <MenuItem
-              icon={<PauseCircle />}
-              label={authority.suspend.twoPerson ? "Suspend penalty (needs approval)" : "Suspend penalty"}
-              why={onSuspend && !suspendWaiting ? null : suspendWhy}
-              ask={onSuspend ? null : suspendAsk}
-              onSelect={onSuspend && !suspendWaiting ? onSuspend : undefined}
-            />
-          ) : null}
           {authority.block ? (
             <DropdownMenuItem asChild>
               <Link href={`/operator/blocks?block=${encodeURIComponent(providerId)}&kind=ORGANIZATION`} className="cursor-pointer">
@@ -143,10 +123,9 @@ export function MoreActions({
               onSelect={authority.compensate && !compensateWaiting ? () => setOpen("compensate") : undefined}
             />
           ) : null}
-          {canSweep ? <MenuItem icon={<Layers />} label="Open a fleet sweep" why={null} onSelect={() => setOpen("sweep")} /> : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link href={`/operator/override-log?targetId=${encodeURIComponent(proposalId)}`} className="cursor-pointer">
+            <Link href={`/operator/activity?targetId=${encodeURIComponent(proposalId)}`} className="cursor-pointer">
               <History aria-hidden="true" />
               History in Activity
             </Link>
@@ -154,14 +133,6 @@ export function MoreActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <FormSheet
-        open={open === "sweep"}
-        onOpenChange={(next) => setOpen(next ? "sweep" : null)}
-        title="Open a fleet sweep?"
-        description="Decides every case the same defect touched the way this one was decided. Needs a second adjudicator."
-      >
-        {canSweep ? <SweepForm proposalId={proposalId} outcome={outcome as ArbitrationOutcome} me={identity} /> : null}
-      </FormSheet>
       <FormSheet
         open={open === "compensate"}
         onOpenChange={(next) => setOpen(next ? "compensate" : null)}
@@ -294,62 +265,6 @@ function Queued({ answer, what, needs, approvers }: { answer: TwoPersonAnswer<un
   );
 }
 
-// ── Fleet sweep (S-11) ──────────────────────────────────────────────────────
-
-function SweepForm({ proposalId, outcome, me }: { proposalId: string; outcome: ArbitrationOutcome; me: OperatorIdentity }) {
-  const queryClient = useQueryClient();
-  const directory = useOperatorDirectory();
-  const [defectKey, setDefectKey] = React.useState("");
-  const [hours, setHours] = React.useState("720");
-  const [reason, setReason] = React.useState("");
-  const [note, setNote] = React.useState("");
-  const [errors, setErrors] = React.useState<{ defect?: string; hours?: string; reason?: string; note?: string }>({});
-  const options = (REASON_CODES[outcome] ?? []).map((code) => ({ value: code, label: reasonText(code) }));
-  const sweep = useMutation({
-    mutationFn: () =>
-      openFleetSweep(proposalId, { defectKey: defectKey.trim(), lookbackHours: Number(hours), reasonCode: reason, note: note.trim() }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["operator"] }),
-  });
-
-  const submit = () => {
-    const lookback = Number(hours);
-    const next = {
-      defect: defectKey.trim() ? undefined : "Name the defect, e.g. the mapping regression's key.",
-      hours: Number.isInteger(lookback) && lookback >= 1 && lookback <= 2160 ? undefined : "Whole hours, 1 to 2160 (90 days).",
-      reason: reason ? undefined : "Pick a reason.",
-      note: note.trim().length < DECISION_NOTE_MIN_LENGTH ? `Write at least ${DECISION_NOTE_MIN_LENGTH} characters: providers who never disputed are decided on this.` : undefined,
-    };
-    setErrors(next);
-    if (Object.values(next).some(Boolean)) return;
-    sweep.mutate();
-  };
-
-  const approvers = directory.isPending ? undefined : eligibleApprovers("S-11", directory.operators, me.id);
-  if (sweep.data) return <Queued answer={sweep.data} what="The fleet sweep" needs={approvalNeeds("S-11", me.roles)} approvers={approvers} />;
-  return (
-    <>
-      <Field label="Defect" value={defectKey} onChange={(e) => setDefectKey(e.target.value)} placeholder="MAPPING_REGRESSION_2026_10" maxLength={128} error={errors.defect} />
-      <Field label="Look back" value={hours} onChange={(e) => setHours(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" suffix="h" maxLength={4} error={errors.hours} hint="Every case with this defect in that many hours is matched." />
-      <ReasonChips
-        label="Why"
-        options={options}
-        value={reason}
-        onChange={setReason}
-        note={note}
-        onNoteChange={setNote}
-        noteMin={DECISION_NOTE_MIN_LENGTH}
-        notePlaceholder="What the defect is, how it was found, and why every matched case shares it."
-        errors={errors}
-      />
-      <ApprovalFooter needs={approvalNeeds("S-11", me.roles)} approvers={directory.isPending ? undefined : eligibleApprovers("S-11", directory.operators, me.id)} />
-      <Failure error={sweep.error} />
-      <Button variant="danger" className="self-start" loading={sweep.isPending} onClick={submit}>
-        Send the sweep for approval
-      </Button>
-    </>
-  );
-}
-
 // ── Compensation (build, then S-5 record) ───────────────────────────────────
 
 function CompensateForm({ brief, proposalId, me }: { brief: OperatorCaseBrief; proposalId: string; me: OperatorIdentity }) {
@@ -389,7 +304,7 @@ function CompensateForm({ brief, proposalId, me }: { brief: OperatorCaseBrief; p
     return (
       <>
         <p className="text-body-13 text-02">
-          First the deposit is prepared: {formatMoney(penalty)} from the treasury into the provider&rsquo;s stake. Preparing it moves
+          First the deposit is prepared: {formatMoney(penalty)}{" "}from the treasury into the provider&rsquo;s stake. Preparing it moves
           nothing; the treasury&rsquo;s signers pay it.
         </p>
         <Failure error={build.error} />

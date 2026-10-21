@@ -55,6 +55,8 @@ const CREATED: CreatedDeposit = {
   depositId: DEPOSIT_ID,
   expiresAt: "2026-08-23T10:05:00.000Z",
   requirements: {
+    namespace: "solana",
+    chainId: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
     payTo: "AtW955vMKUkYMef861U1ZhPQsqbj2D4Xyb5HnFcm3S6E",
     asset: "AiUqZiWkX3FBjULeRwPi73kC9raWdSnYmn5uQhk6SVP7",
     amount: "1500000",

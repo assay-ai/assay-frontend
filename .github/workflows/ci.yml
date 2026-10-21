@@ -16,15 +16,20 @@ jobs:
       NEXT_PUBLIC_BASE_URL: http://localhost:4000
       NEXT_PUBLIC_API_BASE_URL: http://localhost:3000/api/v1
       NEXT_PUBLIC_PRIVY_APP_ID: replace-with-privy-app-id
+      NEXT_PUBLIC_ASSAY_MCP_VERSION: 1.0.0
+      NEXT_PUBLIC_MCP_URL: http://localhost:3200/
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # Spec R-WEB-2/3/4: integrity on every script, the strict headers, and the
+      # headless Chrome iframe test (the runner has Chrome; a missing Chrome fails here).
+      - run: pnpm check:headers

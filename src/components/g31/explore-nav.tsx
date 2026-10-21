@@ -6,12 +6,14 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/utils";
 
 /**
- * Explore's two views as route tabs: Tools (`/explore`, the main list) and
- * Providers (`/explore/providers`). Real links, so each can be deep-linked.
+ * Explore's views as route tabs: Tools (`/explore`, the main list),
+ * Providers (`/explore/providers`) and the shared Tool sets
+ * (`/explore/toolsets`). Real links, so each can be deep-linked.
  */
 const TABS = [
-  { href: "/explore", label: "Tools", match: (p: string) => p === "/explore" || p.startsWith("/explore/tools") },
+  { href: "/explore", label: "Tools", match: (p: string) => p === "/explore" },
   { href: "/explore/providers", label: "Providers", match: (p: string) => p.startsWith("/explore/providers") },
+  { href: "/explore/toolsets", label: "Tool sets", match: (p: string) => p.startsWith("/explore/toolsets") },
 ];
 
 export function ExploreNav() {

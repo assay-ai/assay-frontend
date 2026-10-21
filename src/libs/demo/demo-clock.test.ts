@@ -20,6 +20,8 @@ function memoryStorage(): Storage {
 }
 
 async function reload() {
+  // The clock keeps its session base only in a demo build (outside one it never touches storage).
+  vi.stubEnv("NEXT_PUBLIC_DEMO_CHAINS", "robinhood");
   vi.resetModules();
   const clock = await import("./demo-clock");
   const penalties = await import("./demo-penalties");
@@ -28,6 +30,7 @@ async function reload() {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
@@ -95,3 +98,16 @@ describe("the demo clock", () => {
     expect(fixtures.justNow()).toBe("2026-10-16T12:34:56.000Z");
   });
 });
+
+describe("outside a demo build", () => {
+  it("never writes the clock to storage", async () => {
+    const session = memoryStorage();
+    const local = memoryStorage();
+    vi.stubGlobal("window", { sessionStorage: session, localStorage: local });
+    vi.resetModules();
+    await import("./demo-clock");
+    expect([session.length, local.length]).toEqual([0, 0]);
+    vi.unstubAllGlobals();
+  });
+});
+

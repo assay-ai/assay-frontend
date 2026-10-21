@@ -7,10 +7,10 @@
  *
  * The brief's `case`, `timeline` and `restoration` are the SAME shapes the
  * provider console already renders, so they are imported rather than
- * redeclared. What is genuinely operator-only is the queue row, the identity,
+ * redeclared. What is genuinely operator-only is the identity,
  * the health tiles, the dispute record and the action bodies.
  */
-import type { ListQuery, Money } from "./api";
+import type { Money } from "./api";
 import type { SlashProposalEvent, SlashRestorationRow } from "./provider-disputes";
 import type { SlashProposalCaseDetail } from "./provider-slash-cases";
 
@@ -106,7 +106,7 @@ export interface ApprovalQueued {
 /** `OperatorApprovalDto` — one row of `GET /operator/approvals`. */
 export interface OperatorApproval {
   id: string;
-  /** e.g. `slash.suspend`, `account.unblock`, `operator.add`. */
+  /** e.g. `slash.compensated`, `account.unblock`, `operator.add`. */
   action: string;
   /** The register row the action writes, e.g. `A-10`. */
   code: string;
@@ -148,12 +148,14 @@ export interface PlatformHealth {
   policiesTotal: number;
   stakeLocked: Money;
   providersWithStake: number;
-  openDisputes: number;
-  oldestOpenDisputeAgeSeconds: number | null;
-  /** The EVM chain-state cache, one row per chain. Absent on an older backend. */
-  chainState?: ChainStateHealth[];
-  /** Every provider on a slash hold, one row per provider and chain. Absent on an older backend. */
-  slashHolds?: SlashHoldHealth[];
+  /** The EVM chain-state cache, one row per chain. */
+  chainState: ChainStateHealth[];
+  /** Every provider on a slash hold, one row per provider and chain. */
+  slashHolds: SlashHoldHealth[];
+  /** Provider tools waiting for review: the "Needs you" count for the review queue. Null when it could not be read. */
+  pendingToolReviews?: number | null;
+  /** Buyer call disputes still open. Null when it could not be read. */
+  openCallDisputes?: number | null;
 }
 
 /** `SlashHoldHealthDto` — a provider whose paid calls are not routed on one chain. */
@@ -170,13 +172,13 @@ export interface SlashHoldHealth {
 
 /**
  * `ChainStateHealthDto` — what the EVM chain-state indexer last read of one
- * chain's `X402Config`. `stale` when the indexer never caught up or lags more
+ * chain's `AssayConfig`. `stale` when the indexer never caught up or lags more
  * than `EVM_CHAIN_STATE_MAX_LAG_MS` (five minutes by default).
  */
 export interface ChainStateHealth {
   chainId: string;
   paused: boolean;
-  /** `X402Config.arbiter()`, lower-case, or `null`. */
+  /** `AssayConfig.arbiter()`, lower-case, or `null`. */
   arbiter: string | null;
   /** The live slash delay — the dispute window. */
   slashDelaySeconds: number | null;
@@ -207,8 +209,7 @@ export interface ChainStateHealth {
  * to `CANCELLED`.
  */
 export type SlashProposalStatus =
-  | "PROPOSED" | "DISPUTED" | "UNDER_REVIEW" | "AWAITING_SECOND"
-  | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
+  | "PROPOSED" | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
   | "REVERSED" | "WAIVED" | "CANCEL_REQUESTED" | "CANCELLED";
 
 /** assay-backend `src/modules/slash/domain/chain-slash-outcome.ts` `ChainProposalStatus`. */
@@ -216,59 +217,13 @@ export type ChainProposalStatus =
   | "NONE" | "PROPOSING" | "PENDING" | "CANCEL_REQUESTED" | "DISPUTED"
   | "EXECUTED" | "CANCELLED" | "REFUSED";
 
-/** assay-backend `src/modules/slash/domain/arbitration.ts` `ArbitrationOutcome`. */
-export type ArbitrationOutcome =
-  | "UPHELD"
-  | "UPHELD_RECALCULATED"
-  | "OVERTURNED_PLATFORM_DEFECT"
-  | "OVERTURNED_POLICY_DEFECT"
-  | "OVERTURNED_GRIEFING"
-  | "OVERTURNED_INSUFFICIENT_EVIDENCE";
-
-/** assay-backend `src/modules/slash/domain/arbitration.ts` `DisputeClaimType`. */
-export type OperatorDisputeClaimType =
-  | "PLATFORM_MAPPING_CHANGE" | "AGENT_GRIEFING" | "POLICY_DEFECT"
-  | "INSUFFICIENT_SAMPLE" | "UPSTREAM_INDUCED" | "DECLARED_INCIDENT" | "OTHER";
-
-/**
- * One row of `GET /operator/queue`.
- *
- * Ordered by time-to-deadline then penalty size, **not** FIFO, and fixed
- * server-side so a caller cannot ask for insertion order.
- */
-export interface AdjudicationQueueRow {
-  proposalId: string;
-  /** e.g. `w_4471 · bnd_7QK`. */
-  caseLabel: string;
-  disputeId: string | null;
-  providerId: string;
-  providerName: string;
-  penaltyAmount: Money;
-  claimType: OperatorDisputeClaimType | null;
-  status: SlashProposalStatus;
-  /** Our deadline. ISO-8601. */
-  dueAt: string | null;
-  secondsToDeadline: number | null;
-  /** True once our deadline has passed — the sweeper overturns these against us. */
-  overdue: boolean;
-  /** The named owner. Null is rendered in red on purpose. */
-  ownerSubject: string | null;
-  rootCauseKey: string | null;
-  /** How many open cases share this root cause, including this one. 1 when ungrouped. */
-  rootCauseGroupSize: number;
-  /** Other bindings on the same tool whose failure rate moved in the same period. */
-  coFailureCount: number;
-}
-
 /**
  * Where a penalty stands, as `GET /operator/cases` groups it: the case status
- * and the mirrored on-chain status read in the case screen's precedence.
- * `DISPUTED` is the retired off-chain objection process; a dispute on chain is
- * `CHAIN_DISPUTED`.
+ * and the mirrored on-chain status read in the case screen's precedence. A
+ * dispute is on chain: `CHAIN_DISPUTED`.
  */
 export type OperatorCaseStatus =
   | "PROPOSED"
-  | "DISPUTED"
   | "CHAIN_DISPUTED"
   | "CANCEL_REQUESTED"
   | "EXECUTED"
@@ -291,6 +246,11 @@ export interface OperatorCaseListRow {
   disputedAt: string | null;
   /** The next instant it moves on its own (lapses, must be signed by, executable from). Null once closed. */
   nextDeadline: string | null;
+  /**
+   * Whether a record of it was ever written on chain. False while it waits to
+   * go there: its dates are then computed, not the chain's.
+   */
+  onChain: boolean;
 }
 
 export interface ListOperatorCasesQuery {
@@ -301,61 +261,11 @@ export interface ListOperatorCasesQuery {
   limit?: number;
 }
 
-export interface ListQueueQuery extends ListQuery {
-  mine?: boolean;
-  unassigned?: boolean;
-  overdue?: boolean;
-  rootCauseKey?: string;
-}
-
-/**
- * The provider's objection, as the brief carries it.
- *
- * **This is the raw `DisputeEntity`, not a DTO** — `brief()` returns
- * `findOneBy()` unmapped. A different shape from the `Dispute` interface in
- * `provider-disputes.ts`, which models the `/disputes` DTO. Do not conflate.
- */
-export interface OperatorDisputeRecord {
-  id: string;
-  organizationId: string;
-  subjectType: string;
-  subjectId: string;
-  providerId: string | null;
-  state: string;
-  claimType: string;
-  reason: string;
-  evidence: unknown[];
-  openedBy: string;
-  acknowledgedAt: string | null;
-  deadlineAt: string | null;
-  resolvedAt: string | null;
-  resolvedBy: string | null;
-  resolutionNote: string | null;
-  restoredAmount: string | null;
-  assetId: string | null;
-  decimals: number | null;
-  assignedOperatorId: string | null;
-  assignedAt: string | null;
-  /** Our own decision deadline. */
-  platformDueAt: string | null;
-  outcome: string | null;
-  reasonCodes: string[];
-  rubricVersion: string | null;
-  resolutionKind: string | null;
-  secondedByOperatorId: string | null;
-  secondedAt: string | null;
-  secondKind: string | null;
-  secondNote: string | null;
-}
-
 /** `GET /operator/cases/:proposalId` — the full operator case brief. */
 export interface OperatorCaseBrief {
   case: SlashProposalCaseDetail;
-  dispute: OperatorDisputeRecord | null;
   timeline: SlashProposalEvent[];
   restoration: SlashRestorationRow[];
-  /** True exactly when the proposal is `AWAITING_SECOND`. */
-  requiresSecondSignature: boolean;
   /**
    * The on-chain record's status (`slash_proposals.chain_status`), read-only.
    * Not the case status: an overturned case waiting for the settlement admin's
@@ -365,77 +275,86 @@ export interface OperatorCaseBrief {
   /**
    * When the on-chain record becomes executable (`chain_executable_at`),
    * read-only. From this moment anyone can execute the penalty, so it is the
-   * deadline for a requested cancel. Null while nothing stands on chain;
-   * absent from a backend that predates the field.
+   * deadline for a requested cancel. Null while nothing stands on chain.
    */
-  chainExecutableAt?: string | null;
+  chainExecutableAt: string | null;
   /**
    * How many of the case's current parts are disputed on chain (audit E-4).
    * With `chainStatus: PENDING` and a non-zero count the case is partly
-   * disputed: the other parts keep executing. Absent from an older backend.
+   * disputed: the other parts keep executing.
    */
-  chainDisputedParts?: number;  /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
+  chainDisputedParts: number;
+  /**
+   * What stands on chain for the case: STANDING (Pending or Disputed: anyone
+   * could execute it once due, a cancel has something to act on), EXECUTED
+   * (the stake was taken, even under a requested cancel), GONE (nothing
+   * stands and nothing was taken), UNKNOWN (could not be told; read as
+   * standing).
+   */
+  chainRecord: "STANDING" | "EXECUTED" | "GONE" | "UNKNOWN";
+  /** STANDING or UNKNOWN; the same reading as `chainRecord`, kept for simple reads. */
+  chainStanding: boolean;
+  /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;
+  /**
+   * B18: the three operator actions for a case stuck behind a requested
+   * cancel the backend's sweep cannot settle, each with whether its guard
+   * holds on the brief's own live chain read. The action reads the chain
+   * again before it acts. Absent: nothing offered.
+   */
+  manualActions?: OperatorCaseManualActions;
 }
 
-/** `POST /operator/cases/:id/decide`. */
-export interface DecideCaseBody {
-  outcome: ArbitrationOutcome;
-  /** All must be valid for the chosen outcome — the API 422s otherwise. */
-  reasonCodes: string[];
-  /** At least 120 characters. Enforced by the DTO and again by a CHECK constraint. */
-  note: string;
-  rootCauseKey?: string;
-  ticketRef?: string;
-  /** Only for `UPHELD_RECALCULATED`: minor units, and never above the original. */
-  recalculatedAmount?: string;
+/** Why a B18 action is refused, as the backend names it (`StuckCaseRefusal`). */
+export type ManualActionRefusal =
+  | "NOT_CANCEL_REQUESTED"
+  | "SWEEP_SETTLES"
+  | "CHAIN_UNKNOWN"
+  | "STANDING"
+  | "EXECUTED"
+  | "NOT_EXECUTED"
+  | "NOT_GONE"
+  | "UPHELD_USE_REPROPOSE"
+  | "CASE_STATUS"
+  | "ALREADY_RECORDED"
+  | "EXECUTED_BEYOND_DECISION"
+  | "DISPUTED_ON_CHAIN"
+  | "BENEFICIARY_NOT_AN_AGENT"
+  | "SPLIT_NOT_EXPRESSIBLE";
+
+export interface ManualActionOption {
+  allowed: boolean;
+  refusal: ManualActionRefusal | null;
 }
 
-/** `POST /operator/cases/:id/second`. Note is at least 20 characters. */
-export interface SecondSignatureBody {
-  kind: "SIGNED" | "OBJECTED";
-  note: string;
+export interface OperatorCaseManualActions {
+  /** `S-15`: the record reads cancelled and the case is closed with no penalty. One person. */
+  closeNothingStanding: ManualActionOption;
+  /** `S-16`: the record reads executed while the cancel waited. Two-person. */
+  recordExecution: ManualActionOption & {
+    /** What the chain took, minor units of the penalty's asset; set when the record reads executed. */
+    appliedMinor: string | null;
+  };
+  /** `S-17`: the record reads cancelled and the case is still upheld. Two-person. */
+  repropose: ManualActionOption;
 }
 
-/** `POST /operator/cases/:id/suspend`. */
-export interface SuspendProposalBody {
+/** The body of a B18 action (`ManualCaseActionBodyDto`). */
+export interface ManualCaseActionBody {
   /** At least 20 characters. */
   note: string;
   reasonCode: string;
   ticketRef?: string;
 }
 
-/** `POST /operator/cases/:id/extend-deadline`. */
-export interface ExtendDeadlineBody {
-  /** 1 to 336. */
-  additionalHours: number;
-  /** At least 20 characters. */
-  note: string;
-  reasonCode: string;
-}
-
-/** `POST /operator/cases/:id/sweep`. Two-person. */
-export interface OpenFleetSweepBody {
-  defectKey: string;
-  /** 1 to 2160. */
-  lookbackHours: number;
-  /** At least 120 characters. */
-  note: string;
-  reasonCode: string;
-}
-
-export interface FleetSweep {
-  id: string;
-  outcome: ArbitrationOutcome;
-  defectKey: string;
-  windowFrom: string;
-  windowTo: string;
-  status: "OPEN" | "COMPLETED" | "FAILED";
-  matchedCount: number;
-  /** Lower than `matchedCount` when a match was already decided the same way. */
-  appliedCount: number;
-  openedBySubject: string;
-  completedAt: string | null;
+/** What a B18 action answers once it ran (200). */
+export interface ManualCaseActionResult {
+  proposalId: string;
+  status: string;
+  chainStatus: string;
+  chainEpoch: number;
+  /** A repeat of an action that already ran (a double submit): nothing more was written. */
+  alreadyDone?: boolean;
 }
 
 // ── The two transactions an operator gets built but cannot sign ────────────
@@ -509,13 +428,13 @@ export interface CancelIntent {
   transaction: string;
   /**
    * The only key that can sign this. Solana: `Config.admin`, **bare base58**.
-   * EVM: always `X402Config.arbiter()` (D-19); without an arbiter the build is
+   * EVM: always `AssayConfig.arbiter()` (D-19); without an arbiter the build is
    * refused with `409 CHAIN_ARBITER_NOT_SET`.
    */
   admin: string;
   /** EVM: always `ARBITER`. Absent on Solana, where `admin` is `Config.admin`. */
   signerRole?: "ARBITER";
-  /** EVM only: the X402Stake proxy the calldata is sent to. */
+  /** EVM only: the AssayStake proxy the calldata is sent to. */
   to?: string;
   /** The slash request id the record PDA is seeded by. 32 bytes, lower-case hex. */
   requestId: string;
@@ -540,6 +459,8 @@ export interface AccountBlock {
   subject: string;
   /** What enforcement matches on: the uuid, or `namespace:address` (no chain reference). */
   subjectKey: string;
+  /** An organization's name (the provider's, else the organization's own); null for a wallet. */
+  subjectName: string | null;
   active: boolean;
   reasonCode: string;
   /** Internal. Never shown to the blocked account. */
@@ -627,9 +548,9 @@ export interface ListOverrideLogQuery {
 export interface ArbiterTerms {
   chainId: string;
   paused: boolean;
-  /** `X402Config.arbiter()`, checksummed, or `null` for none appointed. */
+  /** `AssayConfig.arbiter()`, checksummed, or `null` for none appointed. */
   arbiter: string | null;
-  /** `X402Config.admin()`, checksummed. */
+  /** `AssayConfig.admin()`, checksummed. */
   admin: string;
   /** The delay a proposal made now would freeze into its `executableAt`. */
   slashDelaySeconds: number;

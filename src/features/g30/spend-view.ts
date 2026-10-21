@@ -51,13 +51,9 @@ export interface RankedRow {
   delta: string | null;
 }
 
-/**
- * The summary's not-charged figure: everything not charged and not owed. An
- * older API sends only `withheldTotal`, which was the same figure before buyer
- * debt existed.
- */
+/** The summary's not-charged figure: everything not charged and not owed. */
 function notChargedOf(g: SummaryGroup): Money {
-  return g.notChargedTotal ?? g.withheldTotal;
+  return g.notChargedTotal;
 }
 
 export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string) => string): RankedRow[] {

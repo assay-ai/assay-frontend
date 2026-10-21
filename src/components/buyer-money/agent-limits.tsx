@@ -38,11 +38,11 @@ import { BudgetFields, type BudgetBootstrap, useBudgetDraft } from "./budget-fie
 import { LetAgentPaySheet } from "./let-agent-pay-sheet";
 import { type AgentRow, useAgentsAndKeys } from "./use-agents";
 
-/** "your time; …" hints, so a refill time says which clock it runs on. */
+/** Refill hints, so a refill time says what its window is. */
 export const REFILL_HINT = {
-  rolling: "your time; 24 h after the first payment in the window",
-  day: "your time; the day starts 00:00 UTC",
-  month: "your time; the month starts 00:00 UTC",
+  rolling: "24 h after the first payment in the window",
+  day: "the day starts 00:00 UTC",
+  month: "the month starts 00:00 UTC",
 } as const;
 
 /** The window's spend: charged plus owed (open or written-off buyer debt is still spend). */
@@ -59,9 +59,17 @@ export function useLimitsContext(options: { pollMs?: number | false } = {}) {
   const data = useAgentsAndKeys(options);
   const policy = data.policyQuery.data ?? null;
   const { chains } = useChains();
-  const bootstrapState = data.agentsQuery.isError
-    ? ({ kind: "unknown", reason: "your agents could not be read" } as const)
-    : policyBootstrapAsset(data.agentsQuery.data?.items as never, chains);
+  const agentsError = data.agentsQuery.isError;
+  const agentItems = data.agentsQuery.data?.items;
+  // Stable across re-renders (BUG-R2-01): a fresh object each render made
+  // anything keyed on it (the consent page's limits sheet) start over.
+  const bootstrapState = React.useMemo(
+    () =>
+      agentsError
+        ? ({ kind: "unknown", reason: "your agents could not be read" } as const)
+        : policyBootstrapAsset(agentItems as never, chains),
+    [agentsError, agentItems, chains],
+  );
   const bootstrap: BudgetBootstrap | null = bootstrapState.kind === "ready" ? bootstrapState : null;
   const editableFor = budgetAgentId(data.agents, policy, data.escrowQuery.data?.account);
 
@@ -143,12 +151,24 @@ export function BudgetOnlySheet({
   agentName,
   policy,
   bootstrap,
+  saveLabel = "Save",
+  onSaved,
+  beforeSave,
+  intro,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   agentName: string;
   policy: SpendPolicy | null;
   bootstrap: BudgetBootstrap | null;
+  /** The save button's label, e.g. "Save and approve" on the consent page. */
+  saveLabel?: string;
+  /** Runs once the limits are saved (or left unchanged) and the sheet has closed. */
+  onSaved?: () => void;
+  /** Runs before saving; a returned reason is shown and nothing is saved. */
+  beforeSave?: () => Promise<string | null>;
+  /** A line above the fields, e.g. who the limits apply to. */
+  intro?: React.ReactNode;
 }) {
   const draft = useBudgetDraft({ policy, bootstrap, open, mode: "budget" });
   const [busy, setBusy] = React.useState(false);
@@ -158,8 +178,23 @@ export function BudgetOnlySheet({
   }, [open]);
   const submit = async () => {
     if (!draft.validate()) return;
+    if (beforeSave) {
+      setBusy(true);
+      setError(null);
+      let reason: string | null;
+      try {
+        reason = await beforeSave();
+      } finally {
+        setBusy(false);
+      }
+      if (reason) {
+        setError(reason);
+        return;
+      }
+    }
     if (!draft.dirty) {
       onOpenChange(false);
+      onSaved?.();
       return;
     }
     setBusy(true);
@@ -168,6 +203,7 @@ export function BudgetOnlySheet({
       await draft.save();
       toast.success("Saved. The new limits apply from the next call.");
       onOpenChange(false);
+      onSaved?.();
     } catch (caught) {
       setError(caught instanceof ApiError ? plainError(caught.code) : "The limits could not be saved. Try again.");
     } finally {
@@ -185,6 +221,7 @@ export function BudgetOnlySheet({
           </SheetDescription>
         </SheetHeader>
         <div className="flex w-full flex-col gap-4 px-[18px] pt-4">
+          {intro ? <p className="text-body-13 text-02">{intro}</p> : null}
           <BudgetFields draft={draft} />
           {error ? (
             <p role="alert" className="text-body-13 text-danger-600">
@@ -198,7 +235,7 @@ export function BudgetOnlySheet({
               Cancel
             </Button>
             <Button type="button" loading={busy} disabled={!draft.creatable} onClick={() => void submit()}>
-              Save
+              {saveLabel}
             </Button>
           </div>
         </SheetFooter>
@@ -286,7 +323,7 @@ export function SpendingLimitsActions({
             .
           </p>
         ) : !escrowReady ? (
-          <p className="text-body-xs text-03">Add funds first: your first deposit opens your escrow.</p>
+          <p className="text-body-xs text-03">Add funds first: your first deposit sets up your balance.</p>
         ) : null}
         <LetAgentPaySheet
           open={payOpen}
@@ -410,7 +447,7 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
           <h2 className="text-label-md text-01">Account ceiling</h2>
           <p className="text-body-13 text-02">
             {set
-              ? `${formatLimit(escrow.maxVoucherAmount)} a call · ${formatLimit(escrow.maxPerWindow)} per 24 hours, for all your agents together. Enforced on chain; it protects your whole escrow.`
+              ? `${formatLimit(escrow.maxVoucherAmount)} a call · ${formatLimit(escrow.maxPerWindow)} per 24 hours, for all your agents together. Enforced on chain; it protects your whole balance.`
               : "Not set, so paid calls are refused. It takes one free signature."}
           </p>
         </div>
@@ -420,7 +457,7 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
       </div>
       {set ? (
         <CapMeter
-          label="Spent from your escrow in the last 24 hours, all agents"
+          label="Spent from your balance in the last 24 hours, all agents"
           used={escrow.spentInWindow ?? { ...escrow.maxPerWindow!, amount: "0" }}
           limit={escrow.maxPerWindow}
           refillsAt={windowRefillAt(escrow.windowStartedAt, escrow.windowSeconds)}
@@ -436,7 +473,7 @@ export function AccountCeilingCard({ ctx }: { ctx: LimitsContext }) {
         }),
       ) ? (
         <p className="text-body-xs text-03" data-testid="ceiling-counts-all">
-          This counts every payment from your escrow, including keys you revoked and agents you removed, so it can be more
+          This counts every payment from your balance, including keys you revoked and agents you removed, so it can be more
           than the agents above add up to.
         </p>
       ) : null}

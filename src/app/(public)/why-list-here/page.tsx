@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CircleAlert, CircleCheck, Rocket } from "lucide-react";
+import { ArrowRight, CircleAlert, CircleCheck, Rocket, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -20,10 +20,11 @@ import {
   type ListingMode,
 } from "@/features/explorer/provider-economics";
 import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
+import { GLOSSARY, REPORT_WINDOW } from "@/libs/glossary";
 
 /**
  * For providers — route `/why-list-here`, with the earnings calculator
- * embedded (`/calculator` redirects here). One page answers "what would I
+ * embedded (`#calculator`). One page answers "what would I
  * earn, what do I put at risk, and what am I agreeing to", and one button,
  * "Start listing", carries the visitor's price and volume into setup.
  *
@@ -31,7 +32,38 @@ import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
  * free listing needs no stake and cannot be penalised; disputes are on chain
  * and decided by Assay's arbiter (a person, on chain). The only limits on a
  * penalty shown as guarantees are the ones the chain enforces.
+ *
+ * "Never clawed back" and the stake sit side by side, so the page says once,
+ * under the headline, how they fit: a payout stays paid, and only the stake is
+ * at risk. "Steps to list" shows the whole path (account setup, then each
+ * listing) before anyone signs in; the provider pages that showed it are
+ * behind sign-in.
  */
+
+/** Never clawed back vs the stake, in the glossary's words: when a payment is final, then the stake rule. */
+const STAKE_RECONCILE = `Payouts are never clawed back. ${GLOSSARY["payout-final"].definition} ${GLOSSARY["stake-rule"].definition}`;
+
+/** The setup steps (`/provider/setup`) and the listing steps (the listing wizard), in their own words. */
+const STEPS: ReadonlyArray<{ group: string; when: string; steps: ReadonlyArray<{ title: string; detail: string }> }> = [
+  {
+    group: "Set up your account",
+    when: "once",
+    steps: [
+      { title: "You", detail: "Your business name, a contact, and the terms." },
+      { title: "Get paid", detail: "Connect the wallet you want to be paid to and sign a message. Signing is free." },
+      { title: "Your API", detail: "Your API's address. You can use another address for each tool." },
+    ],
+  },
+  {
+    group: "List a tool",
+    when: "for each tool",
+    steps: [
+      { title: "Tool", detail: "Pick a tool from the catalogue to serve. Publishing your own API as a new tool has its own steps." },
+      { title: "Connect & test", detail: "Map your API to the tool and run a real test call. A passing test is needed to go on." },
+      { title: "Go live", detail: "Set your price and the failure rate you promise, then publish." },
+    ],
+  },
+];
 
 const MODES: { value: ListingMode; label: string }[] = [
   { value: "PAID", label: "Paid" },
@@ -184,13 +216,60 @@ function Calculator({
   );
 }
 
+/** The whole path, before anyone signs in: account setup once, then each listing, then the stake for paid calls. */
+function StepsToList() {
+  return (
+    <Panel id="steps" className="scroll-mt-20">
+      <PanelHeader>
+        <PanelTitles>
+          <PanelTitle>Steps to list</PanelTitle>
+          <PanelDescription>What you do, in order. Your progress is saved as you go.</PanelDescription>
+        </PanelTitles>
+      </PanelHeader>
+      <PanelBody className="gap-5 p-4 tablet:p-5">
+        <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2">
+          {STEPS.map((group) => (
+            <section key={group.group} aria-label={group.group} className="flex flex-col gap-3">
+              <p className="text-label-md text-01">
+                {group.group} <span className="text-body-xs text-03">({group.when})</span>
+              </p>
+              <ol className="flex flex-col gap-3">
+                {group.steps.map((step, index) => (
+                  <li key={step.title} className="flex items-start gap-3">
+                    <span className="flex size-[26px] shrink-0 items-center justify-center rounded-full bg-primary-10 font-mono text-mono-12 font-semibold text-primary-500">
+                      {index + 1}
+                    </span>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="text-label-sm text-01">{step.title}</span>
+                      <span className="text-body-13 text-02">{step.detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ))}
+        </div>
+        <div className="flex items-start gap-2.5 rounded-lg border border-01 bg-02 p-3.5">
+          <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-500" />
+          <p className="text-body-13 text-02">
+            <span className="text-label-sm text-01">Stake, for paid calls. </span>
+            Free listings need none. To charge per call, add a <Term k="stake">stake</Term> that covers $50 or 1,000
+            calls at your price, whichever is more; you get it back when you stop, after a waiting period. Once a
+            call&apos;s {REPORT_WINDOW} report window has closed, the stake is the only money at risk.{" "}
+            {GLOSSARY["stake-rule"].definition}
+          </p>
+        </div>
+      </PanelBody>
+    </Panel>
+  );
+}
+
 export default function WhyListHerePage() {
   const [mode, setMode] = React.useState<ListingMode>("PAID");
   const [price, setPrice] = React.useState("0.001");
   const [calls, setCalls] = React.useState("100000");
 
-  // A direct load of `/why-list-here#calculator` (or the `/calculator`
-  // redirect) lands on the calculator. The browser's own jump runs before
+  // A direct load of `/why-list-here#calculator` lands on the calculator. The browser's own jump runs before
   // this client page has laid out, so it is repeated once it has.
   React.useEffect(() => {
     if (window.location.hash !== "#calculator") return;
@@ -209,6 +288,10 @@ export default function WhyListHerePage() {
         <p className="max-w-[760px] text-center text-body-md text-02">
           We check the result of every call before money moves. A failed call is not charged to the buyer and not paid
           to you — and you can see the check behind every decision.
+        </p>
+        <p className="flex max-w-[760px] items-start gap-2 text-left text-body-13 text-01" data-testid="stake-reconcile">
+          <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success-500" />
+          <span>{STAKE_RECONCILE}</span>
         </p>
         <div className="flex flex-wrap justify-center gap-2.5 pt-1">
           <Button asChild>
@@ -235,6 +318,8 @@ export default function WhyListHerePage() {
         </div>
 
         <Calculator mode={mode} setMode={setMode} price={price} setPrice={setPrice} calls={calls} setCalls={setCalls} />
+
+        <StepsToList />
 
         <Panel>
           <PanelHeader>
@@ -280,7 +365,7 @@ export default function WhyListHerePage() {
 
 const FACTS: ReadonlyArray<{ value: string; key: string; sub: string }> = [
   { value: "Per call", key: "paid on chain", sub: "to your own wallet" },
-  { value: "0%", key: "reserve held", sub: "we hold nothing back" },
+  { value: "0%", key: "standing reserve", sub: `No standing reserve: each paid call is held for ${REPORT_WINDOW} for buyer reports` },
   { value: "Never", key: "clawed back", sub: "a payout stays paid" },
   { value: `${DAILY_CAP_PERCENT}%`, key: "most taken per 24 h", sub: "of your stake, enforced on chain" },
 ];

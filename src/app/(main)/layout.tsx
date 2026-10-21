@@ -1,6 +1,5 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Toaster } from "sonner";
@@ -12,15 +11,17 @@ import { BottomTabBar } from "@/components/layout/bottom-tab-bar";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
 import { BuyerSectionTabs } from "@/components/layout/section-tabs";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
-import { BUYER_NAV_ITEMS, sectionFor } from "@/components/layout/nav-config";
+import { BUYER_NAV_ITEMS, documentTitleFor, mobileTitleFor, sectionFor } from "@/components/layout/nav-config";
 import { AlertsMenu } from "@/components/layout/alerts-menu";
 import { BuyerSearch } from "@/components/layout/buyer-search";
 import { TopBar } from "@/components/layout/top-bar";
 import { WalletMenu } from "@/components/layout/wallet-menu";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { routes } from "@/libs/routes";
+import { appNavigate } from "@/features/oauth/strict-pages";
 import { SettleDebtProvider } from "@/features/buyer-debt/settle-debt-sheet";
-import { getUnreadCount } from "@/services";
+import { useMeStatusPart } from "@/features/me-status/use-me-status";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useTheme } from "@/providers/ThemeProvider";
 
 /**
@@ -31,57 +32,27 @@ import { useTheme } from "@/providers/ThemeProvider";
  * bar with the same five sections inline. Sections, their tabs and the
  * account menu's links all come from `nav-config.ts`.
  *
+ * The browser tab names the page and the mobile header names the section,
+ * both from `nav-config.ts` (`documentTitleFor`, `mobileTitleFor`).
+ *
  * Both are always in the DOM and hidden with `md:` rather than swapped on a
  * measured width, so the first paint is correct at either size and there is no
  * layout jump after hydration.
  */
 
-const TITLES: Record<string, string> = {
-  "/": "Overview",
-  "/spend": "Spend",
-  "/spend/calls": "Calls",
-  "/guarantee": "Not charged",
-  "/funding": "Funding",
-  "/limits": "Spending limits",
-  "/alerts": "Alerts",
-  "/approvals": "Approvals",
-  "/explore": "Explore",
-  "/agents": "Agents & keys",
-  "/audit-log": "Activity log",
-  "/statements": "Statements",
-  "/team": "Team",
-  "/settings": "Settings",
-  "/settings/close": "Close account",
-  "/connect": "Connect",
-  "/onboarding": "Get started",
-};
-
-/** Longest prefix wins, so /funding/withdraw beats /funding. */
-function titleFor(pathname: string): string {
-  if (TITLES[pathname]) return TITLES[pathname];
-  const match = Object.keys(TITLES)
-    .filter((href) => href !== "/" && pathname.startsWith(href))
-    .sort((a, b) => b.length - a.length)[0];
-  if (match) return TITLES[match];
-  if (pathname.startsWith("/receipts/view")) return "Receipt";
-  return "Assay";
-}
-
 export default function BuyerLayout({ children }: { children: React.ReactNode }) {
   const { themeType } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
-  // The bell's badge. A failed read shows no badge rather than a wrong one.
-  const unread = useQuery({
-    queryKey: ["notifications", "unread-count"],
-    queryFn: getUnreadCount,
-    refetchInterval: 60_000,
-    retry: 0,
-  });
+  // The bell's badge (`GET /me/status`'s `unreadCount`, polled by the shell's
+  // block-status read). A failed read shows no badge rather than a wrong one.
+  const unread = useMeStatusPart("unreadCount");
   const alertCount = unread.data?.count ?? 0;
-  const openAlerts = () => router.push("/alerts");
+  // `appNavigate`: leaving a strict page (the consent page) is a full page load.
+  const openAlerts = () => appNavigate(router, "/alerts", { pathname });
 
   const activeNavId = sectionFor(pathname) ?? undefined;
+  useDocumentTitle(documentTitleFor(pathname));
 
   return (
     <div className="flex min-h-screen flex-col bg-01">
@@ -107,14 +78,16 @@ export default function BuyerLayout({ children }: { children: React.ReactNode })
 
       <div className="md:hidden">
         <MobileTopBar
-          title={titleFor(pathname)}
+          title={mobileTitleFor(pathname)}
           alertCount={alertCount}
           onAlertsClick={openAlerts}
           alerts={<AlertsMenu count={alertCount} variant="mobile" />}
-          onSearch={() => router.push(routes.calls())}
+          onSearch={() => appNavigate(router, routes.calls(), { pathname })}
           avatar={
             <>
               <TestnetChip compact />
+              {/* The emergency stop one tap away at phone width, next to the bell (icon only). */}
+              <PauseAllButton compact />
               {/* The same theme switch as the desktop bar, so the choice is reachable at every width. */}
               <ThemeToggle />
               <WalletMenu />

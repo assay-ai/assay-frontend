@@ -1,13 +1,16 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
-import { ArrowLeft, ArrowRight, Lock, ScanSearch, Split } from "lucide-react";
+import { ArrowLeft, ArrowRight, Coins, Lock, ScanSearch, ShieldCheck, Split, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Button } from "@/components/ui/button";
+import { GLOSSARY } from "@/libs/glossary";
+import { useWalletLink } from "@/features/auth/wallet-link";
+import { isStrictPagePath, loadPage } from "@/features/oauth/strict-pages";
 import { safeNextPath } from "@/libs/login-redirect";
 import { cn } from "@/utils";
 
@@ -46,6 +49,14 @@ import { startReadyTimeout } from "./ready-timeout";
  * `MinimalBar` (no signed-in tenant to name) and drops the main element's
  * padding so these two panes can run full-bleed. There is no middleware, so
  * the route is reachable unauthenticated regardless of which group it sits in.
+ *
+ * ## Two pitches
+ *
+ * Sent here from a provider page (`next` under `/provider`), the brand pane
+ * carries the provider's pitch instead (paid per call, payouts never clawed
+ * back, what the stake risks) and the newcomer link goes to Why list here; the
+ * buyer's "we hold, not charge" would read to an API owner as "the platform
+ * keeps money from my calls". Those lines follow `/why-list-here`.
  */
 
 /** Verbatim from the how-it-works design's flow steps 2–4. */
@@ -64,6 +75,28 @@ const PROOF_POINTS = [
     icon: Split,
     title: "Money moves, or it does not",
     detail: "Passed: you pay the serving provider's price, never more than the hold. Failed: you keep the money.",
+  },
+];
+
+/**
+ * The provider's pitch, from `/why-list-here`: what you earn, when a payment
+ * is final, what the stake risks. The last two are the glossary's sentences.
+ */
+const PROVIDER_POINTS = [
+  {
+    icon: Coins,
+    title: "Paid per call, on chain",
+    detail: "Buyers pay your price for each call whose result passes the check; you are paid on chain, to your own wallet, after Assay's fee.",
+  },
+  {
+    icon: Wallet,
+    title: "Payouts are never clawed back",
+    detail: GLOSSARY["payout-final"].definition,
+  },
+  {
+    icon: ShieldCheck,
+    title: "What your stake risks",
+    detail: GLOSSARY["stake-rule"].definition,
   },
 ];
 
@@ -90,6 +123,102 @@ function BrandLockup({ className }: { className?: string }) {
   );
 }
 
+/** The buyer's pitch, verbatim from How it works. */
+function BuyerPitch() {
+  return (
+    <>
+      <div className="flex flex-col gap-7">
+        <div className="flex flex-col gap-3.5">
+          <h2 className="max-w-[420px] text-heading-lg text-01 desktop:text-display-md">
+            {"You don't pay for results you can't use."}
+          </h2>
+          <p className="max-w-[420px] text-body-sm text-03">
+            Your agent calls a tool. We check the result before the money moves — and we show you
+            the amount we did not take.
+          </p>
+        </div>
+
+        {/* The counterfactual, in the shape `MoneyPair` renders it on the
+            light surfaces. Hand-rolled rather than reused because that
+            component is built for `$bg-01` and binds `$text-01`/`$teal-600`,
+            both of which are wrong on this ground. */}
+        <div className="flex max-w-[420px] flex-col gap-2.5 rounded-xl bg-overlay-light px-5 py-[18px]">
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-body-13 text-03">Listed price</span>
+            <span className="text-mono-13 font-mono font-semibold text-01">$0.0100</span>
+          </div>
+          <div className="flex items-center justify-between gap-4">
+            <span className="text-body-13 text-03">You paid</span>
+            <span className="text-mono-13 font-mono font-semibold text-01">$0.0000</span>
+          </div>
+          <div className="flex items-center justify-between gap-4 pt-2.5">
+            <span className="text-label-13 text-teal-400">Not charged</span>
+            <span className="text-mono-13 font-mono font-semibold text-teal-400">$0.0100</span>
+          </div>
+        </div>
+      </div>
+
+      <ul className="flex flex-col gap-4">
+        {PROOF_POINTS.map((point) => {
+          const Icon = point.icon;
+          return (
+            <li key={point.title} className="flex items-start gap-3">
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-overlay-light">
+                <Icon aria-hidden="true" className="h-[15px] w-[15px] text-01" />
+              </span>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-label-13 text-01">{point.title}</span>
+                <span className="text-body-xs text-03">{point.detail}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+/** The provider's pitch, from Why list here, and the way to read the whole offer. */
+function ProviderPitch() {
+  return (
+    <>
+      <div className="flex flex-col gap-3.5">
+        <h2 className="max-w-[420px] text-heading-lg text-01 desktop:text-display-md">List an API. Get paid per call.</h2>
+        <p className="max-w-[420px] text-body-sm text-03">
+          Agents pay for your tool through Assay, per call. We check each result before the money moves, so buyers
+          pay only for results they can use.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-5">
+        <ul className="flex flex-col gap-4">
+          {PROVIDER_POINTS.map((point) => {
+            const Icon = point.icon;
+            return (
+              <li key={point.title} className="flex items-start gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-overlay-light">
+                  <Icon aria-hidden="true" className="h-[15px] w-[15px] text-01" />
+                </span>
+                <span className="flex min-w-0 flex-col gap-0.5">
+                  <span className="text-label-13 text-01">{point.title}</span>
+                  <span className="text-body-xs text-03">{point.detail}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+        <Link
+          href="/why-list-here"
+          className="group inline-flex min-h-10 items-center gap-1.5 self-start text-label-13 text-01 underline-offset-2 hover:underline"
+        >
+          Why list here: earnings, stake and terms
+          <ArrowRight aria-hidden="true" className="h-[13px] w-[13px] transition-transform group-hover:translate-x-0.5" />
+        </Link>
+      </div>
+    </>
+  );
+}
+
 export default function LoginPage() {
   const { ready, authenticated, login } = usePrivy();
   const router = useRouter();
@@ -101,9 +230,30 @@ export default function LoginPage() {
   // Sent here from a provider page (List a tool, Start listing): say so.
   const listing = next.startsWith("/provider");
 
+  // Already signed in: go where `next` says (validated, same origin only).
+  // Read from the address bar at that moment as well as from the hook, so a
+  // first render before the query string is known never sends a signed-in
+  // person to `/` instead (V1-13).
+  const walletLink = useWalletLink();
+  const walletSettled = walletLink === "linked" || walletLink === "unavailable";
   useEffect(() => {
-    if (ready && authenticated) router.replace(next);
-  }, [ready, authenticated, router, next]);
+    if (!ready || !authenticated) return;
+    const fromAddress = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("next");
+    // Always validated first; only then can it pick the kind of navigation.
+    const target = fromAddress !== null ? safeNextPath(fromAddress) : next;
+    if (!isStrictPagePath(target)) {
+      router.replace(target);
+      return;
+    }
+    // Back to a strict page (the consent page): a full load, so it gets its
+    // own headers. A full load also drops this page's Privy client, and with
+    // it the embedded wallets a brand-new account is still being given
+    // (`createOnLogin` runs inside the login event only): the account would
+    // be left with no wallet and every API call refused with
+    // AUTH_WALLET_NOT_LINKED. So leave once the API has linked the wallet, or
+    // has given up and the consent page can say so.
+    if (walletSettled) loadPage(target);
+  }, [ready, authenticated, router, next, walletSettled]);
 
   // Don't flash a sign-in form at someone who is already signed in.
   const signedIn = ready && authenticated;
@@ -130,53 +280,7 @@ export default function LoginPage() {
       >
         <BrandLockup className="flex items-center gap-2 text-01" />
 
-        <div className="flex flex-col gap-7">
-          <div className="flex flex-col gap-3.5">
-            <h2 className="max-w-[420px] text-heading-lg text-01 desktop:text-display-md">
-              {"You don't pay for results you can't use."}
-            </h2>
-            <p className="max-w-[420px] text-body-sm text-03">
-              Your agent calls a tool. We check the result before the money moves — and we show you
-              the amount we did not take.
-            </p>
-          </div>
-
-          {/* The counterfactual, in the shape `MoneyPair` renders it on the
-              light surfaces. Hand-rolled rather than reused because that
-              component is built for `$bg-01` and binds `$text-01`/`$teal-600`,
-              both of which are wrong on this ground. */}
-          <div className="flex max-w-[420px] flex-col gap-2.5 rounded-xl bg-overlay-light px-5 py-[18px]">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-body-13 text-03">Listed price</span>
-              <span className="text-mono-13 font-mono font-semibold text-01">$0.0100</span>
-            </div>
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-body-13 text-03">You paid</span>
-              <span className="text-mono-13 font-mono font-semibold text-01">$0.0000</span>
-            </div>
-            <div className="flex items-center justify-between gap-4 pt-2.5">
-              <span className="text-label-13 text-teal-400">Not charged</span>
-              <span className="text-mono-13 font-mono font-semibold text-teal-400">$0.0100</span>
-            </div>
-          </div>
-        </div>
-
-        <ul className="flex flex-col gap-4">
-          {PROOF_POINTS.map((point) => {
-            const Icon = point.icon;
-            return (
-              <li key={point.title} className="flex items-start gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-overlay-light">
-                  <Icon aria-hidden="true" className="h-[15px] w-[15px] text-01" />
-                </span>
-                <span className="flex min-w-0 flex-col gap-0.5">
-                  <span className="text-label-13 text-01">{point.title}</span>
-                  <span className="text-body-xs text-03">{point.detail}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {listing ? <ProviderPitch /> : <BuyerPitch />}
       </aside>
 
       {/* Form pane. */}
@@ -210,6 +314,7 @@ export default function LoginPage() {
             <p className="text-body-sm text-02">
               Continue to your Assay account. Email or wallet — there is no password to remember.
             </p>
+            <p className="text-body-sm text-02">One account for using and listing tools.</p>
           </div>
 
           <div className="flex flex-col gap-3">
@@ -237,23 +342,22 @@ export default function LoginPage() {
                 {!ready
                   ? "Loading sign-in…"
                   : signedIn
-                    ? "Signing you in"
+                    ? walletLink === "provisioning"
+                      ? "Setting up your wallet…"
+                      : "Signing you in"
                     : "Continue with email or wallet"}
               </Button>
             )}
-            <p className="text-body-xs text-03">
-              Sign-in opens on this page, through Privy. You can use an email code or connect a
-              wallet.
-            </p>
+            <p className="text-body-xs text-03">A sign-in window opens here: email code or wallet.</p>
           </div>
 
           <div className="flex flex-col gap-4">
             <div className="h-px w-full bg-03" />
             <Link
-              href="/how-it-works"
+              href={listing ? "/why-list-here" : "/how-it-works"}
               className="group inline-flex items-center gap-1.5 text-label-13 text-02 hover:text-01"
             >
-              New to Assay? See how it works
+              {listing ? "New to listing? See why to list here" : "New to Assay? See how it works"}
               <ArrowRight
                 aria-hidden="true"
                 className="h-[13px] w-[13px] transition-transform group-hover:translate-x-0.5"

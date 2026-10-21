@@ -135,7 +135,7 @@ const CONTRACT_ABIS: Record<PinnedContract, Abi> = {
     // The admin's doors, sent from Contracts (`contract-config.ts`).
     "struct ParamSet { address treasury; address redeemer; uint64 unbondingPeriodSeconds; uint64 minimumStake; uint64 penaltyAmount; uint64 verifierDailyCap; uint16 takeRateBps; uint16 slashAgentBps; uint16 slashPlatformBps; uint16 slashCapBps; }",
     "function setPaused(bool value)",
-    "function updateConfig(ParamSet p, address newAdmin)",
+    "function updateConfig(ParamSet p)",
     "function registerVerifier(address verifier, bytes32 label, uint64 expiresAt)",
     "function revokeVerifier(address verifier)",
     "function setArbiter(address newArbiter)",

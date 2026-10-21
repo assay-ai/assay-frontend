@@ -25,10 +25,10 @@ const me: Pick<OperatorIdentity, "id" | "roles"> = { id: "me", roles: ["ADJ"] };
 function approval(overrides: Partial<OperatorApproval> = {}): OperatorApproval {
   return {
     id: "a1",
-    action: "slash.sweep",
-    code: "S-11",
+    action: "slash.repropose",
+    code: "S-17",
     target: "slash_proposal:p1",
-    payload: { proposalId: "p1", body: { defectKey: "D-1", lookbackHours: 24, reasonCode: "R", note: "n" } },
+    payload: { proposalId: "p1", body: { reasonCode: "R", note: "n" } },
     status: "PENDING",
     requestedBy: "alice@",
     requestedById: "alice",
@@ -60,7 +60,7 @@ describe("who sees Approve", () => {
     expect(approveBlockedBecause(approval({ code: "A-10" }), me)).toBe("Only a Lead adjudicator can approve this.");
     expect(approveBlockedBecause(approval({ code: "A-12" }), { roles: ["ADJL"] })).toMatch(/an Admin/);
     expect(approveBlockedBecause(approval({ code: "S-5" }), { roles: ["TRE"] })).toBeNull();
-    expect(approveBlockedBecause(approval({ code: "S-11" }), me)).toBeNull();
+    expect(approveBlockedBecause(approval({ code: "S-17" }), me)).toBeNull();
   });
 
   it("leaves an unknown code to the backend", () => {
@@ -89,7 +89,7 @@ describe("who sees Reject", () => {
 describe("how a row reads", () => {
   it("names the action in plain words", () => {
     expect(actionLabel("account.unblock")).toBe("Lift an account block");
-    expect(actionLabel("slash.suspend")).toBe("Suspend a penalty (cancels it)");
+    expect(actionLabel("slash.repropose")).toBe("Propose an upheld penalty on chain again");
     expect(actionLabel("operator.change")).toMatch(/^Raise someone's roles/);
     // No role codes in the words people read.
     expect(Object.values({ a: actionLabel("operator.change"), b: actionLabel("operator.remove") }).join(" ")).not.toMatch(/OPS_ADMIN/);
@@ -141,6 +141,15 @@ describe("how a row reads", () => {
       expect(d.target).toEqual({ label: "Wallet 0x0000…0aBc", href: "/operator/blocks" });
       expect(d.fields.map((f) => f.label)).toEqual(["Blocked for", "Reason", "Note"]);
       expect(JSON.stringify(d)).not.toContain(BLOCK_ID);
+    });
+
+    it("names the organization a lift is for, never its uuid (B12)", () => {
+      const ORG = "7e3a94c1-0000-4000-8000-000000000001";
+      const blocked = new Map(context.blocks);
+      blocked.set(BLOCK_ID, { ...context.blocks.get(BLOCK_ID)!, subjectKind: "ORGANIZATION", subject: ORG, subjectName: "Unlisted Data Co" });
+      const d = describeApproval({ action: "account.unblock", target: `account_block:${BLOCK_ID}`, payload: { blockId: BLOCK_ID } }, { ...context, blocks: blocked });
+      expect(d.sentence).toMatch(/^Lift the block on Unlisted Data Co/);
+      expect(JSON.stringify(d)).not.toContain(ORG);
     });
 
     it("names who blocked by display name, not by a truncated handle", () => {
@@ -328,25 +337,21 @@ describe("how a row reads", () => {
       expect(d.sentence).toBe("Raise the authority limit of operator c39c364e… to unbounded (r).");
     });
 
-    it("links a case and words suspend, sweep and compensation", () => {
+    it("links a case and words a re-proposal and a compensation", () => {
       const id = "a337cb6d-5917-4c3c-be7e-f1463a385ab8";
-      const suspend = describeApproval({
-        action: "slash.suspend",
+      const repropose = describeApproval({
+        action: "slash.repropose",
         target: `slash_proposal:${id}`,
         payload: { body: { note: "n", reasonCode: "R15_TEST" }, proposalId: id },
       });
-      expect(suspend.sentence).toBe("Suspend penalty a337cb6d…, which cancels it (r15 test).");
-      expect(suspend.target).toEqual({ label: "Penalty a337cb6d…", href: `/operator/cases/view?id=${id}` });
+      expect(repropose.sentence).toBe("Propose penalty a337cb6d… on chain again under a new record, its earlier one being cancelled (r15 test).");
+      expect(repropose.target).toEqual({ label: "Penalty a337cb6d…", href: `/operator/cases/view?id=${id}` });
       // Once the penalty is read, it is named by its provider and amount.
       const named = describeApproval(
-        { action: "slash.suspend", target: `slash_proposal:${id}`, payload: { proposalId: id, body: {} } },
+        { action: "slash.repropose", target: `slash_proposal:${id}`, payload: { proposalId: id, body: {} } },
         { ...EMPTY_APPROVAL_CONTEXT, penalties: new Map([[id, "Northwind Geo's $28.47 penalty"]]) },
       );
-      expect(named.sentence).toBe("Suspend Northwind Geo's $28.47 penalty, which cancels it.");
-
-      const sweep = describeApproval(approval());
-      expect(sweep.sentence).toBe("Sweep every penalty with defect D-1 over the last 24 h, decided like penalty p1 (r).");
-      expect(sweep.fields.map((f) => f.label)).toEqual(["Defect", "Look back", "Reason", "Note"]);
+      expect(named.sentence).toBe("Propose Northwind Geo's $28.47 penalty on chain again under a new record, its earlier one being cancelled.");
 
       const comp = describeApproval({
         action: "slash.compensated",
@@ -365,9 +370,7 @@ describe("how a row reads", () => {
   });
 
   it("states what an approval did, from the result", () => {
-    expect(approvedResultSentence("slash.sweep", { matchedCount: 14, appliedCount: 0 })).toBe(
-      "Fleet sweep opened: 14 matched, 0 applied.",
-    );
+    expect(approvedResultSentence("slash.repropose", {})).toBe("Approved. The penalty goes on chain again with the next proposal pass.");
     // Never the CAIP id off the wire: the shared wallet label, or the card's own name for it.
     expect(approvedResultSentence("account.unblock", { subjectKind: "WALLET", subject: "eip155:46630:0x9f3c2b7e1d4a8c05b6e9f2a3d7c1b4e8a0d5f36c" })).toMatch(
       /^Block lifted on Wallet 0x9[fF]3[cC]…[fF]36[cC]\.$/,
@@ -416,20 +419,27 @@ describe("the approve and reject refusals", () => {
       const row = approval({ status: "REJECTED", rejectedBy: "alice@", requestedBy: "alice@" });
       expect(isWithdrawn(row)).toBe(true);
       expect(statusWord(row)).toBe("withdrawn");
-      expect(decisionText(row)).toBe("Withdrawn by alice@");
+      expect(decisionText(row)).toBe("Asked and withdrawn by alice@");
     });
 
     it("reads another operator's reject as rejected", () => {
       const row = approval({ status: "REJECTED", rejectedBy: "bob@", requestedBy: "alice@" });
       expect(isWithdrawn(row)).toBe(false);
       expect(statusWord(row)).toBe("rejected");
-      expect(decisionText(row)).toBe("Rejected by bob@");
+      expect(decisionText(row)).toBe("Asked by alice@ · rejected by bob@");
     });
 
     it("words approved and expired rows", () => {
-      expect(decisionText(approval({ status: "APPROVED", approvedBy: "bob@" }))).toBe("Approved by bob@");
-      expect(decisionText(approval({ status: "EXPIRED" }))).toBe("Expired");
+      expect(decisionText(approval({ status: "APPROVED", requestedBy: "alice@", approvedBy: "bob@" }))).toBe("Asked by alice@ · approved by bob@");
+      expect(decisionText(approval({ status: "EXPIRED", requestedBy: "alice@" }))).toBe("Asked by alice@ · expired");
       expect(statusWord(approval({ status: "EXPIRED" }))).toBe("expired");
+    });
+
+    it("names who asked and who decided, through the console's names", () => {
+      const names: Record<string, string> = { "alice@": "Alice Ng", "bob@": "Bob Ruiz" };
+      const nameOf = (s: string) => names[s] ?? s;
+      expect(decisionText(approval({ status: "APPROVED", requestedBy: "alice@", approvedBy: "bob@" }), nameOf)).toBe("Asked by Alice Ng · approved by Bob Ruiz");
+      expect(decisionText(approval({ status: "REJECTED", requestedBy: "alice@", rejectedBy: "alice@" }), nameOf)).toBe("Asked and withdrawn by Alice Ng");
     });
   });
 });

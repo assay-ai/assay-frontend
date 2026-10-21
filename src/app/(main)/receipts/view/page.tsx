@@ -31,24 +31,23 @@ import {
 } from "@/features/g30/receipt-parts";
 import {
   isFinalNotCharged,
-  isFinalNotChargedReceipt,
-  notChargedStory,
-  receiptFlow,
+  receiptStory,
   relevanceReached,
-  canContestRejection,
   COLLECTION_STATES,
   STATE_CARDS,
   STATE_CARD_ORDER,
-  chargedHeadline,
   deriveReceiptState,
   samplingExplainerCopy,
   samplingSubline,
-  toStageChecks,
   type ReceiptState,
+  type ReceiptTimelineRow,
 } from "@/features/g30/receipt-state";
 import { ErrorBlock } from "@/features/g30/ui";
 import { collectionAt, collectionView, isCollectionState, timelineStamp, timelineZoneNote } from "@/features/g30/receipt-collection";
 import { OwedReceiptAction } from "@/features/buyer-debt/owed-row-action";
+import { ReceiptReport, RefundableNow, receiptReportState, useCallReports } from "@/features/call-disputes/receipt-report";
+import { receiptRefetchInterval } from "@/features/g30/refund-promise";
+import { useNow } from "@/features/call-disputes/ui";
 import { owedCallState } from "@/features/buyer-debt/debt-summary";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import type { Receipt } from "@/features/g30/wire";
@@ -113,6 +112,11 @@ function ReceiptPageContent() {
   const names = useEntityNames({ kinds: ["tool", "provider"] });
   // The same debts query as the banner (one request): a written-off row takes its write-off time from it.
   const debtsQuery = useBuyerDebtsQuery();
+  // One clock for the whole receipt: the hold rows, the headline countdown and the report box
+  // all turn over together at the end of the hour.
+  const now = useNow(30_000);
+  // The same query the report box reads: an open report keeps the payment held.
+  const reportsQuery = useCallReports(intentId);
 
   const receiptQuery = useQuery<Receipt, ApiError>({
     queryKey: ["receipt", intentId],
@@ -128,6 +132,9 @@ function ReceiptPageContent() {
     // cannot read its figures has to say so, immediately and in words.
     retry: 0,
     networkMode: "always" as const,
+    // While it promises a refund, fetched again every minute: the promise is
+    // the backend's, and it lapses (W1A review C1). The clock bounds it between fetches.
+    refetchInterval: (query) => receiptRefetchInterval(query.state.data),
   });
 
   const receipt = receiptQuery.data;
@@ -217,7 +224,6 @@ function ReceiptPageContent() {
       ? override
       : deriveReceiptState(receipt);
 
-  const checks = toStageChecks(receipt);
   const listed = formatMoney(receipt.listedPrice, { decimals: 4 });
   const samplingExplainer = samplingExplainerCopy(receipt, listed);
   const paid = formatMoney(receipt.chargedPrice, { decimals: 4 });
@@ -225,49 +231,40 @@ function ReceiptPageContent() {
 
   // A debt or a forfeit is not one of the "ended without a charge" outcomes.
   const finalNotCharged = isFinalNotCharged(state, receipt) && !COLLECTION_STATES.has(state);
-  // Every finished call that was not charged tells ONE story — the banner, the
-  // money strip, the check rows and the details all read from it — so a voided
-  // call can never say "No result recorded" beside "Check failed".
-  const story = state !== "CHECKING" && isFinalNotChargedReceipt(receipt) ? notChargedStory(receipt) : null;
   // A debt, a voided debt or a forfeit: a short headline of its own (`receipt-collection.ts`).
   const collection = isCollectionState(state) ? collectionView(state, receipt) : null;
-  const stateCard =
-    state === "CHARGED" || state === "NOT_CHARGED" || story || collection
-      ? null
-      : STATE_CARDS[state as keyof typeof STATE_CARDS];
 
   /* ------------------------------------------------------------- timeline */
 
-  const releasedLabel = state === "EXPIRED" ? "Did not finish in time, hold released" : "Hold released";
-  const events: TimelineEvent[] = [
-    { ...stamp(receipt.createdAt), label: "Call made", tone: "neutral" },
-    { ...stamp(receipt.createdAt), label: "Money held", meta: listed, tone: "primary" },
-  ];
-  if (receipt.evaluatedAt) {
-    events.push({ ...stamp(receipt.evaluatedAt), label: "Result checked", tone: "neutral" });
-  }
   const closedAt = receipt.settledAt ?? receipt.holdReleasedAt;
+  let collectionClosing: ReceiptTimelineRow | undefined;
   if (closedAt && collection && isCollectionState(state)) {
     // A debt, a voided debt or a forfeit, in what it means for the buyer. A written-off debt's hold
     // is released without a settlement, so it closes at `holdReleasedAt`; it is still owed.
     const listedDebt = owedCallState(debtsQuery.data, receipt.intentId);
-    events.push({
-      ...stamp(collectionAt(state, closedAt, listedDebt.kind === "unknown" ? null : listedDebt.debt)),
+    collectionClosing = {
+      at: collectionAt(state, closedAt, listedDebt.kind === "unknown" ? null : listedDebt.debt),
       label: collection.timeline.label,
       meta: collection.timeline.meta,
       tone: collection.owed ? "primary" : "teal",
-    });
-  } else if (receipt.settledAt) {
-    const charged = receipt.chargedPrice.amount !== "0";
-    events.push({
-      ...stamp(receipt.settledAt),
-      label: charged ? "Charged" : releasedLabel,
-      meta: charged ? paid : "not charged",
-      tone: charged ? "success" : "teal",
-    });
-  } else if (receipt.holdReleasedAt) {
-    events.push({ ...stamp(receipt.holdReleasedAt), label: releasedLabel, meta: "not charged", tone: "teal" });
+    };
   }
+
+  // The receipt, told once: the headline, the money strip, the check rows and
+  // the timeline all read from it, so a call charged with no check result can
+  // never say "Check passed", and a charged call never closes on "not charged".
+  const told = receiptStory(receipt, state, {
+    now,
+    collectionClosing,
+    report: receiptReportState(reportsQuery.data?.items),
+  });
+  const story = told.notCharged;
+  const checks = told.checks;
+  const events: TimelineEvent[] = told.timeline.map(({ at, ...row }) => ({ ...stamp(at), ...row }));
+  const stateCard =
+    state === "CHARGED" || state === "NOT_CHARGED" || story || collection
+      ? null
+      : STATE_CARDS[state as keyof typeof STATE_CARDS];
 
   const providerName: React.ReactNode =
     providerQuery.data?.legalName ??
@@ -306,11 +303,16 @@ function ReceiptPageContent() {
       {/* 1. One verdict banner per state — never one "error" for all of them. */}
       {state === "CHARGED" ? (
         <ChargedHeadline
-          headline={chargedHeadline(receipt)}
+          headline={told.chargedHeadline ?? ""}
           sub={samplingSubline(receipt)}
           listed={listed}
           paid={paid}
           notCharged={withheld}
+          action={
+            receipt.status === "SETTLED" ? (
+              <RefundableNow receipt={receipt} toolName={names.name("tool", receipt.toolId)} now={now} />
+            ) : null
+          }
         />
       ) : null}
 
@@ -354,7 +356,7 @@ function ReceiptPageContent() {
       {/* 2. Where the money went. */}
       <section className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-5 py-4">
         <h2 className="text-label-13 text-02">Where the money went</h2>
-        <MoneyFlow nodes={receiptFlow(receipt, state)} />
+        <MoneyFlow nodes={told.flow} />
       </section>
 
       {/* 3. The checks and the timeline. */}
@@ -363,7 +365,13 @@ function ReceiptPageContent() {
           <PanelHeader>
             <PanelTitles>
               <PanelTitle>Checks run on this call</PanelTitle>
-              <PanelDescription>{story ? story.checksSummary : "Checks stop at the first failure"}</PanelDescription>
+              <PanelDescription>
+                {story
+                  ? story.checksSummary
+                  : checks.some((check) => check.status === "passed" || check.status === "failed")
+                    ? "Checks stop at the first failure"
+                    : "No check result was recorded for this call"}
+              </PanelDescription>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="gap-3.5 px-5 pb-5 pt-2">
@@ -407,6 +415,16 @@ function ReceiptPageContent() {
           </div>
         ))}
       </dl>
+
+      {/* A charged call: "Report a bad result", or the report's status once filed. */}
+      {receipt.status === "SETTLED" ? (
+        <ReceiptReport
+          receipt={receipt}
+          toolName={names.name("tool", receipt.toolId)}
+          now={now}
+          buttonAbove={state === "CHARGED"}
+        />
+      ) : null}
 
       {/* Only on a call that was not charged: what the other outcomes mean. */}
       {finalNotCharged ? (

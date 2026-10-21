@@ -86,7 +86,7 @@ export interface BuyerEscrow {
    * pending. An INSTANT the backend read off `BuyerEscrow.withdraw_available_at`,
    * never a duration the client adds to `serverTime`.
    *
-   * The wait itself is `WITHDRAW_DELAY_SECONDS` in `@/libs/chains/solana/delays` — a
+   * The wait itself is the program's `WITHDRAW_DELAY_SECONDS` — a
    * program constant, not a `Config` field, and deliberately not
    * modelled here. The route may still send a `withdrawDelaySeconds`; nothing
    * reads it, because a client that rendered `now + delay` against its own
@@ -119,6 +119,21 @@ export interface BuyerEscrow {
    * have printed the word `null` to a buyer during an outage.
    */
   observedAt: string | null;
+  /**
+   * Lifetime money in and out of this escrow, read from the chain in the same
+   * call as `balance`: `deposited − spent − withdrawn = balance` by the
+   * contract's own invariant. `spent` includes payments still in their 1-hour
+   * hold. `null` where the chain keeps no such counters (Solana), with no
+   * escrow, or when the chain could not be read.
+   */
+  lifetime: EscrowLifetime | null;
+}
+
+/** `BuyerEscrow.lifetime`. */
+export interface EscrowLifetime {
+  deposited: Money;
+  spent: Money;
+  withdrawn: Money;
 }
 
 /**

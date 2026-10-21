@@ -7,8 +7,12 @@ import { Toaster } from "sonner";
 
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { PageState } from "@/components/patterns/page-state";
-import { groupApprovals, needsYouCount } from "@/features/operator/inbox";
+import { groupApprovals, needsYouCount, needsYouWork } from "@/features/operator/inbox";
+import { mayAnswerToolRequests } from "@/features/operator/contract-editor";
+import { may } from "@/features/operator/state";
+import { useCancelsDue, useToolRequestsDue } from "@/features/operator/use-cancels-due";
 import { useToSign } from "@/features/operator/use-to-sign";
+import { useToolWork } from "@/features/operator/use-tool-work";
 import { capabilitiesFor } from "@/features/operator/roles";
 import { OperatorBottomTabs, OperatorMobileTopBar, OperatorTopBar } from "@/features/operator/operator-shell";
 import { OperatorRefusal, SuspendedBanner } from "@/features/operator/operator-refusal";
@@ -27,8 +31,9 @@ import {
   type OperatorSessionEnd,
   type OperatorSessionRecord,
 } from "@/libs/operator-session";
-import { getOperatorIdentity, listApprovals, listArbiterDisputes, logoutOperator } from "@/services/operator.service";
+import { getOperatorIdentity, logoutOperator } from "@/services/operator.service";
 import { useTheme } from "@/providers/ThemeProvider";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * The operator console shell.
@@ -56,8 +61,6 @@ import { useTheme } from "@/providers/ThemeProvider";
  * operator action reports its result by toast, so the mount below is
  * load-bearing.
  */
-
-const PENDING_PAGE = 100;
 
 export default function OperatorLayout({ children }: { children: React.ReactNode }) {
   const { themeType } = useTheme();
@@ -96,21 +99,23 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
   const { data, error, isError, isLoading } = identityQuery;
 
   const pendingQuery = useQuery({
-    queryKey: ["operator", "approvals", "pending-count"],
-    queryFn: () => listApprovals({ status: "PENDING", limit: PENDING_PAGE }),
+    ...operatorQueries.pendingApprovals(),
     enabled: Boolean(session && data),
     refetchInterval: 30_000,
     retry: 0,
   });
   const canRule = data ? capabilitiesFor(data.roles).rule : false;
   const disputesQuery = useQuery({
-    queryKey: ["operator", "arbiter", "disputes"],
-    queryFn: listArbiterDisputes,
+    ...operatorQueries.arbiterDisputes(),
     enabled: Boolean(session && data && canRule),
     refetchInterval: 60_000,
     retry: 0,
   });
   const toSign = useToSign(Boolean(session && data && canRule));
+  const toolWork = useToolWork(data, Boolean(session && data));
+  // Cancels to sign and overdue tool requests: the same queries (and keys) as Home.
+  const cancelsDue = useCancelsDue(Boolean(session && data && may(data.roles, "cancel")));
+  const requestsDue = useToolRequestsDue(Boolean(session && data && mayAnswerToolRequests(data.roles)));
   // The badge counts what this operator can act on — the same rule as the Home heading.
   const needsYou = data
     ? needsYouCount(
@@ -118,6 +123,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
         disputesQuery.data?.length ?? 0,
         canRule,
         toSign.count,
+        needsYouWork(toolWork.work, cancelsDue.count, requestsDue.overdue.length),
       )
     : 0;
 
@@ -179,6 +185,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
         identity: data,
         pathname,
         needsYou,
+        sectionCounts: { tools: (toolWork.work.reviews ?? 0) + (toolWork.work.takedowns ?? 0), penalties: toolWork.work.callDisputes ?? 0 },
         expiresAt: session.expiresAt,
         onSignOut: () => void signOut(),
         demo: demoEnabled() && demoPreset ? { current: demoPreset, onSwitch: switchDemoRole } : null,
@@ -215,7 +222,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
       {shell ? (
         <>
           <div className="md:hidden">
-            <OperatorBottomTabs identity={shell.identity} pathname={pathname} needsYou={needsYou} />
+            <OperatorBottomTabs identity={shell.identity} pathname={pathname} needsYou={needsYou} sectionCounts={shell.sectionCounts} />
           </div>
           <ConsoleShortcuts open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
         </>

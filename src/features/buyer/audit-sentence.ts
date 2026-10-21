@@ -1,8 +1,14 @@
+import Decimal from "decimal.js";
+
+import { reasonLabel } from "@/features/call-disputes/model";
 import { humanize, plainAuditAction } from "@/libs/plain-language";
 
 /**
- * Activity log (`/audit-log`), pure: one entry as a plain sentence, and the
+ * Account history (`/audit-log`), pure: one entry as a plain sentence, and the
  * entries grouped by day.
+ *
+ * Sentences are "You …", past tense, in the product's words ("tool set",
+ * never "Toolset"), and never print a raw id, an enum or a list of ids.
  *
  *   { actorType: "user", action: "spend_policy.updated", before: { dailyCap: "40.00" }, after: { dailyCap: "75.00" } }
  *   → title "Spending limits changed", line "You changed daily spending limit from $40.00 to $75.00"
@@ -20,7 +26,7 @@ export interface AuditEntryLike {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Values that are identifiers or secrets, never body text: ids, chain ids, key prefixes, hashes. */
-const RAW_VALUE = /^(eip155:|solana:|assay_|x402_|sk_|pk_|cred_|ses_|aud_|dep_|sp_|hld_)|^0x[0-9a-f]{6,}$/i;
+const RAW_VALUE = /^(eip155:|solana:|assay_|sk_|pk_|cred_|ses_|aud_|dep_|sp_|hld_)|^0x[0-9a-f]{6,}$/i;
 
 /** An email address: said only as the actor's name, never inside a change. */
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -54,8 +60,13 @@ function shown(value: unknown, key = ""): string | null {
 export function auditActor(entry: AuditEntryLike, agentName: (id: string) => string | null, me?: string | null): string {
   switch (entry.actorType) {
     case "user":
-      if (!entry.actorId || (me && entry.actorId.toLowerCase() === me.toLowerCase())) return "You";
-      return UUID.test(entry.actorId) ? "Someone on your team" : entry.actorId;
+      // An account is one person (owner decision D3), and the backend names a
+      // signed-in person by the credential of their session, not their email:
+      // a "user" entry is the reader. Only an email that is not theirs is named.
+      if (entry.actorId && EMAIL.test(entry.actorId) && (!me || entry.actorId.toLowerCase() !== me.toLowerCase())) {
+        return entry.actorId;
+      }
+      return "You";
     case "agent":
       return (entry.actorId && agentName(entry.actorId)) || "One of your agents";
     case "system":
@@ -73,7 +84,7 @@ export function auditChanges(entry: AuditEntryLike): string[] {
   const before = entry.before ?? {};
   const phrases: string[] = [];
   for (const [key, next] of Object.entries(after).slice(0, 3)) {
-    if (/Id$|_id$/.test(key)) continue;
+    if (/Ids?$|_ids?$/.test(key)) continue;
     const label = KEY_WORDS[key] ?? humanize(key).toLowerCase();
     const to = shown(next, key);
     if (to === null) continue;
@@ -93,13 +104,28 @@ function text(value: unknown): string | null {
     : null;
 }
 
+function count(value: unknown, noun: string): string | null {
+  if (!Array.isArray(value) && typeof value !== "number") return null;
+  const n = Array.isArray(value) ? value.length : value;
+  return `${n.toLocaleString("en-US")} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+/** "the tool set “Research”", or "a tool set" when the entry does not carry its name. */
+function toolsetName(...values: unknown[]): string {
+  const name = values.map(text).find((value) => value !== null);
+  return name ? `the tool set “${name}”` : "a tool set";
+}
+
 function dollars(value: unknown): string | null {
-  return typeof value === "string" && /^\d+(\.\d+)?$/.test(value) ? `$${value}` : null;
+  if (typeof value !== "string" || !/^\d+(\.\d+)?$/.test(value)) return null;
+  // "25.000000" (an amount at the asset's full scale) reads "$25.00"; a sub-cent price keeps its digits.
+  const amount = new Decimal(value);
+  return `$${amount.toFixed(Math.max(2, amount.decimalPlaces()))}`;
 }
 
 /**
  * Entries whose generic "changed X from A to B" reading would be system talk
- * ("Assay changed charged from 6.00 to 0.00", "set credential to assay_live_…").
+ * ("Assay changed charged from 6.00 to 0.00", "set credential to assay_sk_live_…").
  * Each gets the sentence a person would say.
  */
 function specific(
@@ -136,6 +162,40 @@ function specific(
         line: "Your deposit reached your balance and can pay for calls",
       };
     }
+    case "agent.renamed": {
+      const from = text(before.label);
+      const to = text(after.label);
+      return {
+        title: "Agent renamed",
+        line: to ? `${subject} renamed ${from ? `the agent “${from}”` : "an agent"} to “${to}”` : `${subject} renamed an agent`,
+      };
+    }
+    case "deposit.rejected": {
+      const amount = dollars(after.amount);
+      return {
+        title: amount ? `Deposit: ${amount} not credited` : "Deposit not credited",
+        line: "The chain dropped the deposit's transaction, so nothing was added to your balance",
+      };
+    }
+    case "withdrawal.requested": {
+      const amount = dollars(after.amount);
+      return {
+        title: amount ? `Withdrawal: ${amount} requested` : "Withdrawal requested",
+        line: `${subject} asked to withdraw ${amount ? `up to ${amount}` : "money"} from the escrow; paid calls on that chain pause until it is claimed or cancelled`,
+      };
+    }
+    case "withdrawal.cancelled":
+      return {
+        title: "Withdrawal cancelled",
+        line: `${subject} cancelled the withdrawal request; nothing left the escrow and paid calls can resume`,
+      };
+    case "withdrawal.claimed": {
+      const amount = dollars(after.amount);
+      return {
+        title: amount ? `Withdrawal: ${amount} claimed` : "Withdrawal claimed",
+        line: `${amount ?? "The money"} left the escrow for your wallet`,
+      };
+    }
     case "credential.created": {
       const name = text(after.name) ?? text(after.label);
       return { title: "Agent key created", line: `${subject} created ${name ? `the agent key “${name}”` : "an agent key"}` };
@@ -147,6 +207,55 @@ function specific(
         line: `${subject} revoked ${name ? `the agent key “${name}”` : "an agent key"}; it stopped working immediately`,
       };
     }
+    case "call_dispute.filed": {
+      const reason = text(after.reason);
+      const window =
+        after.refundGuaranteed === true
+          ? "; reported within the refund window"
+          : after.refundGuaranteed === false
+            ? "; reported after the refund window, so a refund is not guaranteed"
+            : "";
+      return {
+        title: "Bad result reported",
+        line: `${subject} reported a bad result on a call${reason ? ` (reason: ${reasonLabel(reason, humanize(reason)).toLowerCase()})` : ""}${window}`,
+      };
+    }
+    case "call_dispute.withdrawn":
+      return { title: "Report withdrawn", line: `${subject} withdrew a report of a bad result` };
+    case "call_dispute.responded":
+      return { title: "Provider replied", line: "The provider replied to a report of a bad result" };
+    case "toolset.created": {
+      const tools = count(after.toolCount, "tool");
+      return {
+        title: "Tool set created",
+        line: `${subject} created ${toolsetName(after.name, after.slug)}${tools ? ` with ${tools}` : ""}`,
+      };
+    }
+    case "toolset.updated": {
+      const from = text(before.name);
+      const to = text(after.name);
+      if (to && from !== to) {
+        return { title: "Tool set renamed", line: `${subject} renamed ${toolsetName(from)} to “${to}”` };
+      }
+      return { title: "Tool set changed", line: `${subject} changed the settings of ${toolsetName(from)}` };
+    }
+    case "toolset.entries_replaced": {
+      const tools = count(after.toolIds, "tool");
+      return {
+        title: "Tool set tools changed",
+        line: `${subject} changed which tools are in a tool set${tools ? `; it now has ${tools}` : ""}`,
+      };
+    }
+    case "toolset.deleted":
+      return { title: "Tool set deleted", line: `${subject} deleted ${toolsetName(before.name, before.slug)}` };
+    case "toolset.published": {
+      const version = typeof after.latestVersion === "number" ? ` as version ${after.latestVersion}` : "";
+      return { title: "Tool set published", line: `${subject} published a tool set${version}` };
+    }
+    case "toolset.copied":
+      return { title: "Tool set copied", line: `${subject} copied a tool set into your own` };
+    case "credential.access_updated":
+      return { title: "Agent's tools changed", line: `${subject} changed which tools an agent key can use` };
     case "agent.created": {
       const name = text(after.label) ?? text(after.name);
       return { title: "Agent added", line: `${subject} added ${name ? `the agent “${name}”` : "an agent"}` };
@@ -166,7 +275,8 @@ export function auditSentence(
   if (special) return special;
   const changes = auditChanges(entry);
   return {
-    title: plainAuditAction(entry.action),
+    // The backend's action names say "toolset"; the product says "tool set".
+    title: plainAuditAction(entry.action).replace(/\btoolset\b/gi, (word) => (word[0] === "T" ? "Tool set" : "tool set")),
     line: changes.length > 0 ? `${actor} ${changes.join(", and ")}` : `By ${actor === "You" ? "you" : actor}`,
   };
 }

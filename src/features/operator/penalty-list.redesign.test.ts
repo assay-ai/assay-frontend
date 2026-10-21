@@ -12,10 +12,8 @@ import {
   rowFromCase,
   rowMatches,
   STATUS_TABS,
-  statusOfStage,
   tabById,
   tabCounts,
-  uniqueRows,
   waitingText,
   type PenaltyRow,
 } from "./penalty-list";
@@ -34,6 +32,7 @@ function row(partial: Partial<PenaltyRow>): PenaltyRow {
     proposedAt: "2026-09-21T08:09:00Z",
     disputedAt: "2026-09-23T10:00:00Z",
     nextDeadline: "2026-10-23T10:00:00Z",
+    onChain: true,
     ...partial,
   };
 }
@@ -43,7 +42,7 @@ describe("Penalties tabs", () => {
     const named = STATUS_TABS.flatMap((tab) => tab.statuses ?? []);
     expect(new Set(named).size).toBe(named.length);
     expect(named.sort()).toEqual(
-      ["CANCELLED", "CANCEL_REQUESTED", "CHAIN_DISPUTED", "COMPENSATED", "DISPUTED", "EXECUTED", "EXPIRED", "PROPOSED"].sort(),
+      ["CANCELLED", "CANCEL_REQUESTED", "CHAIN_DISPUTED", "COMPENSATED", "EXECUTED", "EXPIRED", "PROPOSED"].sort(),
     );
     expect(tabById(STATUS_TABS, "all").statuses).toBeNull();
   });
@@ -56,12 +55,11 @@ describe("Penalties tabs", () => {
   it("counts only the open tabs", () => {
     const counts = tabCounts([
       row({ status: "CHAIN_DISPUTED" }),
-      row({ status: "DISPUTED" }),
       row({ status: "CANCEL_REQUESTED" }),
       row({ status: "PROPOSED" }),
       row({ status: "PROPOSED" }),
     ]);
-    expect(counts).toEqual({ "needs-ruling": 2, signature: 1, window: 2 });
+    expect(counts).toEqual({ "needs-ruling": 1, signature: 1, window: 2 });
     expect(OPEN_STATUSES).not.toContain("EXECUTED");
   });
 });
@@ -97,23 +95,11 @@ describe("what a row says", () => {
     expect(penaltyChip(row({ status: "COMPENSATED" }), NOW)).toEqual({ status: "closed", detail: "paid back" });
   });
 
-  it("maps every case-screen stage to the list status the backend would give", () => {
-    expect(statusOfStage("disputed")).toBe("CHAIN_DISPUTED");
-    expect(statusOfStage("upheld")).toBe("PROPOSED");
-    expect(statusOfStage("executable")).toBe("PROPOSED");
-    expect(statusOfStage("compensated")).toBe("COMPENSATED");
-    expect(statusOfStage("cancel-requested")).toBe("CANCEL_REQUESTED");
-  });
-
   it("filters by provider or tool, case-insensitively", () => {
     expect(rowMatches(row({}), "north")).toBe(true);
     expect(rowMatches(row({}), "GEOCODE")).toBe(true);
     expect(rowMatches(row({}), "tidewater")).toBe(false);
     expect(rowMatches(row({}), "  ")).toBe(true);
-  });
-
-  it("keeps the first of a penalty seen twice", () => {
-    expect(uniqueRows([row({ status: "CHAIN_DISPUTED" }), row({ status: "PROPOSED" })]).map((r) => r.status)).toEqual(["CHAIN_DISPUTED"]);
   });
 
   it("names who a waiting request needs", () => {
@@ -122,18 +108,17 @@ describe("what a row says", () => {
   });
 
   it("tells one story in Status and Next while a request waits", () => {
-    expect(penaltyChip(row({ status: "PROPOSED", disputedAt: "2026-10-01T00:00:00Z" }), NOW, "slash.suspend")).toEqual({
+    expect(penaltyChip(row({ status: "PROPOSED", disputedAt: "2026-10-01T00:00:00Z" }), NOW, "slash.repropose")).toEqual({
       status: "upheld",
-      detail: "suspend pending",
+      detail: "re-proposal pending",
     });
     expect(penaltyChip(row({ status: "EXECUTED" }), NOW, "slash.compensated")).toEqual({ status: "executed", detail: "pay-back pending" });
     expect(penaltyChip(row({ status: "EXECUTED" }), NOW, null)).toEqual({ status: "executed" });
   });
 
   it("opens on Needs ruling for who can rule, on All for everyone else", () => {
-    expect(defaultTab(true, false)).toBe("needs-ruling");
-    expect(defaultTab(false, false)).toBe("all");
-    expect(defaultTab(false, true)).toBe("needs-ruling");
+    expect(defaultTab(true)).toBe("needs-ruling");
+    expect(defaultTab(false)).toBe("all");
   });
 
   it("rounds time left up, in whole units", () => {

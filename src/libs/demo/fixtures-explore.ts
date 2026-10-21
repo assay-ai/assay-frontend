@@ -1,5 +1,6 @@
 import type { CursorPage } from "@/interfaces";
 import type {
+  CatalogueChainPrice,
   CatalogueChainStake,
   CatalogueMoney,
   CatalogueProvider,
@@ -17,12 +18,13 @@ import type { CatalogueTool as ToolCatalogueEntry, ToolTier } from "@/services/t
 
 import { DEMO_ASSET, DEMO_BUYER_ACCOUNT, DEMO_CHAIN_ID, minutesAgo, money } from "./fixtures";
 import type { DemoFixture } from "./fixtures";
+import { demoVersionFields, demoVersionList, registerDemoCatalogueTools, type DemoCatalogueToolRef } from "./fixtures-contracts";
 
 /**
  * DEMO ONLY — see `demo-api.ts` for the rules. **The marketplace surface.**
  *
  * What a visitor is shown when they open `/explore/providers`,
- * `/explore/providers/view?id=`, `/explore/tools` and `/connect` on a deployment
+ * `/explore/providers/view?id=`, `/explore` and `/connect` on a deployment
  * whose catalogue tables are empty: a market with depth, priced in a single
  * settlement asset on Robinhood Chain testnet (`eip155:46630`).
  *
@@ -492,6 +494,31 @@ export function demoOfferPriceMinor(toolId: string, providerId: string): string 
   return offer ? usd(offer.price).amount : null;
 }
 
+/** The topic a demo tool sits in (the backend's `tools.category`), from its name. */
+export function demoCategoryOf(name: string): string {
+  const n = name.toLowerCase();
+  if (/weather|geocode/.test(n)) return "weather";
+  if (/usd|token|market|fx|chain/.test(n)) return "finance";
+  if (/wikipedia|research|summar/.test(n)) return "knowledge";
+  return "web";
+}
+
+/** The catalogue as the tool-set fixtures read it: each tool with its name, pricing and offers. */
+export function demoToolOffers(): readonly {
+  readonly id: string;
+  readonly name: string;
+  readonly pricingMode: string | null;
+  readonly offers: readonly { readonly providerId: string; readonly price: string }[];
+}[] {
+  return TOOLS;
+}
+
+/** A provider's legal name and tier, for the tool-set fixtures; null for an id the market does not hold. */
+export function demoProvider(providerId: string): { legalName: string; tier: "NEW" | "ESTABLISHED" | "TRUSTED" } | null {
+  const provider = PROVIDERS.find((p) => p.providerId === providerId);
+  return provider ? { legalName: provider.legalName, tier: provider.tier } : null;
+}
+
 /** Every offer a provider has listed, as `(tool, price)` pairs. */
 function offersOf(providerId: string): { tool: DemoTool; price: CatalogueMoney }[] {
   return TOOLS.flatMap((tool) =>
@@ -514,6 +541,7 @@ function toolRow(tool: DemoTool): CatalogueTool {
     id: tool.id,
     name: tool.name,
     description: tool.description,
+    ...demoVersionFields(tool.id, tool.name, tool.description),
     tier: tool.tier,
     providerCount: tool.offers.length,
     fromPrice: cheapest(prices),
@@ -527,7 +555,33 @@ function toolRow(tool: DemoTool): CatalogueTool {
     paidBindings: tool.pricingMode === "FREE" ? 0 : tool.offers.length,
     unroutableReason: tool.unroutableReason ?? null,
     settlementChains: [DEMO_CHAIN_ID],
+    /* One chain: its price is the quote, set by the dearest offer's provider. */
+    prices: priceOn(tool),
   };
+}
+
+/**
+ * The tool's price per chain: the one demo chain, at the dearest offer. Every
+ * offer is an eligible listing there, so `providerId` is set only when one
+ * provider alone charges that price, as the router's priced set would say.
+ */
+function priceOn(tool: DemoTool): CatalogueChainPrice[] {
+  const top = dearest(tool.offers.map((offer) => usd(offer.price)));
+  if (!top) return [];
+  const atTop = tool.offers.filter((offer) => usd(offer.price).amount === top.amount);
+  return [
+    {
+      chainId: DEMO_CHAIN_ID,
+      price: top,
+      providerId: atTop.length === 1 ? atTop[0].providerId : null,
+      listings: tool.offers.length,
+    },
+  ];
+}
+
+/** What each demo listing promises: 2% on a verified provider's listing, 5% otherwise. */
+function promisedRate(provider: DemoProvider): number {
+  return provider.verified ? 0.02 : 0.05;
 }
 
 function providerRow(provider: DemoProvider): CatalogueProvider {
@@ -544,6 +598,9 @@ function providerRow(provider: DemoProvider): CatalogueProvider {
     fromPrice: cheapest(offers.map((offer) => offer.price)),
     stake: provider.stake.map(bonded),
     quality: provider.quality,
+    // One demo chain, and the demo buyer's agent pays on it: every listing serves it.
+    chains: offers.length > 0 ? [DEMO_CHAIN_ID] : [],
+    servesYou: offers.length > 0,
   };
 }
 
@@ -553,7 +610,10 @@ function providerTools(provider: DemoProvider): CatalogueProviderTool[] {
     name: tool.name,
     pricingMode: tool.pricingMode ?? "PAID",
     price,
+    promisedFailureRate: promisedRate(provider),
     freeCallsPerAgentPerDay: tool.pricingMode === "FREEMIUM" || tool.pricingMode === "FREE" ? (tool.freePerAgent ?? 100) : null,
+    chains: [DEMO_CHAIN_ID],
+    servesYou: true,
   }));
 }
 
@@ -657,6 +717,22 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
     match: "/catalogue/tools",
     body: () => ({ tools: TOOLS.map(toolRow) }),
   },
+  /* T3: a tool's published contract versions, schemas and changelog. */
+  {
+    method: "GET",
+    match: /^\/catalogue\/tools\/[^/]+\/versions$/,
+    body: (path) => {
+      const tool = TOOLS.find((t) => t.id === idFromPath(path, 3));
+      return tool === undefined
+        ? undefined
+        : demoVersionList(
+            tool.id,
+            tool.name,
+            tool.description,
+            tool.offers.map((o) => ({ providerId: o.providerId, legalName: PROVIDER_BY_ID.get(o.providerId)?.legalName ?? o.providerId })),
+          );
+    },
+  },
   /*
     Listed after the exact path above, though the anchored pattern could not
     match it: `/catalogue/providers/{id}` requires a segment after the slash.
@@ -746,3 +822,6 @@ export const EXPLORE_FIXTURES: readonly DemoFixture[] = [
       ]),
   },
 ];
+
+/** The catalogue's tools, for the operator contract list (see `registerDemoCatalogueTools`). */
+registerDemoCatalogueTools(TOOLS.map((tool): DemoCatalogueToolRef => ({ id: tool.id, name: tool.name, description: tool.description })));

@@ -13,7 +13,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     <RecordGate
       param="verdict"
       record="verdict"
-      backHref={routes.binding(bindingId, "verdicts")}
+      backHref={`${routes.binding(bindingId, "quality")}&section=verdicts`}
       backLabel="Back to verdicts"
     >
       {children}

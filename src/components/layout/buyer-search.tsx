@@ -2,6 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+
+import { appNavigate } from "@/features/oauth/strict-pages";
 import * as React from "react";
 
 import { shortId } from "@/components/patterns/copy-chip";
@@ -89,7 +91,6 @@ export function BuyerSearch() {
     queryKey: ["tool-calls", "search-recent"],
     enabled: open,
     retry: 0,
-    staleTime: 30_000,
     queryFn: () => listToolCalls({ limit: 100 }),
   });
 
@@ -111,7 +112,7 @@ export function BuyerSearch() {
 
   const go = (suggestion: SearchSuggestion | undefined) => {
     if (!suggestion) return;
-    router.push(suggestion.href);
+    appNavigate(router, suggestion.href);
     setValue("");
     setOpen(false);
     inputRef.current?.blur();

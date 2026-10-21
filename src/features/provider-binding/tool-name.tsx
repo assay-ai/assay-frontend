@@ -7,7 +7,6 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import type { CatalogueTool, ToolCatalogue } from "@/interfaces";
 import { listToolCatalogue } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
-import { labelForEndpoint } from "@/utils/provider-label";
 
 /**
  * Bindings by the tool they serve, not by id. Every provider surface that
@@ -18,7 +17,7 @@ import { labelForEndpoint } from "@/utils/provider-label";
  *
  *   const names = useProviderToolNames();
  *   names.toolName(binding.toolId)            // "Market quote", or null until it loads
- *   names.bindingLabel(binding)               // name, else the endpoint's host
+ *   names.bindingLabel(binding)               // name, else "…" while loading, else "Removed tool (draft)" / "Unknown tool"
  *   <ToolName toolId={binding.toolId} />      // name, or a short-id copy chip
  */
 
@@ -43,7 +42,25 @@ export function isFixtureTool(tool: Pick<CatalogueTool, "name" | "description">)
 
 export interface BindingLike {
   toolId: string;
-  endpoint?: string | null;
+  /** A draft whose tool left the catalogue is named as such (V1-9). */
+  status?: string;
+}
+
+/** A draft for a tool the catalogue no longer has: it can't go live, only be discarded. */
+export const REMOVED_TOOL_DRAFT = "Removed tool (draft)";
+
+/**
+ * A listing's label: the tool's name, "…" while the catalogue loads, else
+ * "Removed tool (draft)" for a draft missing from a catalogue that LOADED,
+ * or "Unknown tool". A failed catalogue read proves nothing was removed, so
+ * it never says so: that could lead a provider to discard a valid draft.
+ * Never the endpoint: a host or an IP address is infrastructure, not a name,
+ * and it is the same for every listing on one API.
+ */
+export function bindingLabelOf(toolName: string | null, pending: boolean, status?: string, loaded = false): string {
+  if (toolName) return toolName;
+  if (pending) return "…";
+  return status === "DRAFT" && loaded ? REMOVED_TOOL_DRAFT : "Unknown tool";
 }
 
 export function useProviderToolNames() {
@@ -60,11 +77,11 @@ export function useProviderToolNames() {
     return name ? name : null;
   }, [byId]);
 
-  /** The tool's name; before it loads (or if unknown) the endpoint's host; never a uuid. */
+  /** The tool's name; never a uuid, a host or an IP address. */
   const bindingLabel = React.useCallback(
     (binding: BindingLike): string =>
-      toolName(binding.toolId) ?? (binding.endpoint ? labelForEndpoint(binding.endpoint) : "Your tool"),
-    [toolName],
+      bindingLabelOf(toolName(binding.toolId), catalogue.isPending, binding.status, catalogue.isSuccess),
+    [toolName, catalogue.isPending, catalogue.isSuccess],
   );
 
   return {
@@ -72,6 +89,8 @@ export function useProviderToolNames() {
     bindingLabel,
     tool: (toolId: string) => byId.get(toolId) ?? null,
     isPending: catalogue.isPending,
+    /** The catalogue was read: only then is a tool missing from it known to be gone. */
+    loaded: catalogue.isSuccess,
     catalogue: catalogue.data ?? null,
   };
 }
@@ -79,12 +98,10 @@ export function useProviderToolNames() {
 /** A tool's name, or its id as a copy chip when the catalogue does not know it. */
 export function ToolName({
   toolId,
-  endpoint,
   className,
   copyable = true,
 }: {
   toolId: string;
-  endpoint?: string | null;
   className?: string;
   /** False inside links and buttons (a button inside one is invalid HTML). */
   copyable?: boolean;
@@ -92,7 +109,6 @@ export function ToolName({
   const names = useProviderToolNames();
   const name = names.toolName(toolId);
   if (name) return <span className={className}>{name}</span>;
-  if (endpoint) return <span className={className}>{labelForEndpoint(endpoint)}</span>;
   if (names.isPending) return <span className={cn("text-03", className)}>…</span>;
   return copyable ? <CopyChip value={toolId} /> : <span className={className}>Unknown tool</span>;
 }

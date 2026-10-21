@@ -27,23 +27,23 @@ export interface ListProviderPayoutsQuery extends ListQuery {
   to?: string;
 }
 
+/** How a payment reached the provider's wallet. */
+export type ProviderPaymentKind = "REDEMPTION";
+
 /**
- * One `PAYOUT` ledger entry — a line in a payout batch, not the batch.
- *
- * There is no batch row to paginate, so this pages entries. A provider dealing
- * in a single asset sees one row per batch; one paid out in two assets in the
- * same run sees two rows sharing a `batchId`, which is the honest ledger shape
- * rather than a synthetic merge. Group by `batchId` client-side if the screen
- * wants batches.
+ * One payment sent to the provider's wallet: a rail-B redemption transaction,
+ * where the buyer's escrow paid on chain. The credits it carried are summed,
+ * and `calls` says how many.
  */
 export interface ProviderPayout {
-  /** The ledger entry id. */
+  /** The lowest ledger entry id in the transaction. */
   id: string;
-  /** The payout run this entry belongs to. */
-  batchId: string;
+  kind: ProviderPaymentKind;
   amount: Money;
-  /** On-chain transaction reference, once sent. */
+  /** On-chain transaction reference; `null` when its signature was not observed. */
   chainTxRef: string | null;
+  /** Calls this payment paid for. */
+  calls: number | null;
   createdAt: string;
 }
 

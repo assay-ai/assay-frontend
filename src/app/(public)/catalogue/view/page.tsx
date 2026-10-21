@@ -4,6 +4,8 @@ import { ArrowLeft, Check, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { ToolContractSection } from "@/components/contracts/tool-contract";
+import { ToolVersionBadges } from "@/components/contracts/version-badges";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { NotChargedProof } from "@/components/explorer/not-charged-proof";
@@ -11,8 +13,11 @@ import { StartFreeCta } from "@/components/explorer/start-free";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import {
+  chainPriceLines,
   checkSentences,
   failRateLabel,
+  orderChainPrices,
+  paidOnText,
   listingOfferText,
   normalisedMode,
   failsOften,
@@ -21,7 +26,6 @@ import {
   routingNotes,
   offerLine,
   costSentence,
-  smallestFreeAllowance,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
 import {
@@ -30,6 +34,7 @@ import {
   usePublicProviders,
   usePublicTools,
 } from "@/features/explorer/use-public-explorer";
+import { mcpToolName } from "@/features/connect/mcp-url";
 import { useChainName } from "@/hooks/useChainName";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useSearchParam } from "@/hooks/useSearchParam";
@@ -37,7 +42,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 
 /**
- * One tool, public — route `/catalogue/view?tool=<id or name>`.
+ * One tool, public — route `/catalogue/view?tool=<id>`.
  *
  * Answers a newcomer's questions in order: what it does, what a call costs and
  * when you pay, what is checked, who serves it (with their failure record and
@@ -51,7 +56,7 @@ function ToolPage() {
   const chainName = useChainName();
 
   const tool = React.useMemo(
-    () => tools.data?.tools.find((t) => t.id === key) ?? tools.data?.tools.find((t) => t.name === key) ?? null,
+    () => tools.data?.tools.find((t) => t.id === key) ?? null,
     [tools.data, key],
   );
   const serving = React.useMemo(
@@ -64,11 +69,12 @@ function ToolPage() {
       .map((d) => d.data)
       .find((d) => d?.providerId === providerId)
       ?.tools.find((t) => t.toolId === tool?.id);
+  // The name an agent calls it by, for "Use this tool" (`/connect?tools=`).
+  const mcpName = tool ? mcpToolName(tool) : null;
   // A static export cannot set per-tool metadata; name the tool in the tab.
   useDocumentTitle(tool ? `${tool.name}: price and record — Assay` : null);
-  // The backend's own figure when the public API sends it; otherwise the smallest per-listing allowance.
-  const freeAllowance =
-    tool?.freeCallsPerDay ?? smallestFreeAllowance(serving.map((p) => listingOf(p.providerId)?.freeCallsPerAgentPerDay));
+  // The backend's own figure: free calls a day over every free-capable listing.
+  const freeAllowance = tool?.freeCallsPerDay ?? null;
 
   if (tools.isPending) {
     return <PageState kind="loading" rows={4} label="Loading the tool" />;
@@ -96,13 +102,21 @@ function ToolPage() {
   }
 
   const settles = tool.settlementChains ?? [];
+  // A buyer pays on one chain, so the price is per chain (D6). Anonymous, the
+  // headline is the chain of the tool's own quote; every other chain gets its own line.
+  const chainPrices = orderChainPrices(tool.prices, null, tool.price);
+  const lead = chainPrices[0] ?? null;
+  const held = lead?.price ?? tool.price;
+  const nameOf = (providerId: string) => serving.find((p) => p.providerId === providerId)?.name;
   // What the providers charge, against what a call is held for (the dearest
   // provider that can take it now). See `priceRange`.
-  // "from" only over more than one listing that can be charged (`paidBindings`, when the API sends it).
+  // "from" only over more than one listing that can be charged (`paidBindings`).
   const range = priceRange(
-    tool.price,
-    (tool.paidBindings ?? 2) > 1 ? [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)] : [],
+    held,
+    tool.paidBindings > 1 ? [tool.fromPrice, ...serving.map((p) => listingOf(p.providerId)?.price)] : [],
   );
+  // The provider is named only when exactly one eligible listing serves that chain (`listings`).
+  const lines = chainPriceLines(chainPrices, { chainName, nameOf, leadIsRange: range?.differs });
 
   return (
     <>
@@ -110,8 +124,26 @@ function ToolPage() {
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="break-all font-mono text-heading-md text-01">{tool.name}</h1>
           {tool.routable ? null : <UnavailableTag />}
+          <ToolVersionBadges name={tool.name} version={tool.version} versions={tool.versions} deprecatedMajors={tool.deprecatedMajors} replacementName={tool.replacementName} replacementVersion={tool.replacementVersion} />
         </div>
         {tool.description ? <p className="max-w-[760px] text-body-md text-02">{tool.description}</p> : null}
+        {tool.kind === "PROVIDER" ? (
+          <p className="flex flex-wrap items-center gap-2 text-body-13 text-02" data-testid="maker-facts">
+            <span className="rounded-full bg-03 px-2 py-0.5 text-label-xs text-02">One maker&apos;s API{tool.handle ? ` · @${tool.handle}` : ""}</span>
+            {tool.notReviewed ? <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">Not reviewed</span> : null}
+            <span>
+              Only its maker serves it, so there is no backup provider.
+              {tool.handle ? (
+                <>
+                  {" "}
+                  <Link href={`/toolsets/handle?handle=${encodeURIComponent(tool.handle)}`} className="text-primary-600 hover:underline">
+                    More from @{tool.handle}
+                  </Link>
+                </>
+              ) : null}
+            </span>
+          </p>
+        ) : null}
       </header>
 
       <div className="grid grid-cols-1 gap-4 tablet:grid-cols-2">
@@ -119,12 +151,22 @@ function ToolPage() {
           <h2 className="text-label-md text-01">What a call costs</h2>
           {/* One price line, free first: the free tier and the price together. */}
           <OfferPrice size="lg" offer={offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance })} />
+          {lead && range && lines.lead ? (
+            <p className="-mt-2 text-body-13 text-02" data-testid="price-chain">
+              {lines.lead}
+            </p>
+          ) : null}
+          {lines.others.map((line) => (
+            <p key={line.chainId} className="text-body-13 text-02" data-testid="chain-price">
+              {line.text}
+            </p>
+          ))}
           <p className="text-body-13 text-02">
-            {costSentence({ mode: tool.pricingMode, price: tool.price, range, freeCallsPerDay: freeAllowance })}
+            {costSentence({ mode: tool.pricingMode, price: held, range, freeCallsPerDay: freeAllowance })}
           </p>
           {settles.length > 0 ? (
             <p className="text-body-xs text-03">
-              Paid on {settles.map((c) => chainName(c)).join(", ")}.{" "}
+              {paidOnText(settles, tool.prices, chainName)}{" "}
               {freeAllowance ? "You need funds there once the free calls run out." : "You pay from funds you hold there."}
             </p>
           ) : null}
@@ -148,6 +190,8 @@ function ToolPage() {
         </section>
       </div>
 
+      <ToolContractSection toolId={tool.id} publicPage />
+
       <section className="flex flex-col gap-3">
         <h2 className="text-label-md text-01">Who serves it</h2>
         {providers.isPending ? (
@@ -159,6 +203,18 @@ function ToolPage() {
             description={publicErrorText(providers.error, "the providers")}
             onRetry={() => void providers.refetch()}
           />
+        ) : serving.length === 0 && tool.kind === "PROVIDER" ? (
+          <p className="rounded-xl border border-01 bg-01 px-4 py-3.5 text-body-13 text-02" data-testid="maker-serves">
+            Served by {tool.handle ? `@${tool.handle}` : "its maker"}{" "}only: it is one maker&apos;s own API, so there is no backup provider.
+            {tool.handle ? (
+              <>
+                {" "}
+                <Link href={`/toolsets/handle?handle=${encodeURIComponent(tool.handle)}`} className="inline-flex min-h-10 items-center text-primary-600 hover:underline">
+                  See @{tool.handle}
+                </Link>
+              </>
+            ) : null}
+          </p>
         ) : serving.length === 0 ? (
           <PageState
             kind="empty"
@@ -172,7 +228,7 @@ function ToolPage() {
               const listing = listingOf(provider.providerId);
               // Priced above the hold: the router's quote is the dearest provider
               // that can take a call now, so this one is not being routed to.
-              const notRouted = notTakingPaidCalls(tool.price, listing?.price);
+              const notRouted = notTakingPaidCalls(held, listing?.price);
               return (
                 <li key={provider.providerId}>
                   <Link
@@ -191,7 +247,9 @@ function ToolPage() {
                           {notRouted ? " · not taking paid calls right now" : ""}
                         </span>
                       </div>
-                      <Fact label={<ObservedFailuresLabel />}>{failRateLabel(provider.quality)}</Fact>
+                      <Fact label={<ObservedFailuresLabel />}>
+                        {failRateLabel(provider.quality, listing?.promisedFailureRate, "this tool")}
+                      </Fact>
                       <Fact label="Stake at risk">{stakeSummary(provider.stake, chainName)}</Fact>
                     </div>
                     <ChevronRight aria-hidden="true" className="mt-1 size-4 shrink-0 text-03 group-hover:text-02" />
@@ -203,9 +261,10 @@ function ToolPage() {
         )}
         {serving.length > 0
           ? routingNotes(
-              tool.price,
+              held,
               serving.map((p) => ({ name: p.name, price: listingOf(p.providerId)?.price, quality: p.quality })),
               chainName,
+              { chainsListed: chainPrices.length > 1 },
             ).map((note) => (
               <p key={note} className="text-body-13 text-02" data-testid="routing-note">
                 {note}
@@ -231,7 +290,13 @@ function ToolPage() {
               : "Sign up, create an agent key and add funds. You pay only for results that pass."}
           </p>
         </div>
-        <StartFreeCta next={routes.exploreTool(tool.id)} className="tablet:items-end" />
+        {/* "Use this tool": Connect with only this tool chosen; signed out, sign-in comes back there. */}
+        <StartFreeCta
+          next={mcpName ? routes.connectTools([mcpName]) : routes.exploreTool(tool.id)}
+          label={mcpName ? "Use this tool" : "Start free"}
+          signedInLabel={mcpName ? "Use this tool" : "Open app"}
+          className="tablet:items-end"
+        />
       </section>
     </>
   );

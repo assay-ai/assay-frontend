@@ -81,7 +81,7 @@ export interface StakeExpectation {
   readonly amount: string | null;
 }
 
-/** The X402Stake function each eip155 intent kind may call. OPEN_STAKE has none on EVM. */
+/** The AssayStake function each eip155 intent kind may call. OPEN_STAKE has none on EVM. */
 const STAKE_FUNCTION: Partial<Record<StakeIntentKind, string>> = {
   DEPOSIT: "depositStake",
   UNSTAKE: "requestUnstake",
@@ -144,7 +144,7 @@ export async function runStakeIntent(
  * `approve(stake, amount)` on the stake asset, mined, before an eip155 stake
  * deposit — or nothing, when the allowance already covers it.
  *
- * `X402Stake.depositStake` pulls with `transferFrom`, and the backend builds
+ * `AssayStake.depositStake` pulls with `transferFrom`, and the backend builds
  * only that second call: it cannot even be estimated against a zero allowance.
  * The approval is sequenced here because its nonce and the deposit's are
  * consecutive and only the wallet knows when the first has landed —

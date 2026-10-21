@@ -317,10 +317,14 @@ const ERRORS: Record<string, string> = {
   VELOCITY_LIMIT_EXCEEDED: "Spending too fast: this call was refused. Calls are allowed again in a moment.",
   POLICY_AGENT_PAUSED: "This agent is paused by its budget.",
   APPROVAL_REQUIRED: "This call needs a person's approval.",
-  TOOL_NOT_ALLOWED: "Your budget does not allow this tool.",
+  TOOL_NOT_ALLOWED: "This agent isn't allowed to use this tool.",
+  TOOL_NOT_IN_TOOLSET: "This tool is not part of this server.",
+  NO_PROVIDER_MATCHES_RULES: "No provider fits your limits.",
+  TOOL_REMOVED: "This tool was removed by its maker.",
+  CONTRACT_VERSION_RETIRED: "This version of the tool was retired. Use its newer version.",
+  UNSUPPORTED_INPUT_FIELD: "No provider this agent may use accepts one of the inputs it sent.",
   QUOTA_EXCEEDED: "The free calls are used up.",
   CREDENTIAL_INVALID: "This agent key is not valid.",
-  CREDENTIAL_REVOKED: "This agent key was revoked.",
   INSUFFICIENT_FUNDS: "Not enough balance for this call.",
   VOUCHER_ADMISSION_PAUSED: "Paid calls are paused for a moment. Try again shortly.",
   VOUCHER_ESCROW_LIMIT_EXCEEDED: "This is over your escrow's safety cap.",
@@ -331,7 +335,6 @@ const ERRORS: Record<string, string> = {
   WITHDRAWAL_PENDING: "A withdrawal is in progress, so paid calls are paused.",
   NO_SETTLEABLE_CHAIN: "You and this provider share no chain to pay on.",
   PROVIDER_SLASH_HOLD: "This provider is on hold during a penalty case.",
-  INTENT_EXPIRED: "The payment timed out. Nothing was charged.",
   DEPOSIT_BELOW_MINIMUM: "The deposit is below the minimum.",
   DEPOSIT_TRANSACTION_ALREADY_CLAIMED: "This deposit was already credited.",
   DEPOSIT_ACCOUNT_NOT_LINKED: "The wallet you deposited from is not linked to your account.",
@@ -339,12 +342,10 @@ const ERRORS: Record<string, string> = {
   UNSETTLED_VOUCHERS_AT_RISK: "This change would leave recent payments unable to settle.",
   WITHDRAWALS_FROZEN: "Withdrawals are frozen for now.",
   WITHDRAWAL_NOT_YET_AVAILABLE: "The withdrawal is not available yet.",
-  WITHDRAWAL_EXCEEDS_RESERVES: "That is more than is available to withdraw.",
   WITHDRAWAL_DESTINATION_INVALID: "The destination address is not valid.",
   DELEGATION_NOT_ACTIVE: "The payment permission is not active.",
   UNBONDING_NOT_MATURED: "The stake is still unlocking. You can withdraw it once the waiting period ends.",
   STAKE_BELOW_MINIMUM: "The stake is below the required minimum.",
-  PAYOUT_ADDRESS_UNPROVEN: "Prove you control the payout address first.",
   CHAIN_NOT_ENROLLED: "Set up this chain first.",
   BINDING_NOT_EDITABLE: "This listing cannot be edited right now.",
   BINDING_TOOL_UNKNOWN: "This tool is not in the catalogue any more. Pick another one.",
@@ -364,9 +365,8 @@ const ERRORS: Record<string, string> = {
   PAYOUT_SIGNATURE_INVALID: "The signature did not match. Sign with the right wallet.",
   NO_ELIGIBLE_BINDING: "No provider can serve this tool right now.",
   ALL_BINDINGS_FAILED: "Every provider failed this call. Nothing was charged.",
-  UPSTREAM_TIMEOUT: "The provider took too long. Nothing was charged.",
   ARGUMENTS_INVALID: "The tool's inputs are not valid.",
-  TOOL_DISABLED: "This tool is turned off.",
+  INTERNAL_ERROR: "Something went wrong on our side. Try again in a moment; if it keeps happening, contact support.",
   DISPUTE_NOT_WITHDRAWABLE: "This dispute can no longer be withdrawn.",
   DISPUTE_ALREADY_ACKNOWLEDGED: "This dispute was already acknowledged.",
   SLASH_PROPOSAL_RESPONSE_WINDOW_CLOSED: "It is too late to dispute this penalty.",
@@ -385,7 +385,6 @@ const ERRORS: Record<string, string> = {
   OPERATOR_BLOCK_ALREADY_ACTIVE: "This is already blocked.",
   OPERATOR_BLOCK_ALREADY_LIFTED: "This is already unblocked.",
   OPERATOR_APPROVAL_NOT_PENDING: "This request was already decided.",
-  VERIFICATION_KILL_SWITCH_ENGAGED: "Checking is paused for now.",
   VERIFICATION_EVIDENCE_PACK_TAMPERED: "The evidence failed its integrity check.",
   CHAIN_PROGRAM_PAUSED: "The contracts are paused. Try again after they resume.",
   CHAIN_ADDRESS_BLOCKED: "This address is blocked on chain.",
@@ -404,18 +403,66 @@ const ERRORS: Record<string, string> = {
   TOO_MANY_REQUESTS: "Too many requests. Wait a moment and try again.",
   SERVICE_UNAVAILABLE: "Assay is briefly unavailable. Try again shortly.",
   ERR_NETWORK: "We could not reach Assay. Check your connection.",
+  TOOLSET_NOT_FOUND: "This tool set was not found. It may have been deleted.",
+  TOOLSET_SLUG_TAKEN: "Another of your tool sets already uses this address.",
+  TOOLSET_INVALID: "This tool set is not valid: check its tools and provider rules.",
+  TOOLSET_LIMIT_EXCEEDED: "You reached a limit: 200 tools per set, 5 always loaded, 100 sets per account.",
+  TOOLSET_ACCESS_INVALID: "This change to what the agent can use is not valid.",
+  TOOLSET_REFUSED_CALL_NOT_FOUND: "This refused call was not found.",
+  TOOLSET_HANDLE_INVALID: "Use 3–24 lowercase letters, digits or “-” for a public name, starting with a letter.",
+  TOOLSET_HANDLE_TAKEN: "This public name is taken. Try another.",
+  TOOLSET_HANDLE_LOCKED: "Your public name is in use by a shared tool set. Ask support to rename it.",
+  TOOLSET_HANDLE_REQUIRED: "Choose a public name before sharing.",
+  TOOLSET_HANDLE_CLAIM_REFUSED: "Add funds once before you choose a public name.",
+  TOOLSET_HANDLE_NOT_FOUND: "No one uses this public name.",
+  TOOLSET_SHARING_REFUSED: "This tool set can't be changed that way right now.",
+  TOOLSET_NOT_PUBLISHABLE: "Some tools in this set can't be shared. Remove them and try again.",
+  TOOLSET_VERSION_NOT_FOUND: "This version of the tool set does not exist.",
+  TOOLSET_SLUG_LOCKED: "A tool set that has been shared keeps its address.",
+  TOOLSET_REPORT_DUPLICATE: "Your team already reported this. Assay is looking at it.",
+  TOOLSET_REPORT_TARGET_NOT_FOUND: "There is nothing here to report.",
+  CREDENTIAL_IN_QUERY:
+    "Don't put keys in the URL. URLs are logged by proxies, CDNs and servers and leak through browser history. Add it under Authentication → API key instead.",
+  SECRET_IN_MAPPING:
+    "This looks like a secret. Mappings are stored in plain text — add it under Authentication → API key instead.",
+  INVALID_CREDENTIAL_HEADERS: "Some header names or values aren't allowed. Check the highlighted rows.",
+  CREDENTIAL_ORIGIN_MISMATCH: "These headers belong to an old address. Enter them again for the current endpoint.",
+  CREDENTIAL_VAULT_UNAVAILABLE: "We can't reach the key store right now. Your API wasn't called. Try again in a minute.",
+  CREDENTIAL_VAULT_NOT_CONFIGURED:
+    "Key storage isn't set up on this server, so headers can't be saved. Nothing was stored. Tell Assay support.",
+  ENDPOINT_PORT_NOT_SUPPORTED:
+    "Your API uses a port Assay can't reach. Use port 443 or one of 8443, 2053, 2083, 2087, 2096.",
+  RESERVED_MAPPING_HEADER: "Headers starting with x-assay- are set by Assay. Remove this header from your mapping.",
+  CREDENTIALS_REQUIRED_FOR_AUTH_MODE: "Add your API key headers for the live address first, then switch to API key.",
+  CREDENTIAL_ORIGIN_LIVE: "Your live tool uses these headers. Publish a new address first, then remove them.",
+  URL_NOT_RECOGNISED: "We couldn't read this URL. Start a new one.",
+  MCP_URL_NOT_FOUND: "This server URL does not serve anything (yet).",
 };
 
 const ERROR_PREFIXES = ["MCP_", "PAYMENT_", "SETTLEMENT_", "PROVIDER_", "TOOL_"];
 
-/** An API error code as one sentence. Unknown codes get a safe generic sentence. */
-export function plainError(code: string | null | undefined): string {
-  if (!code) return "Something went wrong. Try again.";
-  if (ERRORS[code]) return ERRORS[code]!;
+/**
+ * An API error code as one sentence. Unknown codes get a safe generic
+ * sentence; pass the HTTP status (`ApiError.status`) and an unknown 5xx says
+ * it is Assay's side, instead of "Something went wrong". It does not claim
+ * nothing changed: a 5xx does not prove that.
+ */
+export function plainError(code: string | null | undefined, status?: number): string {
+  if (code && ERRORS[code]) return ERRORS[code]!;
   for (const prefix of ERROR_PREFIXES) {
-    if (code.startsWith(prefix) && ERRORS[code.slice(prefix.length)]) return ERRORS[code.slice(prefix.length)]!;
+    if (code?.startsWith(prefix) && ERRORS[code.slice(prefix.length)]) return ERRORS[code.slice(prefix.length)]!;
   }
+  if (status !== undefined && status >= 500) return serverErrorSentence(status);
+  if (!code) return "Something went wrong. Try again.";
   return "Something went wrong. Try again, and if it keeps happening, contact support.";
+}
+
+/** An unknown 5xx: Assay's side, and what to do. */
+function serverErrorSentence(status: number): string {
+  if (status === 503 || status === 502 || status === 504) {
+    return `This part of Assay is unavailable right now (HTTP ${status}). Try again in a few minutes; if it keeps happening, tell Assay support.`;
+  }
+  return `Something failed on Assay's side (HTTP ${status}). Try again; if it keeps happening, tell Assay support.`;
 }
 
 /** Whether the dictionary has a sentence of its own for this code. */
@@ -430,6 +477,7 @@ export function knowsError(code: string): boolean {
 const AUDIT_ACTIONS: Record<string, string> = {
   "credential.created": "Agent key created",
   "credential.revoked": "Agent key revoked",
+  "agent.renamed": "Agent renamed",
   "limit.updated": "Spending limits changed",
   "spend_policy.created": "Spending limits set",
   "spend_policy.updated": "Spending limits changed",
@@ -472,6 +520,9 @@ const AUDIT_ACTIONS: Record<string, string> = {
   "operator.change": "Change operator",
   "operator.remove": "Remove operator",
   "slash.compensated": "Compensation paid",
+  "slash.chain_cancel_closed": "Requested cancel closed (nothing on chain)",
+  "slash.execution_recorded": "On-chain execution recorded",
+  "slash.reproposed": "Penalty proposed again",
 };
 
 /** An audit-log `action` as a short past-tense phrase. */
@@ -520,10 +571,4 @@ function isRuleType(key: string): boolean {
 }
 
 export const plainRuleCode = (code: string): string => RULE_CODES[code] ?? humanize(code);
-export const plainTerm = (key: string): string => TERMS[key] ?? (/^w_\d+$/i.test(key) ? windowLabel(key) : humanize(key));
-export const plainOutcome = (key: string): string => OUTCOMES[key] ?? humanize(key);
-export const plainResponseClass = (key: string): string => RESPONSE_CLASSES[key] ?? humanize(key);
-export const plainClassification = (key: string): string =>
-  CLASSIFICATION_REASONS[key] ?? (/^POLICY_\w+_STATUS$/.test(key) ? "The tool's own policy reclassified this reply" : humanize(key));
 export const plainStatus = (key: string): string => STATUSES[key] ?? humanize(key);
-export const plainIneligibility = (key: string): string => INELIGIBILITY[key] ?? humanize(key);

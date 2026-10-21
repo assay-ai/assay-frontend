@@ -86,8 +86,6 @@ export interface Hold {
   expiresAt: string;
 }
 
-const ZERO = (asset: string, decimals: number): Money => ({ amount: "0", asset, decimals });
-
 /**
  * Every chain's balance, in the order the API served them.
  *
@@ -134,8 +132,4 @@ export function hasMultipleChains(balances: readonly FullBalance[]): boolean {
  */
 export function soleChainBalance(balances: readonly FullBalance[]): FullBalance | null {
   return balances.length === 1 ? balances[0] : null;
-}
-
-export function zeroLike(money: Money): Money {
-  return ZERO(money.asset, money.decimals);
 }

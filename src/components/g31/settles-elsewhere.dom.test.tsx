@@ -31,7 +31,7 @@ const CHAINS: Chain[] = [
   },
 ];
 
-function tool(settlementChains: string[] | undefined): ToolRow {
+function tool(settlementChains: string[] | null | undefined): ToolRow {
   return {
     toolId: "b0a2f1c4-0000-4000-8000-000000000001",
     name: "search.web",
@@ -42,16 +42,22 @@ function tool(settlementChains: string[] | undefined): ToolRow {
     fromPrice: null,
     price: null,
     paidBindings: 2,
+    freeCallsPerDay: null,
     routable: true,
     unroutableReason: null,
     settlementChains,
     yourCalls: 0,
+    version: null,
+    versions: [],
+    deprecatedMajors: [],
+    replacementName: null,
+    replacementVersion: null,
     listed: null,
     charged: null,
   };
 }
 
-function markup(settlementChains: string[] | undefined, buyerChains: string[]): string {
+function markup(settlementChains: string[] | null | undefined, buyerChains: string[]): string {
   return renderToStaticMarkup(
     <SettlesElsewhere tool={tool(settlementChains)} buyerChains={buyerChains} chains={CHAINS} />,
   );
@@ -87,6 +93,12 @@ describe("SettlesElsewhere — marked, never hidden", () => {
     */
     expect(markup(undefined, [SOLANA])).toBe("");
     expect(markup([], [SOLANA])).toBe("");
+  });
+
+  it("says nothing, and renders, when the catalogue sends null (BUG-M1-01)", () => {
+    // `null` is the backend's "not known" for an unroutable tool; it crashed
+    // the tool detail page when only `undefined` was guarded.
+    expect(markup(null, [SOLANA])).toBe("");
   });
 
   it("says nothing when the buyer's own chains are unknown", () => {

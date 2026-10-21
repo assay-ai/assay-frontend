@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
@@ -12,7 +12,8 @@ import { demoEnabled } from "@/libs/demo/demo-api";
 import { AccountBlockBridge } from "@/features/account-block/account-block-bridge";
 import { PrivySessionBridge } from "@/providers/PrivySessionBridge";
 import { ThemeProvider } from "@/providers/ThemeProvider";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { createAppQueryClient } from "@/providers/query-client";
 import { useChains } from "@/hooks/useChains";
 
 interface PrivyShellProps {
@@ -74,32 +75,7 @@ const ROBINHOOD_CHAIN = {
   testnet: true,
 } as unknown as ViemChain;
 
-/**
- * `networkMode: "always"` is the important one, and it is not a preference.
- *
- * React Query's default is "online": when a fetch fails at the transport layer
- * it PAUSES the query instead of failing it. The observed result is
- * `status:"pending", fetchStatus:"paused"` forever, while the underlying
- * request has already rejected — so a screen whose data never arrives sits on
- * "Loading…" indefinitely and never reaches its error branch. That is the worst
- * possible failure for this product: a person waiting on a spinner cannot tell
- * whether they were charged.
- *
- * "always" makes a failed request an error the UI can render. `retry: 0` keeps
- * a dead API from being retried three times before the screen admits it.
- */
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      networkMode: "always",
-      retry: 0,
-    },
-    mutations: {
-      networkMode: "always",
-    },
-  },
-});
+const queryClient = createAppQueryClient();
 
 function PrivyShell({ children, chains }: PrivyShellProps) {
   /*
@@ -229,10 +205,22 @@ function PrivyShell({ children, chains }: PrivyShellProps) {
  * guarantee that mattered — Privy never mounts with a partial chain list —
  * and the query it waits on is the same `["chains"]` every screen reads, so
  * nothing asks twice. A failed read mounts with an empty list, as before.
+ *
+ * **It holds only the first load.** Once the read has answered — ready or
+ * failed — the app stays mounted whatever the query does next. Gating on every
+ * `loading` turned an unreachable API into a loop: the read failed, the app
+ * mounted, a screen's own `useChains()` refetched the failed query on mount,
+ * the query went back to pending, the gate unmounted the app for the splash,
+ * and the read failed again — hundreds of `/chains` (and each page's own
+ * reads) a second, against an API that was already down.
  */
 function ChainsGate({ children }: { children: React.ReactNode }) {
   const result = useChains();
-  if (result.status === "loading") {
+  const [answered, setAnswered] = useState(false);
+  // State derived during render, not in an effect: the splash must not paint
+  // for one frame after the answer, and this is React's documented pattern.
+  if (!answered && result.status !== "loading") setAnswered(true);
+  if (!answered && result.status === "loading") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-01" role="status" aria-label="Loading">
         {/* eslint-disable-next-line @next/next/no-img-element */}

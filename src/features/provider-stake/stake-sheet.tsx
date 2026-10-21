@@ -18,6 +18,7 @@ import { useProviderPendingTransactions } from "./pending-chain-tx-list";
 import { stakePreflight, useStakeBalances } from "./stake-preflight";
 import { depositSteps, describeStakeError, proveWalletStep } from "./stake-steps";
 import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
+import { STAKE_REDUCED_ONLY_BY, stakeAfterSentence } from "./stake-status";
 import { short, useStakeWallet, walletBlocker } from "./use-stake-wallet";
 import { simulatedSteps } from "./wallet-readiness";
 
@@ -150,8 +151,14 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
       onOpenChange={onOpenChange}
       title="Add stake"
       description={
-        reason ??
-        "Stake is the deposit that lets your tools take paid calls. It stays yours; it is only reduced by a penalty you did not dispute in time."
+        // The caller's reason (the stake status) first, then what can reduce stake, always (D21).
+        typeof reason === "string" || reason === null || reason === undefined || reason === false ? (
+          `${typeof reason === "string" && reason.trim() ? `${reason.trim()} ` : "Stake is the deposit that lets your tools take paid calls. "}${STAKE_REDUCED_ONLY_BY}`
+        ) : (
+          <>
+            {reason} {STAKE_REDUCED_ONLY_BY}
+          </>
+        )
       }
       changes={
         parsed.value
@@ -230,7 +237,12 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
         error={value ? parsed.error : undefined}
         hint={
           status.required
-            ? `Your paid tools need ${formatMoney(status.required)} (the most any one of them needs); you have ${status.staked ? formatMoney(status.staked) : "$0.00"}.`
+            ? [
+                `Your paid tools need ${formatMoney(status.required)} (the most any one of them needs); you have ${status.staked ? formatMoney(status.staked) : "$0.00"}.`,
+                stakeAfterSentence(after ?? null, status.required, status.recommended),
+              ]
+                .filter(Boolean)
+                .join(" ")
             : "You can stake before you list a paid tool."
         }
       />

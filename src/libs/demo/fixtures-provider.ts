@@ -1,3 +1,9 @@
+import { formatVersionRange, parseVersionRange } from "@/features/contracts/semver";
+import type { ToolContractVersion } from "@/interfaces/contracts";
+import { ApiError } from "@/libs/ApiClient";
+
+import { demoContractVersions, WEATHER_TOOL_ID, weatherSunsetAt } from "./fixtures-contracts";
+import { demoContractMismatch, demoRetiredMajor } from "./demo-switches";
 import {
   DEMO_PENALTY_AMOUNTS,
   DEMO_PENALTY_PROPOSALS,
@@ -43,8 +49,7 @@ import {
  * is what keeps the dashboard's thin-headroom warning off. Quality is healthy
  * (94.1% PASS over 25,449 calls in 30 days), with one FAIL that cost a single
  * call's 0.405 and one contested slash proposal on the FX binding's last
- * window. Three payout batches, all paid, summing to exactly the month's
- * earned figure.
+ * window. Five redemptions, all paid on chain.
  *
  * The arithmetic is deliberate and is checked in both directions:
  *
@@ -55,9 +60,8 @@ import {
  *  - earnings `totals` = Σ `groups`, and `earned` + `platformFee` = the gross
  *    the call counts imply at each binding's price.
  *  - the three payout amounts sum to the month's `earned`.
- *  - `quality.verdictMix` counts sum to `totalCalls`, which is the same
- *    25,449 the traffic buckets sum to and the same figure `/providers/me`
- *    reports as `callsServed`.
+ *  - `/providers/me` reports the 25,449 calls of `TRAFFIC_DAILY` as
+ *    `callsServed`.
  *
  * ## Two things the mechanism cannot do, so the rows work around them
  *
@@ -75,12 +79,6 @@ import {
  * Detail routes take their id off the path (`idIn`) and echo it back, so any
  * id a list screen links to resolves — a known one answers with its own row,
  * an unknown one with the lead row wearing the requested id.
- *
- * `override: "always"` is set on exactly the routes whose real answer would
- * name a chain, an account or an asset: on an unseeded dev backend those still
- * answer with Solana ids, and a Solana address on a Robinhood Chain demo is
- * the one substitution that has to win over a live response rather than only
- * fill an empty one. Everything else keeps the default and yields to the API.
  *
  * `GET /providers/me/calls/export` is **not** here and cannot be: it goes
  * through `api.raw()` to keep the CSV body unwrapped, which is the one path
@@ -104,8 +102,6 @@ const STAKE_ADDRESS = "0x9F2c8A1e5D7b30C4f6A8e2B915D3c7E04A6b1F82";
 /** The console credential this provider's own actions are stamped with. */
 const CONSOLE_CREDENTIAL = "cred_8f3a1d0c";
 
-const EGRESS_IPS = ["203.0.113.21", "203.0.113.22", "198.51.100.9"];
-
 /** CAIP-10 for the payout address. Built lazily — see the module docstring. */
 function payoutAccount(): string {
   return `${DEMO_CHAIN_ID}:${PAYOUT_ADDRESS}`;
@@ -121,11 +117,6 @@ function stakeAuthority(): string {
 /** `now + minutes`, for a deadline. Same clock as `minutesAgo`, other way. */
 function inMinutes(minutes: number): string {
   return minutesAgo(-minutes);
-}
-
-/** The UTC calendar day `days` ago, as `YYYY-MM-DD`. */
-function dayUtc(days: number): string {
-  return minutesAgo(days * 1440).slice(0, 10);
 }
 
 /** Every list on this API is one cursor page; the stage set never has a second. */
@@ -171,6 +162,17 @@ interface DemoBinding {
   seeded?: { inputs: string[] };
   /** What a test call against this listing returns, when not the market quote. */
   sample?: { query: string; rawBody: string; mapped: Record<string, unknown> };
+  /** T3: the contract majors served; the tool's current major when unset. */
+  range?: string;
+  /** T3: optional outputs returned. */
+  provides?: string[];
+  /** T3: optional inputs accepted. */
+  supports?: string[];
+  /**
+   * T3: the majors a passing test already exists for at `version` (the seed's
+   * own runs). A test run in this tab adds to them (`rememberRun`).
+   */
+  testedMajors?: number[];
 }
 
 const BINDINGS: DemoBinding[] = [
@@ -225,6 +227,8 @@ const BINDINGS: DemoBinding[] = [
     id: "d5e02b88-1c74-493a-8b2f-6a1c9d4e7503",
     toolId: "chain-activity",
     toolName: "Chain activity summary",
+    // T3: a live listing still on v1, which is deprecated: the Overview asks to add v2.
+    range: "^1",
     endpoint: `${API_HOST}/v1/activity`,
     pricingMode: "FREE",
     priceMajor: "0",
@@ -268,6 +272,45 @@ const BINDINGS: DemoBinding[] = [
       { target: "asOf", selector: "$.vessel.position.ts" },
     ],
   },
+  /*
+    T3: a weather draft started on contract v1, before v2 came out. v1 is now
+    deprecated (stops in 120 days; `?contracts=retired` retires it), so the
+    editor says to add v2, re-map and test. It already returns the optional
+    `uv_index` and accepts the optional `units`.
+  */
+  {
+    id: "f2c84d19-3b6e-4a07-9d51-8e2f0a7c4b63",
+    toolId: "weather-now",
+    toolName: "Weather now",
+    endpoint: `${API_HOST}/v1/weather`,
+    pricingMode: "PAID",
+    priceMajor: "0.002",
+    status: "DRAFT",
+    version: 3,
+    publishedVersion: null,
+    freeQuotaPerAgent: null,
+    freeDailyBudget: null,
+    slaFailureRate: 0.02,
+    timeoutMs: 8000,
+    maxRps: null,
+    maxDailyCalls: null,
+    upstreamPath: "/v1/weather",
+    outputs: [
+      { target: "temperature", selector: "$.current.temp" },
+      { target: "observed_at", selector: "$.current.time" },
+      { target: "uv_index", selector: "$.current.uv" },
+    ],
+    seeded: { inputs: ["latitude", "longitude", "units"] },
+    sample: {
+      query: "?latitude=38.72&longitude=-9.14&units=metric",
+      rawBody: '{"current":{"temp":19.4,"time":"2026-10-16T14:00:00Z","uv":4.2}}',
+      mapped: { temperature: 19.4, observed_at: "2026-10-16T14:00:00Z", uv_index: 4.2 },
+    },
+    range: "^1",
+    provides: ["uv_index"],
+    supports: ["units"],
+    testedMajors: [1],
+  },
 ];
 
 /**
@@ -279,18 +322,17 @@ const BINDINGS: DemoBinding[] = [
 const DRAFT_PREFIX = "demo-draft-";
 
 const DRAFT_TOOLS: Record<string, Pick<DemoBinding, "toolName" | "outputs" | "seeded" | "sample">> = {
-  "weather-now": {
-    toolName: "Weather now",
+  "air-quality": {
+    toolName: "Air quality",
     outputs: [
-      { target: "temperature", selector: "$.temperature" },
-      { target: "conditions", selector: "$.conditions" },
+      { target: "aqi", selector: "$.aqi" },
       { target: "observedAt", selector: "$.observedAt" },
     ],
-    seeded: { inputs: ["city", "units"] },
+    seeded: { inputs: ["city"] },
     sample: {
-      query: "?city=Lisbon&units=metric",
-      rawBody: '{"temperature":21.4,"conditions":"Clear","observedAt":"2026-10-16T08:40:00Z"}',
-      mapped: { temperature: 21.4, conditions: "Clear", observedAt: "2026-10-16T08:40:00Z" },
+      query: "?city=Lisbon",
+      rawBody: '{"aqi":31,"pm25":7.2,"observedAt":"2026-10-16T08:40:00Z"}',
+      mapped: { aqi: 31, observedAt: "2026-10-16T08:40:00Z" },
     },
   },
 };
@@ -377,6 +419,15 @@ function withSavedLimits(binding: DemoBinding): DemoBinding {
   return next;
 }
 
+/** Stored credential summaries per binding, then per origin: names and hints only, never a value. */
+const demoCredentialSets = new Map<string, Map<string, { origin: string; headers: { name: string; hint: string | null }[]; updatedAt: string }>>();
+
+/** Drafts discarded in this tab (`DELETE …/tool-bindings/:id`): gone from the list until a reload. */
+const demoDiscarded = new Set<string>();
+
+/** The auth mode a tab chose per listing. Only the mode: the demo never keeps a credential value. */
+const demoAuthModes = new Map<string, "NONE" | "API_KEY" | "SIGNATURE" | "BOTH">();
+
 /** A write's answer: the stored listing with what was sent laid over it. Echoed; the free limits, pricing mode and price are kept for the tab (see `rememberLimits`). */
 function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBinding {
   const next = { ...binding };
@@ -398,6 +449,9 @@ function withWrite(binding: DemoBinding, data: Record<string, unknown>): DemoBin
   if (data.freeDailyBudget === null || typeof data.freeDailyBudget === "number") {
     next.freeDailyBudget = data.freeDailyBudget;
     rememberLimits(next.id, { freeDailyBudget: data.freeDailyBudget });
+  }
+  if (data.authMode === "NONE" || data.authMode === "API_KEY" || data.authMode === "SIGNATURE" || data.authMode === "BOTH") {
+    demoAuthModes.set(next.id, data.authMode);
   }
   if (data.maxRps === null || typeof data.maxRps === "number") next.maxRps = data.maxRps;
   if (data.maxDailyCalls === null || typeof data.maxDailyCalls === "number") next.maxDailyCalls = data.maxDailyCalls;
@@ -467,15 +521,279 @@ function bindingDetail(binding: DemoBinding, id: string) {
     maxDailyCalls: binding.maxDailyCalls,
     publishedVersion: binding.publishedVersion,
     hasUnpublishedChanges: binding.publishedVersion !== binding.version,
+    toolVersionRange: termsFor(binding).range,
+    providesOutputFields: [...termsFor(binding).provides],
+    supportsInputFields: [...termsFor(binding).supports],
+    authMode: demoAuthModes.get(binding.id) ?? ("SIGNATURE" as const),
+    publishedEndpoint: binding.publishedVersion !== null ? binding.endpoint : null,
   };
 }
 
-// ── Traffic, quality and earnings ───────────────────────────────────────────
+// ── Contract versions (T3) ──────────────────────────────────────────────────
+
+/** A catalogue tool as the fixture writes it: schemas plus the optional fields of its one version. */
+interface DemoCatalogueTool {
+  id: string;
+  name: string;
+  description: string;
+  tier: "UNVERIFIED" | "VERIFIED" | "GUARANTEED";
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  optionalOutputs?: string[];
+  optionalInputs?: string[];
+  /** Set by `weatherCatalogueTool`: the shared contract story's versions. */
+  versions?: ToolContractVersion[];
+}
+
+/** One published version, 1.0.0 and current, for a tool with no version story. */
+function firstVersion(tool: DemoCatalogueTool): ToolContractVersion {
+  return {
+    version: 1,
+    semver: "1.0.0",
+    major: 1,
+    status: "ACTIVE",
+    summary: tool.description,
+    description: tool.description,
+    inputSchema: tool.inputSchema,
+    outputSchema: tool.outputSchema,
+    optionalInputFields: [...(tool.optionalInputs ?? [])],
+    optionalOutputFields: [...(tool.optionalOutputs ?? [])],
+    examples: [],
+    tier: tool.tier,
+    sunsetAt: null,
+    changelog: "First version.",
+    publishedAt: minutesAgo(180 * 24 * 60),
+    isCurrent: true,
+  };
+}
+
+/** The catalogue row with `currentVersion` and `versions` (T3). */
+function withContract(tool: DemoCatalogueTool) {
+  const { optionalOutputs: _outputs, optionalInputs: _inputs, versions: given, ...row } = tool;
+  const versions = given ?? [firstVersion(tool)];
+  const current = versions.find((v) => v.isCurrent) ?? versions[0] ?? null;
+  return { ...row, currentVersion: current?.semver ?? null, versions };
+}
+
+/**
+ * The weather tool a provider binds: the shared get_weather contract
+ * (`fixtures-contracts.ts`) — 1.0.0 and 1.1.0 deprecated, 2.0.0 current —
+ * under the provider console's own id. Its schemas are the current version's.
+ */
+function weatherCatalogueTool(): DemoCatalogueTool {
+  const versions = demoContractVersions(WEATHER_TOOL_ID);
+  const current = versions.find((v) => v.isCurrent) ?? versions[0]!;
+  return {
+    id: "weather-now",
+    name: "Weather now",
+    description: current.description,
+    tier: "VERIFIED",
+    inputSchema: current.inputSchema as Record<string, unknown>,
+    outputSchema: current.outputSchema as Record<string, unknown>,
+    versions,
+  };
+}
+
+/**
+ * Chain activity summary: 1.0.0 deprecated (same sunset as get_weather v1),
+ * 2.0.0 current — v2 counts transfers as transfer_count. The demo's live
+ * listing still serves only v1, so its Overview shows the deadline and "Add v2".
+ */
+function chainActivityVersions(): ToolContractVersion[] {
+  const base = firstVersion({
+    id: "chain-activity",
+    name: "Chain activity summary",
+    description: "Transfer and active-address counts for one chain over a named window.",
+    tier: "UNVERIFIED",
+    inputSchema: { type: "object", required: ["chainId"], properties: { chainId: { type: "string" }, window: { type: "string" } } },
+    outputSchema: {
+      type: "object",
+      required: ["window", "transfers", "addresses"],
+      properties: { window: { type: "string" }, transfers: { type: "integer" }, addresses: { type: "integer" } },
+    },
+  });
+  const sunsetAt = weatherSunsetAt();
+  return [
+    {
+      ...base,
+      version: 2,
+      semver: "2.0.0",
+      major: 2,
+      outputSchema: {
+        type: "object",
+        required: ["window", "transfer_count", "addresses"],
+        properties: { window: { type: "string" }, transfer_count: { type: "integer" }, addresses: { type: "integer" } },
+      },
+      changelog: "transfers is now transfer_count. Breaking: re-map and test for v2.",
+      publishedAt: minutesAgo(30 * 24 * 60),
+      isCurrent: true,
+      examples: [{ title: "Base, last 24 hours", arguments: { chainId: "eip155:8453", window: "24h" } }],
+    },
+    {
+      ...base,
+      status: demoRetiredMajor() ? "RETIRED" : "DEPRECATED",
+      sunsetAt,
+      isCurrent: false,
+      examples: [{ title: "Base, last 24 hours", arguments: { chainId: "eip155:8453", window: "24h" } }],
+    },
+  ];
+}
+
+/** The provider catalogue's versions of a tool, by its console id. */
+function catalogueVersionsOf(toolId: string): ToolContractVersion[] {
+  if (toolId === "weather-now") return demoContractVersions(WEATHER_TOOL_ID);
+  if (toolId === "chain-activity") return chainActivityVersions();
+  return [{ ...firstVersion({ id: toolId, name: toolId, description: toolId, tier: "VERIFIED", inputSchema: {}, outputSchema: {}, optionalOutputs: toolId === "air-quality" ? ["pm25"] : [] }) }];
+}
+
+function currentMajorOfTool(toolId: string): number {
+  const versions = catalogueVersionsOf(toolId);
+  return (versions.find((v) => v.isCurrent) ?? versions[0])?.major ?? 1;
+}
+
+/*
+  DEMO ONLY: what a listing serves and which majors passed a test in this tab,
+  kept like the free limits above (sessionStorage), so a changed range shows
+  after a save and the publish check names the version still untested.
+*/
+const TERMS_KEY = "assay.demo.binding-terms";
+interface KeptTerms {
+  range?: string;
+  provides?: string[];
+  supports?: string[];
+  /** `${mappingVersion}:${major}` of every passing run. */
+  passed?: string[];
+  /** `${mappingVersion}:${major}` of runs that failed (`?contracts=mismatch`). */
+  failed?: string[];
+  /** The terms were changed in this tab: the stage set's own runs no longer count. */
+  changed?: boolean;
+}
+let savedTerms: Record<string, KeptTerms> | null = null;
+
+function keptTerms(): Record<string, KeptTerms> {
+  if (savedTerms) return savedTerms;
+  savedTerms = {};
+  if (typeof window === "undefined") return savedTerms;
+  try {
+    const raw = window.sessionStorage.getItem(TERMS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) savedTerms = parsed as Record<string, KeptTerms>;
+  } catch {
+    // Storage blocked or malformed: start from the stage set.
+  }
+  return savedTerms;
+}
+
+function rememberTerms(id: string, terms: KeptTerms): void {
+  const kept = keptTerms();
+  savedTerms = { ...kept, [id]: { ...kept[id], ...terms } };
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(TERMS_KEY, JSON.stringify(savedTerms));
+  } catch {
+    // Storage blocked: kept until reload.
+  }
+}
+
+/** The listing's terms: what this tab saved, else the stage set's, else the tool's current major. */
+function termsFor(binding: DemoBinding): { range: string; provides: string[]; supports: string[] } {
+  const kept = keptTerms()[binding.id] ?? {};
+  return {
+    range: kept.range ?? binding.range ?? `^${currentMajorOfTool(binding.toolId)}`,
+    provides: kept.provides ?? binding.provides ?? [],
+    supports: kept.supports ?? binding.supports ?? [],
+  };
+}
+
+/** The majors with a passing run at the listing's current revision. */
+function passedMajors(binding: DemoBinding): number[] {
+  const kept = (keptTerms()[binding.id]?.passed ?? [])
+    .map((key) => key.split(":").map(Number))
+    .filter(([version]) => version === binding.version)
+    .map(([, major]) => major!);
+  // A live listing's own revision was tested on every major it serves when it was published.
+  const seeded = keptTerms()[binding.id]?.changed
+    ? []
+    : binding.publishedVersion === binding.version
+      ? (parseVersionRange(termsFor(binding).range) ?? [1])
+      : (binding.testedMajors ?? []);
+  const failed = failedMajors(binding);
+  return [...new Set([...seeded, ...kept])].filter((major) => !failed.includes(major));
+}
+
+function rememberRun(binding: DemoBinding, major: number): void {
+  const key = `${binding.version}:${major}`;
+  const passed = keptTerms()[binding.id]?.passed ?? [];
+  const failed = (keptTerms()[binding.id]?.failed ?? []).filter((k) => k !== key);
+  if (!passed.includes(key)) rememberTerms(binding.id, { passed: [...passed, key], failed });
+}
+
+/** A failing run at this revision: the publish check says so instead of "no test yet". */
+function rememberFailedRun(binding: DemoBinding, major: number): void {
+  const key = `${binding.version}:${major}`;
+  const failed = keptTerms()[binding.id]?.failed ?? [];
+  const passed = (keptTerms()[binding.id]?.passed ?? []).filter((k) => k !== key);
+  if (!failed.includes(key)) rememberTerms(binding.id, { failed: [...failed, key], passed });
+}
+
+function failedMajors(binding: DemoBinding): number[] {
+  return (keptTerms()[binding.id]?.failed ?? [])
+    .filter((key) => key.startsWith(`${binding.version}:`))
+    .map((key) => Number(key.split(":")[1]));
+}
+
+/**
+ * The backend's own contract check (`assertBindingContract`): every major
+ * has a published version; every declared field is an optional field there.
+ */
+function contractProblems(toolId: string, range: string, provides: readonly string[], supports: readonly string[]): string[] {
+  const majors = parseVersionRange(range);
+  if (!majors) return [`"${range}" is not a version range (write ^1, or ^1 || ^2)`];
+  const versions = catalogueVersionsOf(toolId).filter((v) => v.status !== "DRAFT");
+  const problems: string[] = [];
+  const inRange = majors.map((major) => versions.filter((v) => v.major === major)[0]).filter((v): v is ToolContractVersion => Boolean(v));
+  for (const major of majors) if (!versions.some((v) => v.major === major)) problems.push(`contract v${major} has no published version to serve`);
+  for (const field of provides) {
+    if (!inRange.some((v) => v.optionalOutputFields.includes(field))) problems.push(`"${field}" is not an optional output of the contract in ${formatVersionRange(majors)}`);
+  }
+  for (const field of supports) {
+    if (!inRange.some((v) => v.optionalInputFields.includes(field))) problems.push(`"${field}" is not an optional input of the contract in ${formatVersionRange(majors)}`);
+    // `?contracts=mismatch`: the demo listing's request mapping never reads "units".
+    else if (field === "units" && demoContractMismatch()) problems.push(`the request mapping never reads "${field}", so it would be dropped`);
+  }
+  return problems;
+}
+
+/** A write's contract terms laid over the listing; throws the backend's 400 when they do not fit. */
+function withTerms(binding: DemoBinding, data: Record<string, unknown>, path: string): void {
+  const strings = (value: unknown): string[] | undefined =>
+    Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : undefined;
+  const range = typeof data.toolVersionRange === "string" ? data.toolVersionRange : undefined;
+  const provides = strings(data.providesOutputFields);
+  const supports = strings(data.supportsInputFields);
+  if (range === undefined && provides === undefined && supports === undefined) return;
+  const now = termsFor(binding);
+  const next = { range: range ?? now.range, provides: provides ?? now.provides, supports: supports ?? now.supports };
+  const problems = contractProblems(binding.toolId, next.range, next.provides, next.supports);
+  if (problems.length > 0) {
+    throw new ApiError(
+      "PROVIDER_BINDING_CONTRACT_MISMATCH",
+      `This binding does not fit the tool's contract: ${problems.join("; ")}`,
+      400,
+      path,
+      { problems },
+    );
+  }
+  // A changed range or field list is a new revision: every major needs a new test.
+  rememberTerms(binding.id, { range: formatVersionRange(parseVersionRange(next.range)!), provides: next.provides, supports: next.supports, passed: [], changed: true });
+}
+
+// ── Traffic and earnings ────────────────────────────────────────────────────
 
 /**
  * Calls per UTC day over the trailing 30 days, oldest first. The 30-day total
- * is derived from this array rather than written twice — `/providers/me`'s
- * `callsServed` and `/quality`'s `totalCalls` read the same constant.
+ * is derived from this array rather than written twice: `/providers/me`'s
+ * `callsServed` reads it.
  */
 const TRAFFIC_DAILY = [
   742, 801, 869, 913, 884, 756, 690, 812, 905, 948, 921, 877, 734, 702, 826, 913, 967, 940, 902,
@@ -483,28 +801,6 @@ const TRAFFIC_DAILY = [
 ];
 
 const TRAFFIC_TOTAL = TRAFFIC_DAILY.reduce((total, calls) => total + calls, 0);
-
-/**
- * `PaymentIntentStatus`, every value, zero-filled — a status never disappears
- * between buckets. `REFUNDED` is the one attributable failure; the in-flight
- * states only carry anything on the day that is still running.
- */
-function byStatus(calls: number, inFlight = 0) {
-  const refunded = Math.round(calls * 0.012);
-  const voided = Math.round(calls * 0.008);
-  const expired = Math.round(calls * 0.005);
-  const settled = calls - refunded - voided - expired - inFlight;
-  return [
-    { status: "CREATED", calls: 0 },
-    { status: "FUNDS_SECURED", calls: 0 },
-    { status: "PROVIDER_EXECUTING", calls: Math.floor(inFlight / 2) },
-    { status: "VERIFYING", calls: inFlight - Math.floor(inFlight / 2) },
-    { status: "SETTLED", calls: settled },
-    { status: "REFUNDED", calls: refunded },
-    { status: "VOIDED", calls: voided },
-    { status: "EXPIRED", calls: expired },
-  ];
-}
 
 /** The top callers, calls descending. Everyone else folds into "other agents". */
 const AGENT_CALLS: { agentId: string; calls: number }[] = [
@@ -518,27 +814,16 @@ const AGENT_CALLS: { agentId: string; calls: number }[] = [
   { agentId: "7a0d63f2-5e94-4187-b3c6-08f1e5b2c4d7", calls: 902 },
 ];
 
-/** Verdict mix over the same 30-day window, as shares that sum to one. */
-const VERDICT_SHARES: { verdict: string; share: number }[] = [
-  { verdict: "PASS", share: 0.941 },
-  { verdict: "FAIL", share: 0.0125 },
-  { verdict: "EMPTY_CONFIRMED", share: 0.0223 },
-  { verdict: "SKIPPED", share: 0.0167 },
-  { verdict: "DEGRADED", share: 0.0075 },
-];
-
 /**
- * Counts derived from the shares, with the last row taking the remainder — so
- * the mix sums to `totalCalls` exactly rather than to 25,448 or 25,450.
+ * "Not credited" by reason, as the backend sends it: all three classes, in its
+ * order, each summing into `withheld` / `withheldCalls`.
  */
-function verdictMix() {
-  let assigned = 0;
-  return VERDICT_SHARES.map((entry, index) => {
-    const last = index === VERDICT_SHARES.length - 1;
-    const calls = last ? TRAFFIC_TOTAL - assigned : Math.round(TRAFFIC_TOTAL * entry.share);
-    assigned += calls;
-    return { verdict: entry.verdict, calls, share: calls / TRAFFIC_TOTAL };
-  });
+function withheldByClass(failed: [number, string], endpoint: [number, string], refused: [number, string]) {
+  return [
+    { class: "PAID_UNCREDITED", calls: failed[0], amount: money(failed[1]) },
+    { class: "SYSTEM_ERROR", calls: endpoint[0], amount: money(endpoint[1]) },
+    { class: "REQUEST_ERROR", calls: refused[0], amount: money(refused[1]) },
+  ];
 }
 
 /**
@@ -556,6 +841,9 @@ function earningsGroups() {
       platformFee: money("18.36"),
       withheld: money("1.62"),
       withheldCalls: 4,
+      // Two failed checks, one endpoint error, one refused request: the four
+      // not-credited rows of the per-call file.
+      withheldByClass: withheldByClass([2, "0.81"], [1, "0.405"], [1, "0.405"]),
       // One passed call whose buyer has not settled its payment yet, and one
       // whose buyer never did (written off after 30 days). One each, so the
       // figure never equals the two failed checks' $0.81 on Money.
@@ -573,6 +861,7 @@ function earningsGroups() {
       platformFee: money("1.80"),
       withheld: money("0"),
       withheldCalls: 0,
+      withheldByClass: withheldByClass([0, "0"], [0, "0"], [0, "0"]),
       // One call forfeited while the stake was below the minimum.
       forfeited: money("0.072"),
       forfeitedCalls: 1,
@@ -584,6 +873,7 @@ function earningsGroups() {
       platformFee: money("0"),
       withheld: money("0"),
       withheldCalls: 0,
+      withheldByClass: withheldByClass([0, "0"], [0, "0"], [0, "0"]),
     },
   ];
 }
@@ -596,6 +886,7 @@ function earningsTotals() {
     platformFee: money("20.16"),
     withheld: money("1.62"),
     withheldCalls: 4,
+    withheldByClass: withheldByClass([2, "0.81"], [1, "0.405"], [1, "0.405"]),
     debtOutstanding: money("0.405"),
     debtOutstandingCalls: 1,
     forfeited: money("0.072"),
@@ -1006,13 +1297,6 @@ function evidenceRules(failed: boolean) {
 // ── Slash proposal and dispute ──────────────────────────────────────────────
 
 const PROPOSAL_ID = "a91c35e7-0b62-4d84-9f3a-6c81e740d2b5";
-const DISPUTE_ID = "f2a84c61-3d75-4e08-b19c-7a0e5d2f8c36";
-
-
-
-const DISPUTE_REASON =
-  "19 of the 27 failures in this window came from one caller, which re-sent the same stale-window query every 40 seconds for two hours. Excluding that caller the observed rate is 3.74%, inside the declared 5.00%.";
-
 function slashProposalSummary(proposalId: string) {
   /* Three demo cases — needs action, disputed on chain, executed — matching
      the on-chain rows in `demo-penalties.ts`. Any other id reads as the
@@ -1032,7 +1316,6 @@ function slashProposalSummary(proposalId: string) {
     windowId: subject.windowId,
     windowLabel: subject.label,
     penaltyAmount: penalty,
-    outcome: null,
     resolutionKind: null,
     resolvedAt: null,
   };
@@ -1045,11 +1328,15 @@ function slashProposalSummary(proposalId: string) {
         proposedAt: demoPenaltyTime(-1200),
         notifiedAt: demoPenaltyTime(-1190),
         acknowledgedAt: null,
-        respondByAt: demoPenaltyTime(3120),
-        platformDecisionDueAt: null,
         earliestExecutionAt: demoPenaltyTime(3120),
         chainExecutableAt: demoPenaltyTime(3120),
         chainStatus: "PENDING",
+        chainDisputedAt: null,
+        chainDisputedParts: 0,
+        chainRecords: 0,
+        cancelledRecords: 0,
+        chainState: "PENDING",
+        disputeBy: demoPenaltyTime(3120),
         secondsRemaining: 3120 * 60,
         runningClock: "PROVIDER",
       },
@@ -1066,39 +1353,45 @@ function slashProposalSummary(proposalId: string) {
         proposedAt: demoPenaltyTime(-15000),
         notifiedAt: demoPenaltyTime(-14990),
         acknowledgedAt: null,
-        respondByAt: demoPenaltyTime(-10680),
-        platformDecisionDueAt: null,
         earliestExecutionAt: demoPenaltyTime(-10680),
         chainExecutableAt: demoPenaltyTime(-10680),
         chainStatus: "EXECUTED",
+        chainDisputedAt: null,
+        chainDisputedParts: 0,
+        chainRecords: 0,
+        cancelledRecords: 0,
+        chainState: "EXECUTED",
+        disputeBy: null,
         secondsRemaining: null,
         runningClock: "NONE",
       },
       disputeId: null,
-      outcome: "EXECUTED",
       resolvedAt: demoPenaltyTime(-10500),
       executedAt: demoPenaltyTime(-10500),
     };
   }
   return {
     ...base,
-    status: "DISPUTED",
+    // Disputed on chain: the case stays PROPOSED while the arbiter rules.
+    status: "PROPOSED",
     appliedAmount: null,
     clocks: {
       proposedAt: demoPenaltyTime(-5700),
       notifiedAt: demoPenaltyTime(-5688),
       acknowledgedAt: null,
-      respondByAt: null,
-      platformDecisionDueAt: demoPenaltyTime(5340),
       earliestExecutionAt: demoPenaltyTime(2520),
       chainExecutableAt: demoPenaltyTime(2880),
       chainStatus: "DISPUTED",
       chainDisputedAt: demoPenaltyTime(-4320),
       chainDisputedParts: 1,
+      chainRecords: 0,
+      cancelledRecords: 0,
+      chainState: "DISPUTED",
+      disputeBy: null,
       secondsRemaining: null,
-      runningClock: "PLATFORM",
+      runningClock: "NONE",
     },
-    disputeId: DISPUTE_ID,
+    disputeId: null,
     executedAt: null,
   };
 }
@@ -1148,29 +1441,6 @@ function caseFacts(proposalId: string | null) {
   };
 }
 
-function disputeRow(id: string) {
-  return {
-    id,
-    /* Written directly by the arbitration service; the public enum omits it. */
-    subjectType: "SLASH_PROPOSAL",
-    subjectId: PROPOSAL_ID,
-    providerId: PROVIDER_ID,
-    state: "UNDER_REVIEW",
-    claimType: "AGENT_GRIEFING",
-    reason: DISPUTE_REASON,
-    evidence: [],
-    openedBy: CONSOLE_CREDENTIAL,
-    acknowledgedAt: minutesAgo(4380),
-    deadlineAt: inMinutes(2460),
-    resolvedAt: null,
-    resolvedBy: null,
-    resolutionNote: null,
-    restoredAmount: null,
-    createdAt: minutesAgo(4320),
-    updatedAt: minutesAgo(2880),
-  };
-}
-
 // ── The fixtures ────────────────────────────────────────────────────────────
 
 /**
@@ -1203,8 +1473,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/registration",
-    /* `payoutAccounts[]` names a chain and an account. Must win. */
-    override: "always",
     body: () => ({
       registration: {
         id: PROVIDER_ID,
@@ -1266,7 +1534,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         {
           key: "endpoint",
           title: "Endpoint",
-          caption: "Reachable from our egress addresses",
+          caption: "Reachable from Assay",
           status: "DONE",
         },
         { key: "terms", title: "Terms", caption: "Three documents, versioned", status: "DONE" },
@@ -1300,7 +1568,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           },
         ],
       },
-      egressIps: EGRESS_IPS,
       lastConnectivityCheck: {
         outcome: "REACHABLE",
         endpoint: API_HOST,
@@ -1309,23 +1576,15 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         failureKind: null,
         failureCode: null,
         detail: null,
-        egressIps: EGRESS_IPS,
         checkedAt: minutesAgo(180),
       },
     }),
-  },
-  {
-    method: "GET",
-    match: "/providers/egress-ips",
-    body: () => ({ egressIps: EGRESS_IPS }),
   },
 
   // ── Capital ──────────────────────────────────────────────────────────────
   {
     method: "GET",
     match: "/providers/me/stake",
-    /* Names the chain and the stake authority on every entry. Must win. */
-    override: "always",
     body: () => ({
       /*
         One chain, because this provider serves one chain. `staked` and
@@ -1381,7 +1640,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/providers/me/tool-bindings/catalogue",
     /* `settlementAsset.assetId` is a CAIP-19 and must be the 46630 USDG. */
-    override: "always",
     body: () => ({
       tools: [
         {
@@ -1430,6 +1688,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           name: "Chain activity summary",
           description: "Transfer and active-address counts for one chain over a named window.",
           tier: "UNVERIFIED",
+          versions: chainActivityVersions(),
           inputSchema: {
             type: "object",
             required: ["chainId"],
@@ -1466,25 +1725,27 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             },
           },
         },
+        weatherCatalogueTool(),
         {
-          id: "weather-now",
-          name: "Weather now",
-          description: "Current temperature and conditions for a city.",
+          id: "air-quality",
+          name: "Air quality",
+          description: "The air quality index for a city, with the time it was measured.",
           tier: "VERIFIED",
           inputSchema: {
             type: "object",
             required: ["city"],
-            properties: { city: { type: "string", examples: ["Lisbon"] }, units: { type: "string", enum: ["metric", "imperial"] } },
+            properties: { city: { type: "string", examples: ["Lisbon"] } },
           },
           outputSchema: {
             type: "object",
-            required: ["temperature", "conditions", "observedAt"],
+            required: ["aqi", "observedAt"],
             properties: {
-              temperature: { type: "number" },
-              conditions: { type: "string" },
+              aqi: { type: "integer" },
               observedAt: { type: "string", format: "date-time" },
+              pm25: { type: "number", description: "Fine particles, µg/m³" },
             },
           },
+          optionalOutputs: ["pm25"],
         },
         {
           /* Seeded for tests; the listing wizard must never offer it. */
@@ -1495,41 +1756,69 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           inputSchema: { type: "object", properties: {} },
           outputSchema: { type: "object", properties: {} },
         },
-      ],
+      ].map((tool) => withContract(tool as DemoCatalogueTool)),
       settlementAsset: { assetId: DEMO_ASSET, symbol: "USDG", decimals: 6 },
     }),
   },
   {
     method: "GET",
     match: "/providers/me/tool-bindings",
-    body: () => page(BINDINGS.map(bindingSummary)),
+    body: () => page(BINDINGS.filter((binding) => !demoDiscarded.has(binding.id)).map(bindingSummary)),
   },
   {
     method: "GET",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/publish-check$/,
     body: (path) => {
       const binding = bindingFor(idIn(path, 3));
+      // T3: the tester requirements are asked once per contract major served.
+      const majors = parseVersionRange(termsFor(binding).range) ?? [1];
+      const passed = passedMajors(binding);
+      const untested = majors.filter((major) => !passed.includes(major));
+      const failedAt = failedMajors(binding);
+      // One row per major for each tester requirement, each naming its major (as the API answers).
+      const tester = [
+        ...majors.map((major) =>
+          passed.includes(major) || failedAt.includes(major)
+            ? { requirement: "TESTER_RUN", met: true, code: null, detail: `Contract v${major}: Run at revision ${binding.version}.`, major }
+            : { requirement: "TESTER_RUN", met: false, code: "no_run_at_revision", detail: `Contract v${major}: No test has run at revision ${binding.version} yet.`, major },
+        ),
+        ...majors.map((major) =>
+          passed.includes(major)
+            ? { requirement: "TESTER_PASSED", met: true, code: null, detail: `Contract v${major}: Every layer passed, including verification.`, major }
+            : failedAt.includes(major)
+              ? {
+                  requirement: "TESTER_PASSED",
+                  met: false,
+                  code: "last_run_failed",
+                  detail: `Contract v${major}: The last test failed at the response mapping: your API's answer has no temperature_c.`,
+                  major,
+                }
+              : { requirement: "TESTER_PASSED", met: false, code: "no_run_at_revision", detail: `Contract v${major}: Run a passing test first.`, major },
+        ),
+      ];
+      // API key / Both with no stored headers: the publish gate asks for them.
+      const mode = demoAuthModes.get(binding.id);
+      const needsKey = (mode === "API_KEY" || mode === "BOTH") && (demoCredentialSets.get(binding.id)?.size ?? 0) === 0;
+      const credentials = needsKey
+        ? [{
+            requirement: "API_KEY_CREDENTIALS",
+            met: false,
+            code: "credentials_missing_for_origin",
+            detail: "No API key headers are stored for this address.",
+          }]
+        : [];
       return {
-        publishable: true,
+        publishable: untested.length === 0 && !needsKey,
         mappingVersion: binding.version,
         requirements: [
-          {
-            requirement: "TESTER_RUN",
-            met: true,
-            code: null,
-            detail: `Run at revision ${binding.version}.`,
-          },
-          {
-            requirement: "TESTER_PASSED",
-            met: true,
-            code: null,
-            detail: "Every layer passed, including verification.",
-          },
+          ...tester,
+          ...credentials,
           {
             requirement: "STAKE_AT_MINIMUM_ON_EVERY_CHAIN",
             met: true,
             code: null,
             detail: "$600.00 bonded against a $450.00 requirement.",
+            major: null,
           },
         ],
       };
@@ -1547,18 +1836,32 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     /*
       The tester calls the provider's endpoint for real, charges nobody and
       writes no payment intent — so a canned run is a report, not a ledger
-      entry. Left at the default override so a dev backend that can really run
-      one still wins.
+      entry.
     */
     method: "POST",
     match: /^\/providers\/me\/tool-bindings\/[^/]+\/test$/,
-    body: (path) => {
+    body: (path, _query, data = {}) => {
       const binding = bindingFor(idIn(path, 3));
+      // T3: the run is checked against one contract version; by default the newest of the highest major served.
+      const versions = catalogueVersionsOf(binding.toolId);
+      const majors = parseVersionRange(termsFor(binding).range) ?? [1];
+      const asked = typeof data.toolVersion === "number" ? versions.find((v) => v.version === data.toolVersion) : undefined;
+      const tested =
+        asked ??
+        versions.filter((v) => v.major === Math.max(...majors)).sort((a, b) => b.version - a.version)[0] ??
+        versions[0];
+      // `?contracts=mismatch`: v2 renamed temperature to temperature_c, and this API still answers temperature.
+      const fails = demoContractMismatch() && tested?.major === 2;
+      if (tested && !fails) rememberRun(binding, tested.major);
+      if (tested && fails) rememberFailedRun(binding, tested.major);
       return {
         callId: "call_7f21c93a4b08",
-        outcome: "PASSED",
-        failedLayer: null,
+        outcome: fails ? "FAILED" : "PASSED",
+        failedLayer: fails ? "RESPONSE_MAPPING" : null,
+        warnings: [],
         mappingVersion: binding.version,
+        toolVersion: tested?.version ?? 1,
+        toolVersionSemver: tested?.semver ?? "1.0.0",
         layers: [
           { layer: "REQUEST_MAPPING", status: "PASSED", code: null, detail: null, fault: null },
           {
@@ -1569,8 +1872,18 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
             fault: null,
           },
           { layer: "CLASSIFICATION", status: "PASSED", code: "OK", detail: null, fault: null },
-          { layer: "RESPONSE_MAPPING", status: "PASSED", code: null, detail: null, fault: null },
-          { layer: "VERIFICATION", status: "PASSED", code: null, detail: null, fault: null },
+          fails
+            ? {
+                layer: "RESPONSE_MAPPING",
+                status: "FAILED",
+                code: "TOOL_MAPPING_REQUIRED_FIELD_MISSING",
+                detail: "Your API's answer has no temperature_c, which v2 requires. v2 renamed temperature to temperature_c: map it to the field your API returns.",
+                fault: "PROVIDER",
+              }
+            : { layer: "RESPONSE_MAPPING", status: "PASSED", code: null, detail: null, fault: null },
+          fails
+            ? { layer: "VERIFICATION", status: "NOT_REACHED", code: null, detail: null, fault: null }
+            : { layer: "VERIFICATION", status: "PASSED", code: null, detail: null, fault: null },
         ],
         request: {
           method: "GET",
@@ -1635,6 +1948,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
       const toolId = typeof data.toolId === "string" ? data.toolId : BINDINGS[3].toolId;
       const listed = BINDINGS.find((binding) => binding.toolId === toolId);
       const binding = withWrite(listed ?? draftBinding(toolId), data);
+      withTerms(binding, data, "/providers/me/tool-bindings");
       return {
         ...bindingDetail(binding, binding.id),
         ...(isMapping(data.requestMapping) ? { requestMapping: data.requestMapping } : {}),
@@ -1643,15 +1957,71 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     },
   },
   {
+    method: "GET",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: (path) => [...(demoCredentialSets.get(idIn(path, 3) ?? "")?.values() ?? [])],
+  },
+  {
+    // Write-only: the demo answers with names and a hint, and keeps no value.
+    method: "PUT",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: (path, _query, data = {}) => {
+      const summary = {
+        origin: typeof data.origin === "string" ? data.origin : "",
+        headers: (Array.isArray(data.headers) ? data.headers : []).map((header: { name?: unknown; value?: unknown }) => {
+          const value = typeof header.value === "string" ? header.value : "";
+          return { name: String(header.name ?? ""), hint: value.length >= 16 ? value.slice(-4) : null };
+        }),
+        updatedAt: justNow(),
+      };
+      const id = idIn(path, 3) ?? "";
+      const sets = demoCredentialSets.get(id) ?? new Map();
+      sets.set(summary.origin, summary);
+      demoCredentialSets.set(id, sets);
+      return summary;
+    },
+  },
+  {
+    method: "DELETE",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+\/credentials$/,
+    body: (path, query) => {
+      demoCredentialSets.get(idIn(path, 3) ?? "")?.delete(String(query.origin ?? ""));
+      return null;
+    },
+  },
+  {
     method: "PATCH",
     match: /^\/providers\/me\/tool-bindings\/[^/]+$/,
     body: (path, _query, data = {}) => {
       const id = idIn(path, 3) ?? BINDINGS[0].id;
+      withTerms(bindingFor(id), data, path);
       return {
         ...bindingDetail(withWrite(bindingFor(id), data), id),
         ...(isMapping(data.requestMapping) ? { requestMapping: data.requestMapping } : {}),
         ...(isMapping(data.responseMapping) ? { responseMapping: data.responseMapping } : {}),
       };
+    },
+  },
+  {
+    // As the API (status DRAFT and never published; the demo has no publishedAt, so publishedVersion
+    // stands for both): only such a draft can be discarded, and its credential sets go with it.
+    method: "DELETE",
+    match: /^\/providers\/me\/tool-bindings\/[^/]+$/,
+    body: (path) => {
+      const id = idIn(path, 3) ?? "";
+      const binding = id.startsWith(DRAFT_PREFIX) ? bindingFor(id) : BINDINGS.find((known) => known.id === id);
+      if (!binding) throw new ApiError("PROVIDER_BINDING_NOT_FOUND", "No binding of yours with this id", 404, path);
+      if (binding.status !== "DRAFT" || binding.publishedVersion !== null) {
+        throw new ApiError(
+          "PROVIDER_BINDING_NOT_DISCARDABLE",
+          `Only a draft that was never published can be discarded; this one ${binding.status === "DRAFT" ? "was published" : `is ${binding.status}`}. Pause it instead.`,
+          409,
+          path,
+        );
+      }
+      demoCredentialSets.delete(id);
+      demoDiscarded.add(id);
+      return null;
     },
   },
   {
@@ -1701,48 +2071,7 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   // ── Reports ──────────────────────────────────────────────────────────────
   {
     method: "GET",
-    match: "/providers/me/traffic",
-    body: () => ({
-      from: minutesAgo(43200),
-      to: minutesAgo(0),
-      buckets: TRAFFIC_DAILY.map((calls, index) => ({
-        day: dayUtc(TRAFFIC_DAILY.length - 1 - index),
-        calls,
-        byStatus: byStatus(calls, index === TRAFFIC_DAILY.length - 1 ? 9 : 0),
-        /* No per-day latency source exists. Null, never a synthetic figure. */
-        p50LatencyMs: null,
-        p95LatencyMs: null,
-      })),
-      totalCalls: TRAFFIC_TOTAL,
-      agentBreakdown: AGENT_CALLS.map((agent) => ({
-        agentId: agent.agentId,
-        calls: agent.calls,
-        byStatus: byStatus(agent.calls),
-      })),
-    }),
-  },
-  {
-    method: "GET",
-    match: "/providers/me/quality",
-    body: () => ({
-      /*
-        The three rates carry the registry snapshot's own rolling windows (24h
-        for availability, 7d for quality) — they are NOT scoped by from/to.
-      */
-      paidQualityRate: 0.982,
-      freeQualityRate: 0.9705,
-      availabilityRate: 0.9991,
-      from: minutesAgo(43200),
-      to: minutesAgo(0),
-      verdictMix: verdictMix(),
-      totalCalls: TRAFFIC_TOTAL,
-    }),
-  },
-  {
-    method: "GET",
     match: "/providers/me/earnings",
-    /* `asset` is a CAIP-19 the money columns are denominated in. Must win. */
-    override: "always",
     body: () => ({
       groups: earningsGroups(),
       totals: earningsTotals(),
@@ -1754,7 +2083,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/reconciliation",
-    override: "always",
     body: () => {
       const totals = earningsTotals();
       const row = (cls: string, calls: number, credited: string | null, note: string) => ({
@@ -1788,7 +2116,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         platformTakeRatePercent: 10,
         platformTake: totals.platformFee,
         net: totals.earned,
-        batches: { count: 3, paid: totals.earned, reconciles: true },
       };
     },
   },
@@ -1797,29 +2124,50 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/payouts",
-    /* `chainTxRef` is an EVM transaction hash here, never a base58 signature. */
-    override: "always",
+    /*
+      `chainTxRef` is an EVM transaction hash here, never a base58 signature.
+      Rail-B redemptions, one transaction each with its calls, newest first.
+    */
     body: () =>
       page([
         {
+          id: "ple_7a20c3e1",
+          kind: "REDEMPTION",
+          amount: { ...money("0.405"), asset: DEMO_ASSET },
+          chainTxRef: "0x9c3e0d8a51b47f26e8d1c0a3b5f7e9d2c4a6b8e0f1d3c5a7b9e1f3d5c7a9b1e3",
+          calls: 1,
+          createdAt: minutesAgo(7),
+        },
+        {
+          id: "ple_6b14d2f0",
+          kind: "REDEMPTION",
+          amount: { ...money("1.215"), asset: DEMO_ASSET },
+          chainTxRef: "0x2f4a6c8e0b1d3f5a7c9e1b3d5f7a9c1e3b5d7f9a1c3e5b7d9f1a3c5e7b9d1f3a",
+          calls: 3,
+          createdAt: minutesAgo(31),
+        },
+        {
           id: "ple_5c81a04f",
-          batchId: "pb_2026-09-16-08",
+          kind: "REDEMPTION",
           amount: { ...money("52.18"), asset: DEMO_ASSET },
           chainTxRef: "0x58f09cc907edec4fd5fda8cf1d3a0f9f04661d42150a744ce90f20cf4171a71f",
+          calls: 129,
           createdAt: minutesAgo(52),
         },
         {
           id: "ple_3d07f9b2",
-          batchId: "pb_2026-09-15-19",
+          kind: "REDEMPTION",
           amount: { ...money("64.91"), asset: DEMO_ASSET },
           chainTxRef: "0x1ef5cc71b2166cbfe9971f4bff054dda0d3d2bcfb71eb18aec2a7b0e32469391",
+          calls: 160,
           createdAt: minutesAgo(1320),
         },
         {
           id: "ple_91e26cd7",
-          batchId: "pb_2026-09-12-11",
+          kind: "REDEMPTION",
           amount: { ...money("64.35"), asset: DEMO_ASSET },
           chainTxRef: "0x0555b7515f9639e142ee463706cefc42f8a8a9dad3b062c26b1675788ab5b2c2",
+          calls: 158,
           createdAt: minutesAgo(6000),
         },
       ]),
@@ -1829,7 +2177,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/providers\/me\/sla-windows\/[^/]+\/evidence$/,
-    override: "always",
     body: (path) => {
       const id = idIn(path, 3) ?? WINDOWS[0].windowId;
       const entry = windowFor(id);
@@ -1888,7 +2235,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: /^\/providers\/me\/sla-windows\/[^/]+$/,
-    override: "always",
     body: (path) => {
       const id = idIn(path, 3) ?? WINDOWS[0].windowId;
       const entry = windowFor(id);
@@ -1927,7 +2273,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   {
     method: "GET",
     match: "/providers/me/sla-windows",
-    override: "always",
     body: (_path, query) => {
       const bindingId = typeof query.bindingId === "string" ? query.bindingId : null;
       const status = typeof query.status === "string" ? query.status : null;
@@ -1940,50 +2285,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
           .slice(0, limit)
           .map((entry) => slaWindow(entry)),
       );
-    },
-  },
-  {
-    method: "GET",
-    match: /^\/providers\/me\/bindings\/[^/]+\/sla$/,
-    body: (path) => {
-      const binding = bindingFor(idIn(path, 3));
-      const open = WINDOWS.find(
-        (entry) => entry.status === "OPEN" && BINDINGS[entry.bindingIndex].id === binding.id,
-      );
-      const closed = WINDOWS.filter(
-        (entry) => entry.status === "CLOSED" && BINDINGS[entry.bindingIndex].id === binding.id,
-      );
-      const verifiedCalls = closed.reduce((total, entry) => total + entry.verifiedCalls, 0);
-      const failedCalls = closed.reduce((total, entry) => total + entry.failedCalls, 0);
-      const observed = verifiedCalls === 0 ? null : failedCalls / verifiedCalls;
-
-      return {
-        bindingId: binding.id,
-        toolId: binding.toolId,
-        currentDeclaredFailureRate: binding.slaFailureRate,
-        inFlightWindow: open
-          ? {
-              windowId: open.windowId,
-              label: open.label,
-              declaredFailureRate: binding.slaFailureRate,
-              openedAt: minutesAgo(open.openedMinutesAgo),
-              verifiedCalls: open.verifiedCalls,
-            }
-          : null,
-        measured:
-          verifiedCalls === 0
-            ? null
-            : {
-                verifiedCalls,
-                failedCalls,
-                observedFailureRate: observed,
-                confidenceInterval: interval(observed ?? 0, 0.0139),
-              },
-        effectiveThreshold: binding.slaFailureRate + 0.0181,
-        minVerifiedCalls: 200,
-        /* Cross-organization aggregates only — never another provider's name. */
-        peers: { median: 0.0241, p90: 0.0688, rank: 3, count: 17 },
-      };
     },
   },
 
@@ -2176,95 +2477,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
   // ── Slash proposal and disputes ──────────────────────────────────────────
   {
     method: "GET",
-    match: /^\/providers\/me\/slash-proposals\/[^/]+\/timeline$/,
-    body: (path) => {
-      const facts = caseFacts(idIn(path, 3));
-      const { subject } = facts;
-      const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
-      const events: { id: string; occurredAt: string; kind: string; actorType: string; actorId: string | null; summary: string; detail: object }[] = [
-        {
-          id: "ev_1",
-          occurredAt: minutesAgo(subject.closedMinutesAgo ?? 0),
-          kind: "WINDOW_CLOSED",
-          actorType: "system",
-          actorId: null,
-          summary: `${subject.label} closed · ${subject.failedCalls} failed of ${subject.verifiedCalls} verified · ${pct(facts.observed)} against your declared ${pct(facts.declared)}`,
-          detail: {},
-        },
-        {
-          id: "ev_2",
-          occurredAt: minutesAgo(facts.proposedMinutesAgo),
-          kind: "PROPOSED",
-          actorType: "system",
-          actorId: null,
-          summary: `penalty proposed · ${usd(facts.amount)}`,
-          detail: {},
-        },
-        {
-          id: "ev_3",
-          occurredAt: minutesAgo(facts.proposedMinutesAgo - 12),
-          kind: "NOTIFIED",
-          actorType: "system",
-          actorId: null,
-          summary: "delivery confirmed by email · your response clock started here",
-          detail: {},
-        },
-      ];
-      if (facts.which === 1) {
-        events.push(
-          {
-            id: "ev_4",
-            occurredAt: minutesAgo(4380),
-            kind: "ACKNOWLEDGED",
-            actorType: "provider",
-            actorId: CONSOLE_CREDENTIAL,
-            summary: "acknowledged · this moves no clock",
-            detail: {},
-          },
-          {
-            id: "ev_5",
-            occurredAt: minutesAgo(4320),
-            kind: "DISPUTE_FILED",
-            actorType: "provider",
-            actorId: CONSOLE_CREDENTIAL,
-            summary: "disputed on chain by your stake wallet",
-            detail: {},
-          },
-          {
-            id: "ev_6",
-            occurredAt: minutesAgo(2880),
-            kind: "REVIEW_ASSIGNED",
-            actorType: "operator",
-            actorId: "op_4d17",
-            summary: "reviewer assigned · we respond by the platform deadline on this case",
-            detail: {},
-          },
-        );
-      }
-      if (facts.which === 2) {
-        events.push({
-          id: "ev_4",
-          occurredAt: minutesAgo(10500),
-          kind: "EXECUTED",
-          actorType: "system",
-          actorId: null,
-          summary: `penalty taken from stake · ${usd(facts.amount)}`,
-          detail: {},
-        });
-      }
-      return {
-        events,
-        restoration: [
-          { label: "Penalty", value: usd(facts.amount), status: facts.which === 2 ? "NOT_APPLICABLE" : "ON_DECISION" },
-          { label: "Stake", value: facts.which === 2 ? `${usd(facts.amount)} taken` : "$600.00 untouched", status: "NOT_APPLICABLE" },
-          { label: "Routing", value: "unaffected throughout", status: "NOT_APPLICABLE" },
-          { label: "Window record", value: `${subject.label} annotated`, status: facts.which === 2 ? "NOT_APPLICABLE" : "ON_DECISION" },
-        ],
-      };
-    },
-  },
-  {
-    method: "GET",
     match: /^\/providers\/me\/slash-proposals\/[^/]+$/,
     body: (path) => {
       const proposalId = idIn(path, 3) ?? PROPOSAL_ID;
@@ -2344,39 +2556,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
         })),
       };
     },
-  },
-  {
-    method: "GET",
-    match: /^\/disputes\/[^/]+$/,
-    body: (path) => disputeRow(idIn(path, 1) ?? DISPUTE_ID),
-  },
-  {
-    method: "GET",
-    match: "/disputes",
-    body: () =>
-      page([
-        disputeRow(DISPUTE_ID),
-        {
-          id: "8d3b61f0-27ac-4e95-b104-5f9c2e8a3d76",
-          subjectType: "VERDICT",
-          subjectId: VERDICTS[1].id,
-          providerId: PROVIDER_ID,
-          state: "UPHELD",
-          claimType: "POLICY_DEFECT",
-          reason:
-            "The freshness rule read an offset-less timestamp as local time. The upstream field is UTC.",
-          evidence: [],
-          openedBy: CONSOLE_CREDENTIAL,
-          acknowledgedAt: minutesAgo(20160),
-          deadlineAt: minutesAgo(15840),
-          resolvedAt: minutesAgo(14400),
-          resolvedBy: "op_4d17",
-          resolutionNote: "Upheld. The rule was corrected and the call was re-settled.",
-          restoredAmount: money("0.405"),
-          createdAt: minutesAgo(20220),
-          updatedAt: minutesAgo(14400),
-        },
-      ]),
   },
 
   // ── Tool requests ────────────────────────────────────────────────────────
@@ -2488,7 +2667,6 @@ export const PROVIDER_FIXTURES: readonly DemoFixture[] = [
     method: "GET",
     match: "/agents",
     /* `agentAccount` is a CAIP-10 and must name 46630, not a Solana cluster. */
-    override: "always",
     body: () =>
       page([
         {

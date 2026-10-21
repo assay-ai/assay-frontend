@@ -7,7 +7,7 @@
  *                      Solana does today): `servesPaidCalls` is false for it.
  *                      `?rails=paid` (or `?rails=all`) goes back.
  *                      (Not `?chain=`: that already picks the escrow's chain
- *                      on `/funding/escrow`.)
+ *                      in the Funding escrow drawer.)
  *   ?tighten=1h      — the demo escrow delays a tightening (assay-evm D-21):
  *                      `tightenDelaySeconds` is 3600. Also `30m`, `90s` or a
  *                      plain number of seconds; `?tighten=0` goes back to an
@@ -77,4 +77,33 @@ export function demoFreeOnlyChain(chainId: string): boolean {
 export function demoTightenDelaySeconds(): number {
   if (!demoBuild()) return 0;
   return readSwitch("tighten", TIGHTEN_KEY, parseTightenSwitch, 0) ?? 0;
+}
+
+/*
+  ?contracts=retired — get_weather's major 1 has passed its sunset and is
+                       retired (T3), instead of deprecated with 120 days left.
+                       `?contracts=mismatch` keeps it deprecated but makes the
+                       weather listing's v2 test fail (its API has no
+                       temperature_c) and a save with the input "units"
+                       refused (the mapping never reads it).
+                       `?contracts=deprecated` goes back.
+*/
+const CONTRACTS_KEY = "assay.demo.contracts";
+
+export type DemoContracts = "retired" | "deprecated" | "mismatch";
+
+export function parseContractsSwitch(value: string | null | undefined): DemoContracts | null {
+  return value === "retired" || value === "deprecated" || value === "mismatch" ? value : null;
+}
+
+/** Whether the demo makes the weather listing fail its v2 test and refuse "units". Always false outside a demo build. */
+export function demoContractMismatch(): boolean {
+  if (!demoBuild()) return false;
+  return readSwitch("contracts", CONTRACTS_KEY, parseContractsSwitch, "deprecated") === "mismatch";
+}
+
+/** Whether the demo retires get_weather v1. Always false outside a demo build. */
+export function demoRetiredMajor(): boolean {
+  if (!demoBuild()) return false;
+  return readSwitch("contracts", CONTRACTS_KEY, parseContractsSwitch, "deprecated") === "retired";
 }

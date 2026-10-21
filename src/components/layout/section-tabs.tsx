@@ -33,36 +33,46 @@ export interface SectionTabsProps {
 export function SectionTabs({ tabs, label = "Section", activeId, linkAs: LinkComponent = Link, className }: SectionTabsProps) {
   const pathname = usePathname() ?? "";
   const active = activeId ?? activeTabFor(tabs, pathname);
+  const navRef = React.useRef<HTMLElement | null>(null);
+  // On a phone the strip scrolls sideways: bring the active tab into view.
+  React.useEffect(() => {
+    const el = navRef.current?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [active]);
 
   return (
-    <nav aria-label={label} className={cn("w-full overflow-x-auto scrollbar-none", className)}>
-      <ul className="flex w-max min-w-full items-end gap-[22px] border-b border-01 tablet:gap-[26px]">
-        {tabs.map((tab) => {
-          const selected = tab.id === active;
-          return (
-            <li key={tab.id} className="shrink-0">
-              <LinkComponent
-                href={tab.href}
-                aria-current={selected ? "page" : undefined}
-                className={cn(
-                  "-mb-px flex items-center border-b-2 pb-[10px] pt-1 text-label-sm transition-colors",
-                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
-                  selected ? "border-b-[var(--text-01)] text-01" : "border-transparent text-02 hover:text-01",
-                )}
-              >
-                {tab.label}
-                {tab.badge ? (
-                  <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px font-mono text-mono-2xs font-semibold text-on-color">
-                    {tab.badge > 99 ? "99+" : tab.badge}
-                    <span className="sr-only"> needing attention</span>
-                  </span>
-                ) : null}
-              </LinkComponent>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
+    <div className="relative w-full">
+      <nav ref={navRef} aria-label={label} className={cn("w-full overflow-x-auto scrollbar-none", className)}>
+        <ul className="flex w-max min-w-full items-end gap-[22px] border-b border-01 tablet:gap-[26px]">
+          {tabs.map((tab) => {
+            const selected = tab.id === active;
+            return (
+              <li key={tab.id} className="shrink-0">
+                <LinkComponent
+                  href={tab.href}
+                  aria-current={selected ? "page" : undefined}
+                  className={cn(
+                    "-mb-px flex items-center border-b-2 pb-[10px] pt-1 text-label-sm transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500",
+                    selected ? "border-b-[var(--text-01)] text-01" : "border-transparent text-02 hover:text-01",
+                  )}
+                >
+                  {tab.label}
+                  {tab.badge ? (
+                    <span className="ml-1.5 rounded-full bg-danger-500 px-1.5 py-px font-mono text-mono-2xs font-semibold text-on-color">
+                      {tab.badge > 99 ? "99+" : tab.badge}
+                      <span className="sr-only"> needing attention</span>
+                    </span>
+                  ) : null}
+                </LinkComponent>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+      {/* A fade at the edge says the strip scrolls; gone from tablet up, where every tab fits. */}
+      <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-[var(--bg-01)] to-transparent tablet:hidden" />
+    </div>
   );
 }
 

@@ -1,18 +1,16 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
-import { listAccountBlocks } from "@/services/operator.service";
+import { getOperatorTool } from "@/services/operator-contracts.service";
 import { formatMoney } from "@/utils/money";
 
-import { approvalTargetId, type ApprovalContext } from "./approvals";
+import { approvalTargetId, type ApprovalContext, type ApprovalToolInfo } from "./approvals";
 import { eligibleApprovers } from "./inbox";
 import { useOperatorDirectory, usePenaltyBriefs, usePenaltyNames, useProviderNames } from "./use-operator-lookups";
-
-/** The API's page ceiling. Enough to name what a pending request is about. */
-const LOOKUP_LIMIT = 100;
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * What an approval card needs besides the approval: the block and operator
@@ -31,8 +29,7 @@ export function useApprovalContext(
   const directory = useOperatorDirectory();
   const needsBlocks = rows.some((row) => row.action === "account.unblock");
   const blocksQuery = useQuery({
-    queryKey: ["operator", "blocks", "lookup"],
-    queryFn: () => listAccountBlocks({ limit: LOOKUP_LIMIT }),
+    ...operatorQueries.blocksLookup(),
     enabled: needsBlocks,
     retry: 0,
   });
@@ -46,6 +43,16 @@ export function useApprovalContext(
   // The same cached reads, with provider and amount apart for the confirm's money line.
   const briefs = usePenaltyBriefs(penaltyIds);
   const providers = useProviderNames();
+
+  // Contract requests name their tool and version: read each tool once.
+  const toolIds = React.useMemo(
+    () => [...new Set(rows.filter((row) => row.target.startsWith("tool:")).map((row) => approvalTargetId(row)))],
+    [rows],
+  );
+  const toolQueries = useQueries({
+    queries: toolIds.map((id) => ({ queryKey: ["operator", "tools", id], queryFn: () => getOperatorTool(id), retry: 0, staleTime: 30_000 })),
+  });
+  const toolsKey = toolQueries.map((q) => q.dataUpdatedAt).join("|");
   const penaltyParts = new Map<string, { provider: string; amount: string }>();
   briefs.forEach((brief, id) => {
     const proposal = brief.case.proposal;
@@ -61,10 +68,11 @@ export function useApprovalContext(
       asset: withLimit ? { asset: withLimit.asset, decimals: withLimit.decimals } : null,
       penalties,
       penaltyParts,
+      tools: toolInfo(toolQueries.map((q) => q.data)),
     };
     // `penalties` is rebuilt every render; its content is `penaltiesKey`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [blocksQuery.data, directory.operators, me.authorityLimit, penaltiesKey]);
+  }, [blocksQuery.data, directory.operators, me.authorityLimit, penaltiesKey, toolsKey]);
 
   const approversFor = React.useCallback(
     (approval: OperatorApproval) =>
@@ -75,4 +83,15 @@ export function useApprovalContext(
   );
 
   return { context, approversFor, nameOf: directory.nameOf };
+}
+
+function toolInfo(tools: readonly (Awaited<ReturnType<typeof getOperatorTool>> | undefined)[]): Map<string, ApprovalToolInfo> {
+  const map = new Map<string, ApprovalToolInfo>();
+  for (const tool of tools) {
+    if (!tool) continue;
+    const semvers = new Map(tool.versions.map((v) => [v.version, v.semver] as const));
+    if (tool.draft) semvers.set(tool.draft.version, tool.draft.nextSemver);
+    map.set(tool.id, { name: tool.name, semvers, draft: tool.draft ? { version: tool.draft.version, bump: tool.draft.bump } : null });
+  }
+  return map;
 }

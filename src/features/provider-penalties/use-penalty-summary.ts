@@ -35,7 +35,9 @@ export interface PenaltySummary {
  */
 export function usePenaltySummary(): PenaltySummary {
   const penalties = usePenalties({ withCases: "open" });
-  const needsAction = penalties.rows
+  // Last-known rows (`updating`) are for reading only: a penalty disputed
+  // elsewhere since must not be counted again in the badge or Needs action.
+  const needsAction = (penalties.updating ? [] : penalties.rows)
     .filter((row) => row.canDispute)
     .map((row) => ({
       id: row.id,
@@ -45,5 +47,5 @@ export function usePenaltySummary(): PenaltySummary {
       executableAt: row.executableAt,
       href: routes.penalty(row.id),
     }));
-  return { isLoading: penalties.isLoading, needsAction, count: needsAction.length };
+  return { isLoading: penalties.isLoading || penalties.updating, needsAction, count: needsAction.length };
 }

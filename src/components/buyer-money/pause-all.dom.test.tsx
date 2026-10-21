@@ -27,7 +27,6 @@ const policy = (paused: boolean): SpendPolicy =>
     maxCallsPerHour: null,
     maxCallsPerMinute: null,
     maxSpendPerHour: null,
-    allowedTools: null,
     requireApprovalAbove: null,
     paused,
     changedBy: null,

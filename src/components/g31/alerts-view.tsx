@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Inbox, List, Mail, MessageSquare, Pencil, Smartphone, Webhook } from "lucide-react";
+import Link from "next/link";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import {
   ALERT_PRESETS,
-  BUYER_EVENTS,
+  customiseEvents,
   CHANNEL_NAME,
   availableChannels,
   destinationError,
@@ -36,6 +37,11 @@ import {
   type AlertPreset,
   type ExternalChannel,
 } from "@/features/buyer/alert-presets";
+import { useBalancesQuery } from "@/components/buyer-money/use-buyer-money";
+import { groupAlerts, idsToMarkOnOpen, readableBody } from "@/features/buyer/alert-model";
+import { contractNoticeText, isContractNoticeEvent, readContractNotice } from "@/features/toolsets/contract-notices";
+import { ContractNoticeFix } from "@/components/toolsets/contract-notice-fix";
+import { readUpdateNotice, updateNoticeText } from "@/features/toolsets/sharing";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { plainError } from "@/libs/plain-language";
 import { ApiError } from "@/libs/ApiClient";
@@ -54,8 +60,11 @@ import {
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
 
+import { presentAlert, useAlertLimitContext, useMarkAlertsRead } from "@/components/layout/alert-entry";
+
 import { AGGREGATION_LABEL, NOTIFICATION_CATALOGUE, NOTIFICATION_EVENT_LABEL } from "./notification-catalogue";
 import { PageHeader, StatusPill } from "./chrome";
+import { providerQueries } from "@/features/provider-home/queries";
 
 /**
  * Alert settings (`/alerts`): where alerts go and what you are told about.
@@ -71,11 +80,31 @@ import { PageHeader, StatusPill } from "./chrome";
 interface Notification {
   id: string;
   event: string;
+  payload?: unknown;
+  subjectType?: string | null;
+  subjectId?: string | null;
   severity: "INFO" | "WARNING" | "CRITICAL";
   title: string;
   body: string;
   readAt: string | null;
   createdAt: string;
+}
+
+/**
+ * The body as a person reads it: a tool-set update or a contract notice is
+ * told from its payload; any other body only when it is written for a person
+ * (`readableBody`), so an older notice never shows an id or an enum code.
+ */
+function alertBody(item: Notification): string | null {
+  if (item.event === "toolset.update_available") {
+    const notice = readUpdateNotice(item.payload);
+    if (notice) return updateNoticeText(notice);
+  }
+  if (isContractNoticeEvent(item.event)) {
+    const notice = readContractNotice(item.payload);
+    if (notice) return contractNoticeText(item.event, notice);
+  }
+  return readableBody(item.body);
 }
 
 const SEVERITY_TONE = {
@@ -137,6 +166,48 @@ function DeliveryRow({ delivery }: { delivery: NotificationDeliveryDto }) {
   );
 }
 
+/**
+ * A row's next steps in See all: its action, and "Mark read" while it is
+ * unread — the way to clear any alert by hand, an open risk included.
+ */
+export function AlertRowActions({
+  action,
+  contractPayload,
+  unread,
+  marking,
+  onMarkRead,
+}: {
+  action: { label: string; href: string } | null;
+  /** A contract notice's payload, for its in-place fix. */
+  contractPayload?: unknown;
+  unread: boolean;
+  marking: boolean;
+  onMarkRead: () => void;
+}) {
+  if (!action && !unread) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      {action ? (
+        <Link href={action.href} className="min-h-10 self-start content-center text-label-13 font-semibold text-primary-600 hover:underline">
+          {action.label}
+        </Link>
+      ) : null}
+      {action && contractPayload !== undefined ? <ContractNoticeFix payload={contractPayload} /> : null}
+      {unread ? (
+        <button
+          type="button"
+          data-testid="alert-mark-read"
+          disabled={marking}
+          onClick={onMarkRead}
+          className="min-h-10 content-center text-label-13 text-02 hover:text-01 hover:underline disabled:opacity-60"
+        >
+          Mark read
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 const URGENCY: Record<string, string> = { CRITICAL: "Urgent", WARNING: "Warning", INFO: "Info" };
 
 export function AlertsView() {
@@ -161,6 +232,41 @@ export function AlertsView() {
     retry: false,
     queryFn: () => listNotifications({ limit: 25 }) as Promise<{ items: Notification[] }>,
   });
+  const limits = useAlertLimitContext(logOpen);
+  const alertGroups = React.useMemo(() => groupAlerts(feed.data?.items ?? []), [feed.data]);
+
+  // Opening the list is reading it: what it shows is marked read — except
+  // open risks (balance, keys, a pending withdrawal, …), which stay on Overview
+  // until dismissed there or cleared. `idsToMarkOnOpen` asks once per id and
+  // retries a failure once, so a re-render never repeats a request.
+  const markRead = useMarkAlertsRead();
+  const { mutate: markIds } = markRead;
+  const attempts = React.useRef(new Map<string, number>());
+  // A cleared balance alert is marked too: the balances as read now, or unknown (then never).
+  const balancesQuery = useBalancesQuery();
+  const balances = React.useMemo(
+    () => (balancesQuery.isSuccess ? (balancesQuery.data.balances ?? []) : null),
+    [balancesQuery.isSuccess, balancesQuery.data],
+  );
+  React.useEffect(() => {
+    if (!logOpen) return;
+    const ids = idsToMarkOnOpen(alertGroups, attempts.current, { now: Date.now(), balances });
+    if (ids.length === 0) return;
+    for (const id of ids) attempts.current.set(id, (attempts.current.get(id) ?? 0) + 1);
+    markIds(ids);
+  }, [logOpen, alertGroups, balances, markIds]);
+  // "Mark read" on one row: any alert, open risks included, by hand.
+  const [markingRow, setMarkingRow] = React.useState<string | null>(null);
+  const markRow = (ids: readonly string[], rowId: string) => {
+    setMarkingRow(rowId);
+    markIds(ids, {
+      onSuccess: (failed) => {
+        if (failed.length > 0) toast.error("It could not be marked read. Try again in a moment.");
+      },
+      onError: () => toast.error("It could not be marked read. Try again in a moment."),
+      onSettled: () => setMarkingRow(null),
+    });
+  };
 
   const deliveriesQuery = useQuery({
     queryKey: ["notification-deliveries", expandedId],
@@ -194,6 +300,11 @@ export function AlertsView() {
     for (const row of preferencesQuery.data ?? []) map.set(`${row.event}|${row.channel}`, row.enabled);
     return map;
   }, [preferencesQuery.data]);
+
+  // A provider organization also sees its provider-side alerts under Customise. Same
+  // signal and key as the provider console: `GET /providers/me` answers (404 = not a provider).
+  const providerMe = useQuery(providerQueries.me());
+  const isProvider = providerMe.isSuccess;
 
   const isEnabled = React.useCallback(
     (event: NotificationEvent, channel: NotificationChannel) => preferenceOverride.get(`${event}|${channel}`) ?? true,
@@ -316,7 +427,12 @@ export function AlertsView() {
               </div>
             );
           })}
-          {available.length < EDITABLE_CHANNELS.length ? (
+          {!available.includes("EMAIL") ? (
+            <p className="text-body-xs text-03" data-testid="email-not-available">
+              Email alerts are not available yet. For now alerts reach you only in the app: the bell on every page and
+              Needs attention on Overview.
+            </p>
+          ) : available.length < EDITABLE_CHANNELS.length ? (
             <p className="text-body-xs text-03">More channels are coming.</p>
           ) : null}
         </PanelBody>
@@ -377,7 +493,7 @@ export function AlertsView() {
               Customise: every alert, how urgent and how often
             </summary>
             <ul className="flex flex-col px-4 pb-3 tablet:px-5">
-              {BUYER_EVENTS.filter((event) => NOTIFICATION_CATALOGUE[event].hasProducer).map((event) => {
+              {customiseEvents(Object.keys(NOTIFICATION_CATALOGUE) as NotificationEvent[], { provider: isProvider }).filter((event) => NOTIFICATION_CATALOGUE[event].hasProducer).map((event) => {
                 const def = NOTIFICATION_CATALOGUE[event];
                 return (
                   <li key={event} className="flex flex-col gap-1 border-t border-01 py-2.5 first:border-t-0 tablet:flex-row tablet:items-center tablet:gap-3">
@@ -454,18 +570,24 @@ export function AlertsView() {
         <SheetContent className="tablet:max-w-[640px]">
           <SheetHeader>
             <SheetTitle>Recent alerts</SheetTitle>
-            <SheetDescription>Newest first. Open one to see where it was delivered.</SheetDescription>
+            <SheetDescription>
+              Newest first. Opening this list marks them read, except alerts about a risk that may still be open (balance,
+              keys, a pending withdrawal, a paused agent, an unusual call pattern, a spend limit reached, a failed deposit): those stay in Needs attention on Overview until you dismiss them,
+              mark them read here, or the condition clears. Open one to see where it was delivered.
+            </SheetDescription>
           </SheetHeader>
           <div className="flex w-full flex-col gap-3 px-[18px] pb-6 pt-4">
             {feed.isPending ? (
               <PageState kind="loading" rows={4} label="Loading recent alerts" />
             ) : feed.isError ? (
               <PageState kind="error" bare description="Recent alerts could not be loaded." onRetry={() => void feed.refetch()} />
-            ) : (feed.data?.items.length ?? 0) === 0 ? (
+            ) : alertGroups.length === 0 ? (
               <p className="text-body-13 text-02">No alerts yet.</p>
             ) : (
-              feed.data?.items.map((item) => {
+              alertGroups.map(({ note: item, ids, unread }) => {
                 const expanded = expandedId === item.id;
+                const { title, action } = presentAlert(item, limits);
+                const body = alertBody(item);
                 return (
                   <div key={item.id} className="flex w-full flex-col gap-1.5 rounded-lg border border-01 bg-02 p-3.5">
                     <button
@@ -475,7 +597,7 @@ export function AlertsView() {
                       onClick={() => setExpandedId(expanded ? null : item.id)}
                     >
                       <StatusPill label={URGENCY[item.severity] ?? item.severity} tone={SEVERITY_TONE[item.severity] ?? "neutral"} />
-                      <span className="min-w-0 flex-1 truncate text-label-sm text-01">{item.title}</span>
+                      <span className="min-w-0 flex-1 truncate text-label-sm text-01">{title}</span>
                       <span className="text-body-xs text-03">
                         <UtcTime value={item.createdAt} />
                       </span>
@@ -485,7 +607,14 @@ export function AlertsView() {
                         <ChevronRight aria-hidden="true" className="size-3.5 shrink-0 text-03" />
                       )}
                     </button>
-                    <p className="text-body-13 text-02">{item.body}</p>
+                    {body ? <p className="text-body-13 text-02">{body}</p> : null}
+                    <AlertRowActions
+                      action={action}
+                      contractPayload={isContractNoticeEvent(item.event) ? item.payload : undefined}
+                      unread={unread}
+                      marking={markingRow === item.id}
+                      onMarkRead={() => markRow(ids, item.id)}
+                    />
                     {expanded ? (
                       <div className="flex flex-col gap-1.5 border-t border-01 pt-2">
                         {deliveriesQuery.isPending ? (

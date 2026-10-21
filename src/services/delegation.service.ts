@@ -12,15 +12,13 @@ import { api } from "./api";
  * `/escrow/delegates` — agent payment delegation. Every route is the payer's
  * (HUMAN session only); the agent's own credential is refused.
  *
- * `version` is a cache-buster, for the reason `agents-view.tsx` gives at length:
- * the API answers GETs with `Cache-Control: private, max-age=10`, so a list read
- * right after a revoke would otherwise come from the browser's cache and show
- * the delegate as still authorised.
+ * The same URL on every read. It used to carry a `v` cache-buster from when
+ * the API answered `max-age=10` and a read right after a revoke came from the
+ * browser's cache; it answers `private, no-cache` now, so the browser
+ * revalidates every read, and a fresh URL per read only defeated the caches.
  */
-export function listDelegates(version = 0): Promise<ListEscrowDelegates> {
-  return api.get<ListEscrowDelegates>("/escrow/delegates", {
-    v: String(version),
-  });
+export function listDelegates(): Promise<ListEscrowDelegates> {
+  return api.get<ListEscrowDelegates>("/escrow/delegates");
 }
 
 export function createDelegateIntent(

@@ -1,6 +1,8 @@
 import type { StageCheck, StageCheckStatus } from "@/components/ui/stage-list";
+import { formatDateTime } from "@/libs/utc-time";
 import { formatMoney, toDecimal } from "@/utils/money";
 import { presentVerdict } from "@/utils/verdict";
+import { refundPromiseLive } from "./refund-promise";
 
 import type { Receipt, ReceiptStage, WireStageName, WireStageStatus } from "./wire";
 
@@ -33,10 +35,12 @@ export const STAGE_TERM: Partial<Record<WireStageName, "cross-check" | "relevanc
 };
 
 /**
- * Eight wire statuses collapse onto the four the design draws.
+ * Eight wire statuses collapse onto the five the design draws.
  *
  * The load-bearing half of this map is the default: ANY status that is not
- * literally PASSED, FAILED or SKIPPED becomes "not reached". A stage that did
+ * literally PASSED, FAILED, SKIPPED or NOT_APPLICABLE becomes "not reached".
+ * NOT_APPLICABLE is its own word ("does not apply"): the tool declares no such
+ * check, so nothing was cut short. A stage that did
  * not run must never render as a tick — the API says so itself ("`passed` is
  * the only status that may ever be rendered as a tick"), and on this product a
  * false tick is a claim that money was checked when it was not.
@@ -46,7 +50,7 @@ const STAGE_STATUS: Record<WireStageStatus, StageCheckStatus> = {
   FAILED: "failed",
   SKIPPED: "not-sampled",
   NOT_REACHED: "not-reached",
-  NOT_APPLICABLE: "not-reached",
+  NOT_APPLICABLE: "not-applicable",
   NOT_IMPLEMENTED: "not-reached",
   MISAPPLIED: "not-reached",
   UNAVAILABLE: "not-reached",
@@ -68,6 +72,15 @@ const STAGE_FALLBACK_NOTE: Partial<Record<WireStageName, string>> = {
 
 /** The API's own note on a stage that did not run — true, but it said nothing about THIS call. */
 const GENERIC_NOT_REACHED = "checks stop at the first failure";
+
+/** A stage on a call that has no check result at all (not charged for another reason, or served unchecked). */
+const NO_CHECK_RESULT_NOTE = "no check result was recorded";
+
+/** The same sentence, ignoring case and a final full stop: the API sends it as note AND detail. */
+function sameSentence(a: string | undefined | null, b: string | undefined | null): boolean {
+  const norm = (text: string) => text.trim().replace(/\.$/, "").toLowerCase();
+  return Boolean(a && b && norm(a) === norm(b));
+}
 
 /**
  * The receipt's stage rows, told as one story with the rest of the receipt.
@@ -92,6 +105,10 @@ export function toStageChecks(receipt: Receipt): StageCheck[] {
     return { stage, status, detail };
   });
   const anyFailed = rows.some((row) => row.status === "failed");
+  // Nothing ran, nothing failed, and no not-charged story explains it: the
+  // call has no check result. The API's "checks stop at the first failure"
+  // read there as if a check had failed (V1-8).
+  const noneRan = !rows.some((row) => row.status === "passed" || row.status === "failed");
 
   return rows.map(({ stage, status, detail }) => {
     const sampledNote =
@@ -100,10 +117,22 @@ export function toStageChecks(receipt: Receipt): StageCheck[] {
         : undefined;
     let note = sampledNote ?? stage.note ?? STAGE_FALLBACK_NOTE[stage.stage];
     if (status === "not-reached") {
-      note = anyFailed ? "not run: an earlier check failed" : story ? story.notRunNote : note;
+      note = anyFailed
+        ? "not run: an earlier check failed"
+        : story
+          ? story.notRunNote
+          : noneRan
+            ? NO_CHECK_RESULT_NOTE
+            : note;
       if (detail === GENERIC_NOT_REACHED) detail = undefined;
     }
-    if (detail && note && detail.toLowerCase() === note.toLowerCase()) detail = undefined;
+    // "does not apply" says it all: the API's "this check does not apply to
+    // this tool", sent as both note and detail, would repeat it twice more.
+    if (status === "not-applicable") {
+      if (note && /does not apply/i.test(note)) note = undefined;
+      if (detail && /does not apply/i.test(detail)) detail = undefined;
+    }
+    if (sameSentence(detail, note)) detail = undefined;
 
     return {
       id: stage.stage,
@@ -314,6 +343,8 @@ export const STATE_CARD_ORDER = [
  */
 export function chargedHeadline(receipt: Receipt): string {
   const amount = formatMoney(receipt.chargedPrice, { decimals: 4 });
+  // No check result: say so, never "No result recorded" (which reads as "no data came back").
+  if (chargedCheck(receipt) === "UNCHECKED") return `Charged ${amount}. ${UNCHECKED_SENTENCE}`;
   const shown = presentVerdict(receipt.verdict?.status ?? null).shownAs;
   const sentence = shown.endsWith(".") ? shown : `${shown}.`;
   return `Charged ${amount}. ${sentence}`;
@@ -375,6 +406,41 @@ export function samplingExplainerCopy(
   };
 }
 
+/* ------------------------------------------------ what was checked */
+
+/**
+ * What the checks said about a charged call, the one fact the headline, the
+ * money strip and the timeline all hang on:
+ *  - `PASSED`: a check ran and passed, or the verdict is a pass with stages
+ *    that ran (or none sent);
+ *  - `UNCHECKED`: no check passed, and no verdict was recorded or no check
+ *    ran at all (every stage not reached, not sampled or not applicable). The
+ *    call was served and charged, but nothing may say "Check passed";
+ *  - `CHECKED`: a verdict other than a pass, with no stage that passed.
+ *
+ * The stages decide first: a passed stage is drawn as a tick in the checks
+ * panel, so the headline must not say "no check result" beside it.
+ */
+export type ChargedCheck = "PASSED" | "UNCHECKED" | "CHECKED";
+
+export function chargedCheck(receipt: Pick<Receipt, "verdict" | "stages">): ChargedCheck {
+  const verdict = receipt.verdict?.status ?? null;
+  const statuses = (receipt.stages ?? []).map(stageStatus);
+  const ran = statuses.some((status) => status === "passed" || status === "failed");
+  if (statuses.includes("passed")) return "PASSED";
+  if (verdict === null || (statuses.length > 0 && !ran)) return "UNCHECKED";
+  return verdict === "PASS" ? "PASSED" : "CHECKED";
+}
+
+const UNCHECKED_SENTENCE = "Served; no check result was recorded for this call.";
+
+/** The money strip's middle step on a charged call. */
+const CHARGED_STEP: Record<ChargedCheck, ReceiptFlowNode> = {
+  PASSED: { label: "Check passed", tone: "success" },
+  UNCHECKED: { label: "Served (not checked)", tone: "neutral" },
+  CHECKED: { label: "Checked", tone: "neutral" },
+};
+
 /* ------------------------------------------------------------ money flow */
 
 export interface ReceiptFlowNode {
@@ -414,7 +480,7 @@ export function receiptFlow(receipt: Receipt, state: ReceiptState): ReceiptFlowN
   const chargedSomething = receipt.chargedPrice.amount !== "0";
   const step =
     state === "CHARGED"
-      ? { label: "Check passed", tone: "success" as const }
+      ? CHARGED_STEP[chargedCheck(receipt)]
       : !chargedSomething && isFinalNotChargedReceipt(receipt)
         ? notChargedStory(receipt).flowStep
         : OUTCOME_STEP[state];
@@ -427,17 +493,178 @@ export function receiptFlow(receipt: Receipt, state: ReceiptState): ReceiptFlowN
 /**
  * Whether the relevance stage was reached on this call — it ran, or it was
  * considered and not sampled. Only then does the sampling explanation belong
- * on the receipt; an expired, voided or errored call never got that far.
+ * on the receipt; an expired, voided or errored call never got that far, and
+ * a tool that declares no relevance check has nothing to explain.
  */
 export function relevanceReached(receipt: Receipt): boolean {
   const semantic = receipt.stages.find((s) => s.stage === "SEMANTIC");
   if (!semantic) return false;
-  return stageStatus(semantic) !== "not-reached";
+  const status = stageStatus(semantic);
+  return status !== "not-reached" && status !== "not-applicable";
 }
 
 /** A not-charged outcome that is final (not still checking, not charged). */
 export function isFinalNotCharged(state: ReceiptState, receipt: Receipt): boolean {
   return state !== "CHECKING" && receipt.chargedPrice.amount === "0";
+}
+
+/* ------------------------------------------------------- the one story */
+
+/**
+ * Where this call's reports leave its money: `open` for a report covered by
+ * the refund guarantee that is being decided (the payment stays held),
+ * `closed` for any other report, or `none`.
+ */
+export type ReceiptReportState = "none" | "open" | "closed";
+
+/** What the timeline needs besides the receipt. */
+export interface ReceiptTimelineOptions {
+  now?: number;
+  /** The closing row of a debt or a forfeit, which replaces the ordinary one. */
+  collectionClosing?: ReceiptTimelineRow;
+  /** The buyer's reports on this call (`none` when unknown). */
+  report?: ReceiptReportState;
+}
+
+/** One timeline row before it is stamped: an instant, not a formatted time. */
+export interface ReceiptTimelineRow {
+  at: string;
+  label: string;
+  meta?: string;
+  tone: "neutral" | "primary" | "success" | "teal";
+}
+
+/**
+ * The receipt, told once. The headline, the money strip, the check rows and
+ * the timeline all read from here, so they cannot disagree: a call charged
+ * with no check result never shows "Check passed", and a charged call never
+ * closes on "not charged".
+ *
+ * `collectionClosing` is the closing row of a debt or a forfeit, which needs
+ * the debts list (`receipt-collection.ts`); it replaces the ordinary one.
+ */
+export interface ReceiptStory {
+  state: ReceiptState;
+  /** The charged headline, on a CHARGED call only. */
+  chargedHeadline: string | null;
+  /** The not-charged story, on a finished call that was not charged. */
+  notCharged: NotChargedStory | null;
+  flow: ReceiptFlowNode[];
+  checks: StageCheck[];
+  timeline: ReceiptTimelineRow[];
+}
+
+export function receiptStory(
+  receipt: Receipt,
+  state: ReceiptState = deriveReceiptState(receipt),
+  options: ReceiptTimelineOptions = {},
+): ReceiptStory {
+  return {
+    state,
+    chargedHeadline: state === "CHARGED" ? chargedHeadline(receipt) : null,
+    notCharged: state !== "CHECKING" && isFinalNotChargedReceipt(receipt) ? notChargedStory(receipt) : null,
+    flow: receiptFlow(receipt, state),
+    checks: toStageChecks(receipt),
+    timeline: receiptTimeline(receipt, state, options),
+  };
+}
+
+/**
+ * The timeline rows: made, held, checked, how it closed, and on a charged
+ * call the 1-hour hold — when the refundable hour ends and when the payment
+ * goes to the provider. The closing row reads `chargedPrice`: a charged call
+ * closes on "Charged", whichever of `settledAt` or `holdReleasedAt` dates it.
+ */
+export function receiptTimeline(
+  receipt: Receipt,
+  state: ReceiptState,
+  { now = Date.now(), collectionClosing, report = "none" }: ReceiptTimelineOptions = {},
+): ReceiptTimelineRow[] {
+  const rows: ReceiptTimelineRow[] = [
+    { at: receipt.createdAt, label: "Call made", tone: "neutral" },
+    { at: receipt.createdAt, label: "Money held", meta: price(receipt), tone: "primary" },
+  ];
+  if (receipt.evaluatedAt) rows.push({ at: receipt.evaluatedAt, label: "Result checked", tone: "neutral" });
+
+  const closedAt = receipt.settledAt ?? receipt.holdReleasedAt ?? null;
+  const chargedSomething = receipt.chargedPrice.amount !== "0";
+  if (collectionClosing) {
+    rows.push(collectionClosing);
+  } else if (closedAt && state !== "CHECKING") {
+    rows.push(
+      chargedSomething
+        ? { at: closedAt, label: "Charged", meta: charged(receipt), tone: "success" }
+        : {
+            at: closedAt,
+            label: state === "EXPIRED" ? "Did not finish in time, hold released" : "Hold released",
+            meta: "not charged",
+            tone: "teal",
+          },
+    );
+  }
+
+  if (state === "CHARGED" && chargedSomething) rows.push(...holdRows(receipt, now, report));
+  return rows;
+}
+
+/**
+ * The 1-hour hold after a charge, as timeline rows, in time order.
+ *
+ * Neither row claims more than the receipt knows:
+ *  - the hour is "Refundable" only while the backend says a report now is
+ *    refunded in full (`refundableIfReportedNow`), or for a report the
+ *    guarantee covers (`report === "open"`); otherwise it is just "Hold ends"
+ *    (wave-1 audit I1);
+ *  - the payment's release is an expectation read from the clock, never
+ *    "Paid": collection waits while a report is open, and for a blocked party
+ *    or a retry. While a report is open the money is held for it.
+ */
+function holdRows(receipt: Receipt, now: number, report: ReceiptReportState): ReceiptTimelineRow[] {
+  const rows: ReceiptTimelineRow[] = [];
+  const reportable = Boolean(receipt.disputeFilingClosesAt);
+  const windowEnds = receipt.disputeWindowEndsAt ?? null;
+  if (windowEnds) {
+    const open = now < Date.parse(windowEnds);
+    const refundable = report === "open" || (report === "none" && refundPromiseLive(receipt, now));
+    if (!reportable) {
+      rows.push({ at: windowEnds, label: open ? "Hold ends" : "Hold ended", tone: "neutral" });
+    } else if (open && refundable) {
+      rows.push({
+        at: windowEnds,
+        label: "Refundable until then",
+        meta: report === "none" ? "report a bad result for a full refund" : "you reported it",
+        tone: "primary",
+      });
+    } else if (open) {
+      rows.push({ at: windowEnds, label: "Hold ends", ...(report === "none" ? {} : { meta: "you reported it" }), tone: "neutral" });
+    } else {
+      rows.push({ at: windowEnds, label: "Refundable hour ended", ...(report === "none" ? {} : { meta: "you reported it" }), tone: "neutral" });
+    }
+  }
+  const collectable = receipt.collectableAt ?? null;
+  if (collectable) {
+    if (report === "open") {
+      rows.push({ at: collectable, label: "Held for your report until it is decided", meta: charged(receipt), tone: "primary" });
+    } else {
+      rows.push({
+        at: collectable,
+        label: now >= Date.parse(collectable) ? "Released to the provider" : "Goes to the provider after the hold",
+        meta: charged(receipt),
+        tone: "neutral",
+      });
+    }
+  }
+  return rows.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
+}
+
+/**
+ * "Refundable until 18:58 UTC", the shared wording for the 1-hour hold, or
+ * null once it has ended (or when the call has none).
+ */
+export function refundableUntil(receipt: Pick<Receipt, "disputeWindowEndsAt">, now: number = Date.now()): string | null {
+  const ends = receipt.disputeWindowEndsAt ?? null;
+  if (!ends || now >= Date.parse(ends)) return null;
+  return `Refundable until ${formatDateTime(ends, { now, midSentence: true })}`;
 }
 
 /* ------------------------------------------------- the not-charged story */

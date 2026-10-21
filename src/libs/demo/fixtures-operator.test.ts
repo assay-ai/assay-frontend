@@ -90,8 +90,8 @@ describe("the demo clock: one session stays coherent", () => {
     const fixtures = await load();
     const base = fixtures.demoSessionBase();
     const approvals = (call(fixtures, "GET", "/operator/approvals", { status: "PENDING" }) as { items: OperatorApproval[] }).items;
-    const lattice = approvals.find((a) => a.action === "slash.suspend");
-    expect(lattice && isLiveApproval(lattice, base + 6 * 3_600_000)).toBe(true);
+    const payBack = approvals.find((a) => a.action === "slash.compensated");
+    expect(payBack && isLiveApproval(payBack, base + 6 * 3_600_000)).toBe(true);
   });
 
   it("answers a pending request past its deadline as expired, as the API does", async () => {
@@ -100,7 +100,7 @@ describe("the demo clock: one session stays coherent", () => {
     try {
       const approvals = (call(fixtures, "GET", "/operator/approvals") as { items: OperatorApproval[] }).items;
       expect(approvals.filter((a) => a.status === "PENDING")).toEqual([]);
-      expect(approvals.find((a) => a.id === "apr-suspend-1")?.status).toBe("EXPIRED");
+      expect(approvals.find((a) => a.id === "apr-comp-1")?.status).toBe("EXPIRED");
     } finally {
       vi.useRealTimers();
     }
@@ -189,5 +189,66 @@ describe("the arbiter's calls in the demo pass the signing guard unchanged", () 
     expect(() =>
       assertContractCall(built, { contract: "config", functionName: "setBlocked", args: [first.payload.account, true] }),
     ).not.toThrow();
+  });
+});
+
+describe("B11 shapes: chainStanding, cancels to sign", () => {
+  it("lists the CANCEL_REQUESTED rows Home's 'Cancels to sign' reads: one standing, one executed while it waited", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/cases", { status: "CANCEL_REQUESTED" }) as { items: OperatorCaseListRow[] }).items;
+    const records = rows.map((row) => {
+      expect(row).toMatchObject({ status: "CANCEL_REQUESTED", onChain: true });
+      return (call(fixtures, "GET", `/operator/cases/${row.proposalId}`) as OperatorCaseBrief).chainRecord;
+    });
+    expect(records.sort()).toEqual(["EXECUTED", "STANDING"]);
+  });
+
+  it("C1: the executed-while-waiting case never reads as nothing taken", async () => {
+    const fixtures = await load();
+    const base = fixtures.demoSessionBase();
+    const brief = call(fixtures, "GET", "/operator/cases/6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6") as OperatorCaseBrief;
+    const facts = caseFacts(brief, base);
+    expect(facts.executedWhileCancelWaited).toBe(true);
+    expect(brief.chainStanding).toBe(false);
+  });
+
+  it("names every blocked organization, as the server does; a wallet has no name", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/blocks") as { items: import("@/interfaces/operator").AccountBlock[] }).items;
+    for (const row of rows) {
+      if (row.subjectKind === "ORGANIZATION") expect(row.subjectName).toBeTruthy();
+      else expect(row.subjectName).toBeNull();
+    }
+  });
+
+  it("says a closed record no longer stands", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/cases") as { items: OperatorCaseListRow[] }).items;
+    const cancelled = rows.find((row) => row.status === "CANCELLED")!;
+    const brief = call(fixtures, "GET", `/operator/cases/${cancelled.proposalId}`) as OperatorCaseBrief;
+    expect(brief.chainStanding).toBe(false);
+  });
+});
+
+describe("B18 shapes: manualActions", () => {
+  it("offers only the record of the execution made while the cancel waited, and nothing on any other case", async () => {
+    const fixtures = await load();
+    const rows = (call(fixtures, "GET", "/operator/cases") as { items: OperatorCaseListRow[] }).items;
+    for (const row of rows) {
+      const brief = call(fixtures, "GET", `/operator/cases/${row.proposalId}`) as OperatorCaseBrief;
+      const offered = Object.entries(brief.manualActions ?? {})
+        .filter(([, option]) => option.allowed)
+        .map(([name]) => name);
+      expect(offered).toEqual(row.proposalId === "6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6" ? ["recordExecution"] : []);
+    }
+  });
+
+  it("queues the record for a second operator, as the API does", async () => {
+    const fixtures = await load();
+    const answer = call(fixtures, "POST", "/operator/cases/6a0f3b9e-7c21-4d58-9e04-b1c2d3e4f5a6/record-execution", {}, {
+      reasonCode: "EXECUTED_WHILE_CANCEL_WAITED",
+      note: "Read the record on the explorer: executed.",
+    }) as { approvalId: string; status: string; action: string };
+    expect(answer).toMatchObject({ status: "PENDING", action: "slash.record_execution" });
   });
 });

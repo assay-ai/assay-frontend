@@ -12,6 +12,7 @@ import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitle
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { BindingHeader, useBinding } from "@/features/provider-binding/binding-header";
 import { BuyerPreview } from "@/features/provider-binding/buyer-preview";
+import { failureSentence } from "@/features/provider-sla/failure-sentence";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { recentWindows, slaReading, WINDOW_OUTCOME, windowRange, windowRate } from "@/features/provider-sla/reading";
 import { AgentIdCell } from "@/features/provider-traffic/agent-id-cell";
@@ -249,9 +250,8 @@ function QualityContent() {
                     <span className="text-label-13 text-01">What failed</span>
                     <ul className="flex flex-col gap-1">
                       {evidence.failuresByReasonCode.map((group) => (
-                        <li key={group.key} className="flex justify-between gap-3 text-body-13">
-                          <span className="text-02">{plain(group.key)}</span>
-                          <span className="font-mono text-danger-600">{group.count}</span>
+                        <li key={group.key} className="text-body-13 text-danger-700">
+                          {failureSentence(group)}
                         </li>
                       ))}
                     </ul>
@@ -336,6 +336,7 @@ function QualityContent() {
             price={binding.price}
             freeCalls={binding.freeQuotaPerAgent}
             failureRate={binding.slaFailureRate}
+            hasCalls={windows.some((window) => window.totalCalls > 0 || window.verifiedCalls > 0)}
           />
         </>
       )}

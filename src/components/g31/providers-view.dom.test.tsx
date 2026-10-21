@@ -29,8 +29,10 @@ function row(stake: ChainStake[]): ProviderRow {
   };
 }
 
+const NAMES: Record<string, string> = { [SOLANA]: "Solana mainnet", [CHAIN_4663]: "Chain 4663" };
+
 function markup(stake: ChainStake[]): string {
-  return renderToStaticMarkup(<ProviderCard provider={row(stake)} />);
+  return renderToStaticMarkup(<ProviderCard provider={row(stake)} chainName={(id) => NAMES[id] ?? id} />);
 }
 
 /**
@@ -47,6 +49,17 @@ function stakeStat(html: string): string {
   expect(end).toBeGreaterThan(start);
   return html.slice(start, end);
 }
+
+describe("providers explorer · the failure rate, one framing", () => {
+  it("shows the share that failed over its scope, never a quality percentage", () => {
+    const html = markup([]);
+    expect(html).toContain("Failure rate");
+    expect(html).toContain("5% failed");
+    expect(html).toContain("16,000 checked calls to all their tools, last 30 days");
+    expect(html).not.toContain("95.0%");
+    expect(html).not.toContain("Quality");
+  });
+});
 
 describe("providers explorer · the stake stat, rendered", () => {
   it("renders the dash for an empty list instead of throwing", () => {
@@ -78,10 +91,35 @@ describe("providers explorer · the stake stat, rendered", () => {
     expect(stat).toContain('data-chains="2"');
     expect(stat).toContain("$90.00");
     expect(stat).toContain("$40.00");
-    expect(stat).toContain("solana:EtWT…");
-    expect(stat).toContain("eip155:4663");
+    // Chain names, never the raw CAIP-2 ids (review 2026-10-18 A P1).
+    expect(stat).toContain("Solana mainnet");
+    expect(stat).toContain("Chain 4663");
+    expect(stat).not.toContain("solana:");
+    expect(stat).not.toContain("eip155:");
     // Two chains are two different assets; adding them advertises protection
     // no single call has.
     expect(stat).not.toContain("$130.00");
+  });
+});
+
+describe("ProviderCard — whether it serves you (B16)", () => {
+  const card = (fit: Pick<ProviderRow, "chains" | "servesYou">) =>
+    renderToStaticMarkup(<ProviderCard provider={{ ...row([]), ...fit }} chainName={(id) => NAMES[id] ?? id} />).replace(/&#x27;|&#39;/g, "'");
+
+  it("an unchecked provider reads 'Can't check right now', never 'Not taking calls'", () => {
+    for (const html of [card({ chains: null, servesYou: null }), card({ chains: [], servesYou: null })]) {
+      expect(html).toContain("Can't check right now");
+      expect(html).not.toContain("Not taking calls");
+      expect(html).not.toContain("Takes no calls");
+    }
+  });
+
+  it("says when it serves you, when it takes payment elsewhere, and when it takes no calls", () => {
+    expect(card({ chains: [CHAIN_4663], servesYou: true })).toContain("Serves you");
+    const elsewhere = card({ chains: [SOLANA], servesYou: false });
+    expect(elsewhere).toContain("Doesn't take payment on your chain");
+    expect(elsewhere).toContain("Takes payment on Solana mainnet");
+    expect(card({ chains: [], servesYou: false })).toContain("Not taking calls now");
+    expect(card({})).not.toContain('data-testid="serving-chip"');
   });
 });

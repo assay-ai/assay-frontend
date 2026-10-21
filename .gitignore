@@ -64,3 +64,7 @@ scripts/.icon-update-cache.json
 
 # wrangler pages dev scratch
 /.wrangler/
+
+# Python bytecode (it embeds absolute local paths)
+__pycache__/
+*.pyc

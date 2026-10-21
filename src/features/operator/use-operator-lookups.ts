@@ -6,11 +6,12 @@ import * as React from "react";
 import { shortId } from "@/components/patterns/copy-chip";
 import type { OperatorCaseBrief, OperatorDirectoryEntry } from "@/interfaces/operator";
 import { listCatalogueProviders, type CatalogueProvider } from "@/services/catalogue.service";
-import { getOperatorCase, listOperators } from "@/services/operator.service";
+import { listOperators } from "@/services/operator.service";
 import { formatMoney } from "@/utils/money";
 
 import { penaltyPhrase } from "./approvals";
 import { operatorLabel } from "./inbox";
+import { operatorQueries } from "@/features/operator/queries";
 
 /**
  * Names for the ids the operator console shows, from endpoints the operator
@@ -32,7 +33,8 @@ export function useProviderNames(): {
   const query = useQuery({
     queryKey: ["catalogue", "providers"],
     queryFn: listCatalogueProviders,
-    staleTime: 5 * 60_000,
+    // The freshness every reader of this key uses (`useCatalogue`, the entity names).
+    staleTime: 60_000,
     retry: 0,
   });
   return React.useMemo(() => {
@@ -110,10 +112,7 @@ export function usePenaltyBriefs(ids: readonly string[]): ReadonlyMap<string, Op
   const unique = React.useMemo(() => [...new Set(ids.filter(Boolean))].slice(0, CASE_LOOKUP_MAX), [ids]);
   const results = useQueries({
     queries: unique.map((id) => ({
-      queryKey: ["operator", "case", id],
-      queryFn: () => getOperatorCase(id),
-      staleTime: 60_000,
-      retry: 0,
+      ...operatorQueries.case(id),
     })),
   });
   const map = new Map<string, OperatorCaseBrief>();
@@ -122,4 +121,22 @@ export function usePenaltyBriefs(ids: readonly string[]): ReadonlyMap<string, Op
     if (brief) map.set(id, brief);
   });
   return map;
+}
+
+/**
+ * A tool id as its name, for the operator's call-dispute queue: the standard
+ * tools of the contract editor's list. An id it does not know reads as a
+ * readable slug when it is one, else "A tool" (never a bare uuid).
+ */
+export function useOperatorToolNames(): (toolId: string | null | undefined) => string {
+  const query = useQuery(operatorQueries.tools());
+  return React.useCallback(
+    (toolId) => {
+      if (!toolId) return "A tool";
+      const known = query.data?.tools.find((t) => t.id === toolId)?.name;
+      if (known) return known;
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(toolId) ? "A tool" : toolId;
+    },
+    [query.data],
+  );
 }

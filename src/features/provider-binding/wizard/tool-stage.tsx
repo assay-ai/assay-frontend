@@ -7,7 +7,7 @@ import * as React from "react";
 import { PageState } from "@/components/patterns/page-state";
 import { StatusChip } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
-import { ToolRequestSheet } from "@/features/provider-tool-requests/request-sheet";
+import { REPLY_PROMISE, ToolRequestSheet } from "@/features/provider-tool-requests/request-sheet";
 import type { CatalogueTool, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
 import { cn } from "@/utils";
@@ -81,7 +81,7 @@ export function ToolStage({
         <PageState
           kind="empty"
           title={query ? `No tool matches “${query}”` : "No tools to list yet"}
-          description="Ask us to add it. We reply within 2 working days in your Inbox."
+          description={`Ask us to add it. ${REPLY_PROMISE}`}
           action={{ label: "Request a tool", onClick: () => setRequestOpen(true) }}
         />
       ) : (
@@ -132,7 +132,7 @@ export function ToolStage({
         <button type="button" onClick={() => setRequestOpen(true)} className="text-primary-600 underline-offset-2 hover:underline">
           Request it
         </button>
-        . We reply within 2 working days in your Inbox.
+        . {REPLY_PROMISE}
       </p>
 
       <ToolRequestSheet open={requestOpen} onOpenChange={setRequestOpen} initialName={query.trim()} />

@@ -15,6 +15,7 @@ import { Field } from "@/components/ui/field";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
+import { AuthenticationPanel } from "@/features/provider-binding/authentication/authentication-panel";
 import { noteSaved } from "@/features/provider-binding/after-publish";
 import { BindingHeader, bindingQueryKey, useBinding } from "@/features/provider-binding/binding-header";
 import { integerFromInput } from "@/features/provider-binding/chrome";
@@ -26,6 +27,7 @@ import {
   freeTermsChangeRows,
   modeOfChoice,
   onlyChanged,
+  penaltyExample,
   percentText,
   PRICE_CHOICES,
   stakeEffectOf,
@@ -35,12 +37,11 @@ import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { liveFormOf, parseLiveForm, type LiveForm } from "@/features/provider-binding/wizard/live-stage";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
-import type { ToolBindingDetail, UpdateToolBindingBody } from "@/interfaces";
+import type { BindingAuthMode, ToolBindingDetail, UpdateToolBindingBody } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { updateToolBinding } from "@/services/provider-tool-bindings.service";
-import { labelForEndpoint } from "@/utils/provider-label";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
 
@@ -85,6 +86,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
 
   const [form, setForm] = React.useState<LiveForm>(() => liveFormOf(binding, null));
   const [extra, setExtra] = React.useState<ExtraForm>(() => extraOf(binding));
+  const [authMode, setAuthMode] = React.useState<BindingAuthMode>(binding.authMode);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
@@ -121,6 +123,8 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
     else body[key] = parsedInt.value;
   }
 
+  if (authMode !== binding.authMode) body.authMode = authMode;
+
   const hasErrors = Object.keys(parsed.errors).length > 0 || Object.keys(errors).length > 0;
   const changed = Object.keys(body).length > 0;
   const pricingChanged = body.pricingMode !== undefined || body.priceAmount !== undefined || body.freeQuotaPerAgent !== undefined;
@@ -145,6 +149,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
       void queryClient.invalidateQueries({ queryKey: ["provider", "stake"] });
       setForm(liveFormOf(saved, null));
       setExtra(extraOf(saved));
+      setAuthMode(saved.authMode);
       toast.success(saved.hasUnpublishedChanges ? "Saved. Publish the changes to make them live." : "Saved");
     } catch (caught) {
       setError(caught instanceof ApiError ? plainError(caught.code) : "Your changes could not be saved. Try again.");
@@ -195,7 +200,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
             <Field
               label="Price per call"
               inputMode="decimal"
-              suffix={asset.symbol}
+              suffix="$ a call"
               value={form.price}
               disabled={readOnly}
               onChange={(event) => set({ price: event.target.value })}
@@ -257,7 +262,12 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
             disabled={readOnly}
             onChange={(event) => set({ failurePercent: event.target.value })}
             error={parsed.errors.failurePercent}
-            hint="Out of every 100 checked calls. A new value applies from the next window."
+            hint={[
+              "Out of every 100 checked calls. A new value applies from the next window.",
+              penaltyExample(parsed.price, mode, parsed.failureRate),
+            ]
+              .filter(Boolean)
+              .join(" ")}
           />
           <Field
             label="Time we wait for your API"
@@ -309,13 +319,34 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="flex flex-col gap-3 p-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:p-5">
-          <p className="min-w-0 break-all font-mono text-mono-13 text-01">{labelForEndpoint(binding.endpoint)}</p>
+          {/* The full address, here only: lists and headers show a short label (`labelForEndpoint`). */}
+          <p className="min-w-0 break-all font-mono text-mono-13 text-01">{binding.endpoint}</p>
           <Button variant="secondary" size="sm" asChild>
             <Link href={routes.bindingWizard(binding.id, "connect")}>
               Change and test again
               <ArrowRight aria-hidden="true" />
             </Link>
           </Button>
+        </PanelBody>
+      </Panel>
+
+      <Panel className="w-full" id="settings-authentication">
+        <PanelHeader>
+          <PanelTitles>
+            <PanelTitle>Authentication</PanelTitle>
+            <PanelDescription>How your API knows a request is from Assay</PanelDescription>
+          </PanelTitles>
+        </PanelHeader>
+        <PanelBody className="flex flex-col gap-3 p-4 tablet:p-5">
+          <AuthenticationPanel
+            bindingId={binding.id}
+            endpoint={binding.endpoint}
+            savedEndpoint={binding.endpoint}
+            publishedEndpoint={binding.publishedEndpoint}
+            mode={authMode}
+            onModeChange={setAuthMode}
+            readOnly={readOnly}
+          />
         </PanelBody>
       </Panel>
 

@@ -18,7 +18,7 @@ const TYPED = {
     name: "Assay Settlement",
     version: "2",
     chainId: "46630",
-    verifyingContract: "0x1D2625efD87c2fc10b8563f3F0890072845Fcf41",
+    verifyingContract: "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f",
   },
   types: {
     PayoutProof: [
@@ -69,9 +69,9 @@ describe("signProofChallenge", () => {
   it("signs the message and base58-encodes it when there is no typed data", async () => {
     const s = signer("solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1");
 
-    const signature = await signProofChallenge(s, { message: "x402 payout proof v1", typedData: null }, "PAYOUT_ADDRESS");
+    const signature = await signProofChallenge(s, { message: "assay payout proof v1", typedData: null }, "PAYOUT_ADDRESS");
 
-    expect(s.signMessage).toHaveBeenCalledWith(new TextEncoder().encode("x402 payout proof v1"));
+    expect(s.signMessage).toHaveBeenCalledWith(new TextEncoder().encode("assay payout proof v1"));
     expect(signature).toBe("Ldp");
     expect(s.signTypedData).not.toHaveBeenCalled();
   });

@@ -133,7 +133,7 @@ export function ReasonChips({
                 onClick={() => onChange(option.value)}
                 onKeyDown={onArrow}
                 className={cn(
-                  "inline-flex min-h-9 items-center rounded-full border px-3.5 py-1 text-label-13 transition-colors",
+                  "inline-flex min-h-10 items-center rounded-full border px-3.5 py-1 text-label-13 transition-colors",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 disabled:cursor-not-allowed disabled:opacity-40",
                   selected ? "border-primary-500 bg-primary-10 text-01" : "border-02 bg-01 text-02 hover:bg-02 hover:text-01",
                 )}

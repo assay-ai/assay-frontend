@@ -4,7 +4,7 @@ import type { AssayCaseIndex } from "@/features/chain-slashes/assay-match";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import { slashRecordStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 
-import { countByTab, lossOf, openPenaltyHold, openPenaltyPhrase, penaltyRowOf, penaltyTimeline, sortPenalties } from "./model";
+import { countByTab, lossOf, openPenaltyHold, openPenaltyPhrase, penaltyRowOf, penaltyTimeline, penaltyTitle, sortPenalties } from "./model";
 import { failureSentence } from "./sentences";
 
 const NOW = 1_800_000_000;
@@ -128,5 +128,21 @@ describe("lossOf", () => {
     const capped = penaltyRowOf(chainRow(1, { reserved: BigInt(10_000_000) }), ASSET, index, NOW);
     expect(lossOf(capped)?.amount).toBe("9000000");
     expect(lossOf({ ...capped, closedAs: "cancelled" })).toBeNull();
+  });
+});
+
+describe("penaltyTitle", () => {
+  const now = Date.parse("2026-10-18T00:00:00Z");
+  it("names the tool and the window, never an id", () => {
+    expect(
+      penaltyTitle({ toolName: "get_weather", window: { openedAt: "2026-10-14T15:00:00Z", closedAt: "2026-10-15T15:00:00Z" }, proposedAt: "2026-10-15T16:00:00Z", now }),
+    ).toBe("get_weather, Oct 14 – Oct 15");
+    expect(
+      penaltyTitle({ toolName: "get_weather", window: { openedAt: "2026-10-14T10:00:00Z", closedAt: "2026-10-14T15:00:00Z" }, proposedAt: "2026-10-15T16:00:00Z", now }),
+    ).toBe("get_weather, Oct 14");
+  });
+
+  it("says Penalty and the day it was proposed when it knows less", () => {
+    expect(penaltyTitle({ toolName: null, window: null, proposedAt: "2026-10-15T16:00:00Z", now })).toBe("Penalty, proposed Oct 15");
   });
 });

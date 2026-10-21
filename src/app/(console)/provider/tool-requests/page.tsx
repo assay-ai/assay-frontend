@@ -5,6 +5,8 @@ import { Send } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { PROVIDER_TOOLS_TABS } from "@/components/layout/provider-nav-config";
+import { SectionTabs } from "@/components/layout/section-tabs";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { PageState } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
@@ -46,11 +48,17 @@ export default function ToolRequestsPage() {
 
   return (
     <>
+      <SectionTabs tabs={PROVIDER_TOOLS_TABS} label="Listings" />
       <header className="flex w-full flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Tool requests</h1>
           <p className="text-body-13 text-03">
-            Missing a tool your API could provide? Ask the Assay team to add it to the catalogue. {REPLY_PROMISE}
+            Missing a tool your API could provide? Ask the Assay team to add it to the catalogue, so others can serve it
+            too and buyers get a backup. {REPLY_PROMISE} Want it today?{" "}
+            <Link href="/provider/apis" className="text-primary-600 hover:underline">
+              Publish your API
+            </Link>
+            : a new tool that only you serve.
           </p>
         </div>
         <Button icon={<Send aria-hidden="true" />} onClick={() => setOpen(true)}>

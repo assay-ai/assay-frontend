@@ -23,6 +23,8 @@ import {
   windowIdFromQuery,
   windowRange,
 } from "@/features/g30/period";
+import { NotChargedSplitLine } from "@/features/buyer/not-charged-split";
+import { readWithheld } from "@/features/buyer/wire";
 import { reconcileSentence, spendBreakdown } from "@/features/g30/spend-buckets";
 import { OwedSummaryAction } from "@/features/buyer-debt/owed-row-action";
 import { changePercent, previousTotal, rankRows, spendCsv, spendCsvFilename, type RankedRow } from "@/features/g30/spend-view";
@@ -33,7 +35,7 @@ import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
-import { getReceiptsSummary } from "@/services";
+import { getReceiptsSummary, getWithheld } from "@/services";
 import { cn } from "@/utils";
 import { formatMoney, toDecimal } from "@/utils/money";
 
@@ -147,7 +149,15 @@ export default function SpendPage() {
     retry: 0,
   });
 
+  // Why calls were not charged, for the same window: the three lines every money screen shows.
+  const withheldQuery = useQuery({
+    queryKey: ["withheld", "spend", range.from, range.to, assetPick],
+    queryFn: () => getWithheld({ from: range.from, to: range.to }),
+    retry: 0,
+  });
+
   const summary = query.data;
+  const withheld = withheldQuery.data ? readWithheld(withheldQuery.data, summary?.asset) : null;
   const labelOf = React.useCallback(
     (key: string) => {
       if (dimension.id === "tool") return names.name("tool", key);
@@ -161,7 +171,8 @@ export default function SpendPage() {
   const rows = React.useMemo(() => rankRows(summary?.groups ?? [], labelOf), [summary, labelOf]);
   const previous = React.useMemo(() => previousTotal(summary?.groups ?? []), [summary]);
   const change = summary ? changePercent(summary.totals.chargedTotal, previous) : null;
-  const freeCalls = rows.filter((r) => r.free).reduce((n, r) => n + r.calls, 0);
+  // Counted per call by the API, so the figure is the same whichever "Group by" tab is open.
+  const freeCalls = summary?.totals.freeCalls ?? 0;
   const sparkValues = React.useMemo(
     () =>
       [...(daily.data?.groups ?? [])]
@@ -270,6 +281,7 @@ export default function SpendPage() {
                 {hasOwed ? ` · ${plural(summary.totals.owedCalls, "call")} owed` : ""}
                 {freeCalls > 0 ? ` · ${plural(freeCalls, "free call")}` : ""} · {win.label.toLowerCase()}
               </p>
+              <NotChargedSplitLine withheld={withheld} />
               {/* Owed stays in the line above; here, what it stops and the way out. */}
               {hasOwed ? (
                 <OwedSummaryAction owed={formatMoney(summary.totals.owedTotal)} calls={summary.totals.owedCalls} />
@@ -320,9 +332,11 @@ export default function SpendPage() {
                   <span className="inline-flex items-center gap-1.5">
                     <span aria-hidden="true" className="size-2 rounded-sm bg-teal-500" /> Not charged
                   </span>
-                  <span className="inline-flex items-center gap-1.5">
-                    <span aria-hidden="true" className="size-2 rounded-sm bg-chart-6" /> Free
-                  </span>
+                  {freeCalls > 0 ? (
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden="true" className="size-2 rounded-sm bg-chart-6" /> Free
+                    </span>
+                  ) : null}
                 </p>
               </div>
               <Segmented value={dimensionId} onValueChange={setDimensionId} aria-label="Group by" className="inline-flex self-start rounded-md bg-03 p-0.5">

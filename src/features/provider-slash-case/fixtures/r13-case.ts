@@ -10,7 +10,6 @@ import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases"
 export const R13 = {
   proposedAt: "2026-10-15T08:36:00.000Z",
   earliestExecutionAt: "2026-10-15T08:36:00.000Z",
-  respondByAt: "2026-10-17T08:36:00.000Z",
   chainExecutableAt: "2026-10-15T09:37:00.000Z",
   chainDisputedAt: "2026-10-15T08:58:08.000Z",
 } as const;
@@ -23,27 +22,30 @@ export function clocksOf(overrides: Partial<SlashProposalClocks> = {}): SlashPro
     proposedAt: R13.proposedAt,
     notifiedAt: R13.proposedAt,
     acknowledgedAt: null,
-    respondByAt: R13.respondByAt,
-    platformDecisionDueAt: null,
     earliestExecutionAt: R13.earliestExecutionAt,
     chainExecutableAt: R13.chainExecutableAt,
     chainStatus: "PENDING",
     chainDisputedAt: null,
     chainDisputedParts: 0,
+    chainState: "PENDING",
+    chainRecords: 0,
+    cancelledRecords: 0,
+    disputeBy: R13.chainExecutableAt,
     secondsRemaining: 3_600,
     runningClock: "PROVIDER",
     ...overrides,
   };
 }
 
-/** Disputed on chain: the watcher moved the case into review, so Assay's clock runs. */
+/** Disputed on chain: frozen until the arbiter rules, so no clock of the provider's runs. */
 export const DISPUTED_CLOCKS: Partial<SlashProposalClocks> = {
   chainStatus: "DISPUTED",
   chainDisputedAt: R13.chainDisputedAt,
   chainDisputedParts: 1,
-  platformDecisionDueAt: "2026-10-16T07:58:00.000Z",
-  secondsRemaining: 82_740,
-  runningClock: "PLATFORM",
+  chainState: "DISPUTED",
+  disputeBy: null,
+  secondsRemaining: null,
+  runningClock: "NONE",
 };
 
 /** Upheld by the arbiter: Pending again, disputedAt kept, no part disputed. */
@@ -51,6 +53,7 @@ export const UPHELD_CLOCKS: Partial<SlashProposalClocks> = {
   ...DISPUTED_CLOCKS,
   chainStatus: "PENDING",
   chainDisputedParts: 0,
+  chainState: "UPHELD",
 };
 
 export function caseOf(
@@ -73,7 +76,6 @@ export function caseOf(
       appliedAmount: null,
       clocks: clocksOf(clocks),
       disputeId: extra.disputeId ?? null,
-      outcome: null,
       resolutionKind: null,
       resolvedAt: null,
       executedAt: extra.executedAt ?? null,
@@ -96,16 +98,4 @@ export function caseOf(
     priorWindows: [],
     failuresByRule: [],
   };
-}
-
-/** The visible text of a render, with every tag and attribute removed. */
-export function textOf(markup: string): string {
-  return markup
-    .replace(/<[^>]*>/g, " ")
-    .replace(/&#x27;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, "&")
-    .replace(/&#x2F;/g, "/")
-    .replace(/\s+/g, " ")
-    .trim();
 }

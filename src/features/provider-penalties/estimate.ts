@@ -10,7 +10,7 @@ import type { Money } from "@/interfaces";
  *
  * `multiplier` is `SLA_PENALTY_MULTIPLIER` (2).
  *
- * What the chain enforces on top (X402Stake `proposeSlash`/`executeSlash`):
+ * What the chain enforces on top (AssayStake `proposeSlash`/`executeSlash`):
  * each penalty is at most a fixed maximum set on chain (`penaltyAmount`), and
  * penalties take at most a set share of the stake per rolling 24 hours
  * (`slashCapBps`). Both can only lower the result, and neither is known here,

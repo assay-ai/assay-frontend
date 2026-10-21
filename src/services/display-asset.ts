@@ -7,7 +7,11 @@
  * buyer who holds several sees the first until they pick another, and the pick
  * is remembered in this browser.
  */
-import { getBalances } from "./balances.service";
+import { BALANCES_KEY, getBalances } from "./balances.service";
+import { sharedRead } from "./shared-reads";
+
+/** As fresh as the screens' own balances read (`LIVE_STALE_MS`). */
+const LIVE_READ_MS = 2_000;
 
 const STORAGE_KEY = "displayAsset";
 
@@ -50,10 +54,19 @@ export function storeDisplayAsset(asset: string): void {
   for (const listener of listeners) listener();
 }
 
-/** The assets this buyer holds, in the API's order, without duplicates. */
-export async function heldAssets(): Promise<string[]> {
-  const { balances } = await getBalances();
+/** The assets in these balance rows, in the API's order, without duplicates. */
+export function assetsOfBalances(balances: readonly { asset: string }[]): string[] {
   return [...new Set(balances.map((row) => row.asset))];
+}
+
+/**
+ * The assets this buyer holds, in the API's order, without duplicates. Read
+ * through the screens' `["balances"]` query (`sharedRead`), so it is not a
+ * `GET /balances` of its own.
+ */
+export async function heldAssets(): Promise<string[]> {
+  const { balances } = await sharedRead(BALANCES_KEY, getBalances, LIVE_READ_MS);
+  return assetsOfBalances(balances);
 }
 
 let cached: { at: number; value: Promise<string | undefined> } | null = null;

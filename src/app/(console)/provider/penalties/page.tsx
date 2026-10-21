@@ -8,6 +8,8 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { PageState } from "@/components/patterns/page-state";
+import { PROVIDER_PENALTIES_TABS } from "@/components/layout/provider-nav-config";
+import { SectionTabs } from "@/components/layout/section-tabs";
 import { Button } from "@/components/ui/button";
 import { connectedSpelling } from "@/features/chain-calls/send-contract-call";
 import { disputeStep } from "@/features/provider-penalties/dispute";
@@ -150,6 +152,7 @@ export default function PenaltiesPage() {
 
   return (
     <>
+      <SectionTabs tabs={PROVIDER_PENALTIES_TABS} label="Penalties" />
       <header className="flex w-full flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-1 basis-[16rem] flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Penalties</h1>
@@ -171,6 +174,12 @@ export default function PenaltiesPage() {
       </header>
 
       <ProviderPendingTxList kinds={["dispute"]} />
+
+      {penalties.updating ? (
+        <p role="status" className="w-full text-body-xs text-03">
+          Showing your penalties as last read. Updating from the chain…
+        </p>
+      ) : null}
 
       <div role="tablist" aria-label="Penalties" className="flex w-full gap-1 overflow-x-auto border-b border-01">
         {PENALTY_TABS.map((item) => (

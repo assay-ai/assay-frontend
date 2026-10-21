@@ -1,5 +1,3 @@
-import Decimal from "decimal.js";
-
 import type { Money } from "@/interfaces";
 import { formatDate } from "@/libs/utc-time";
 import { chainLabel } from "@/utils/chain";
@@ -74,15 +72,6 @@ export function formatPrice(money: Money | null | undefined): string {
   return formatMoney(money, { decimals: 4 });
 }
 
-/** Ratio of `used` to `cap`, 0–100, clamped. Returns null when there is no cap. */
-export function percentOf(used: Money | null | undefined, cap: Money | null | undefined): number | null {
-  if (!used || !cap) return null;
-  const capValue = toDecimal(cap);
-  if (capValue.isZero()) return null;
-  const ratio = toDecimal(used).div(capValue).mul(100).toNumber();
-  return Math.min(100, Math.max(0, ratio));
-}
-
 /**
  * "3d ago" / "just now". Deliberately coarse: the design writes durations, not
  * timestamps, in subtitles, and a second-accurate value would rerender
@@ -110,17 +99,6 @@ export function formatCount(value: number | null | undefined): string {
   return value.toLocaleString("en-US");
 }
 
-/**
- * A percentage measured on real traffic. Returns null rather than 0 when
- * nothing has been measured — a quality figure invented out of an empty
- * sample is worse than an absent one, and this product's whole claim is that
- * these numbers are observed rather than asserted.
- */
-export function formatRate(passed: number, measured: number): string | null {
-  if (measured <= 0) return null;
-  return `${((passed / measured) * 100).toFixed(1)}%`;
-}
-
 /** UTC day bounds, for the "spent today" figure the daily meter needs. */
 export function todayBounds(now = new Date()): { from: string; to: string } {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -133,16 +111,4 @@ export function monthBounds(now = new Date()): { from: string; to: string } {
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
   return { from: start.toISOString(), to: end.toISOString() };
-}
-
-/**
- * `a − b` in minor units, staying inside decimal.js the whole way. Both sides
- * must share a scale, which every Money on this API does within one asset.
- */
-export function subtractMoney(a: Money, b: Money): Money {
-  return {
-    amount: new Decimal(a.amount || "0").minus(new Decimal(b.amount || "0")).toFixed(0),
-    asset: a.asset,
-    decimals: a.decimals,
-  };
 }

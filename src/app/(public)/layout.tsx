@@ -1,39 +1,23 @@
-"use client";
+import * as React from "react";
 
-import Link from "next/link";
-
-import { useSignedIn } from "@/components/explorer/start-free";
-import { PublicFooter } from "@/components/layout/public-footer";
-import { PublicTopBar, publicNavItems } from "@/components/layout/public-top-bar";
-import { TestnetChip } from "@/components/patterns/testnet-chip";
-import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
+import { PublicShell } from "@/components/layout/public-shell";
 
 /**
- * The public shell: the public top bar over each page. Each page owns its own
- * body frame (padding differs between a full-bleed hero and a list page).
+ * The public shell around every public page (`PublicShell`: the public top
+ * bar, the page, the public footer).
  *
  * | Screen                         | Route                               |
  * |--------------------------------|-------------------------------------|
  * | How it works                   | `/how-it-works`                     |
- * | Explorer (tools, proof feed)   | `/catalogue`                        |
+ * | Tools (tools, proof feed)      | `/catalogue`                        |
  * | Tool / provider page           | `/catalogue/view`, `/catalogue/provider` |
  * | Live demo (when configured)    | `/demo`                             |
  * | For providers (+ calculator)   | `/why-list-here`                    |
  * | Reserves                       | `/reserves`                         |
+ *
+ * None of these needs a session, and a 401 never sends them to sign-in
+ * (`isPublicPath` in `providers/buyer-session.ts` lists them).
  */
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
-  const { demo } = usePublicFeatures();
-  const signedIn = useSignedIn();
-  return (
-    <div className="flex min-h-screen flex-col bg-02">
-      <PublicTopBar
-        linkAs={Link}
-        navItems={publicNavItems({ demo })}
-        signedIn={signedIn}
-        badge={<TestnetChip compact />}
-      />
-      <main className="flex w-full flex-1 flex-col">{children}</main>
-      <PublicFooter linkAs={Link} signedIn={signedIn} />
-    </div>
-  );
+  return <PublicShell>{children}</PublicShell>;
 }

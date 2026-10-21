@@ -56,15 +56,13 @@ export * from "./provider-tool-bindings.service";
 // would have been a third.
 export * from "./provider-verdicts.service";
 export * from "./provider-evidence.service";
-export * from "./provider-disputes.service";
 export * from "./provider-policy-changes.service";
 export * from "./provider-tool-requests.service";
 export * from "./provider-slash-cases.service";
 
-// The operator console. None of its eleven names collides
-// with anything already exported here; they are all operator-scoped verbs
-// (`claimCase`, `decideCase`, `secondCase`, …) reached through a second
-// client. `operator-api.ts` itself stays out of this barrel on purpose: the
+// The operator console. None of its names collides with anything already
+// exported here; they are all operator-scoped verbs (`createCancelIntent`,
+// `reproposeCase`, …) reached through a second client. `operator-api.ts` itself stays out of this barrel on purpose: the
 // operator bearer token is a separate authentication path, and exporting the
 // client beside the shared `api` is how one gets picked by accident.
 export * from "./operator.service";

@@ -22,7 +22,7 @@ describe("chainStatusLabel", () => {
 
   it("names who signs a requested cancel, by chain", () => {
     expect(chainStatusLabel("CANCEL_REQUESTED", "eip155:46630")).toBe("Cancel requested — arbiter to sign");
-    expect(chainStatusLabel("CANCEL_REQUESTED", "eip155:46630/erc20:0x0aF4D08f97B4FA8Ba3E47Cb025aE8CaD509bc73c")).toBe(
+    expect(chainStatusLabel("CANCEL_REQUESTED", "eip155:46630/erc20:0x7242F853db478A28Ae76Ace808212d4B68aa73e7")).toBe(
       "Cancel requested — arbiter to sign",
     );
     expect(chainStatusLabel("CANCEL_REQUESTED", SOLANA_ASSET)).toBe("Cancel requested — program admin to sign");
@@ -66,7 +66,7 @@ describe("chain refusals", () => {
   it("labels a pause and an on-chain block", () => {
     expect(chainErrorLabel("CHAIN_PROGRAM_PAUSED")).toBe("Contracts paused — try after unpause");
     expect(chainErrorLabel("CHAIN_ADDRESS_BLOCKED")).toBe("Blocked on chain");
-    expect(chainErrorLabel("OPERATOR_SUSPENDED")).toBeNull();
+    expect(chainErrorLabel("OPERATOR_NOT_AUTHORIZED")).toBeNull();
   });
 
   it("leads code · message with the label when there is one", () => {
@@ -89,33 +89,27 @@ describe("chain refusals", () => {
 });
 
 describe("caseChainDisputePhase and caseChainStatusLabel", () => {
-  const disputedAt = "2026-10-15T08:58:08.000Z";
-
-  it("reads PENDING with a disputedAt and no disputed part as upheld", () => {
-    const mirror = { chainStatus: "PENDING", chainDisputedAt: disputedAt, chainDisputedParts: 0 };
+  it("reads PENDING after an upheld dispute as upheld", () => {
+    const mirror = { chainStatus: "PENDING", chainState: "UPHELD" };
     expect(caseChainDisputePhase(mirror)).toBe("upheld");
     expect(caseChainStatusLabel(mirror, "eip155:46630")).toBe("Upheld by Assay's arbiter");
   });
 
   it("keeps a never-disputed PENDING record Pending", () => {
-    const mirror = { chainStatus: "PENDING", chainDisputedAt: null, chainDisputedParts: 0 };
+    const mirror = { chainStatus: "PENDING", chainState: "PENDING" };
     expect(caseChainDisputePhase(mirror)).toBe("none");
     expect(caseChainStatusLabel(mirror)).toBe("Pending on chain");
   });
 
   it("names DISPUTED and a partly disputed PENDING case", () => {
-    expect(caseChainDisputePhase({ chainStatus: "DISPUTED", chainDisputedAt: disputedAt, chainDisputedParts: 1 })).toBe(
-      "disputed",
-    );
-    expect(caseChainStatusLabel({ chainStatus: "DISPUTED" })).toBe("Disputed on chain — awaiting arbiter");
-    expect(caseChainDisputePhase({ chainStatus: "PENDING", chainDisputedAt: disputedAt, chainDisputedParts: 2 })).toBe(
-      "partly-disputed",
-    );
+    expect(caseChainDisputePhase({ chainStatus: "DISPUTED", chainState: "DISPUTED" })).toBe("disputed");
+    expect(caseChainStatusLabel({ chainStatus: "DISPUTED", chainState: "DISPUTED" })).toBe("Disputed on chain — awaiting arbiter");
+    expect(caseChainDisputePhase({ chainStatus: "PENDING", chainState: "DISPUTED" })).toBe("partly-disputed");
   });
 
-  it("leaves closed records and an older backend alone", () => {
-    expect(caseChainStatusLabel({ chainStatus: "EXECUTED", chainDisputedAt: disputedAt })).toBe("Executed on chain");
-    expect(caseChainDisputePhase({})).toBe("none");
-    expect(caseChainStatusLabel({})).toBe("Not reported");
+  it("leaves closed records and an unmirrored chain alone", () => {
+    expect(caseChainStatusLabel({ chainStatus: "EXECUTED", chainState: "EXECUTED" })).toBe("Executed on chain");
+    expect(caseChainDisputePhase({ chainStatus: null, chainState: null })).toBe("none");
+    expect(caseChainStatusLabel({ chainStatus: null, chainState: null })).toBe("Not reported");
   });
 });

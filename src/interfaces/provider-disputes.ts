@@ -42,7 +42,7 @@
  * inventing a platform deadline.
  */
 
-import type { ListQuery, Money } from "./api";
+import type { Money } from "./api";
 
 /** `chk_disputes_subject_type` names three; `SLASH_PROPOSAL` is a fourth the column actually holds. See file header. */
 export type DisputeSubjectType = "SLA_WINDOW" | "VERDICT" | "PAYMENT_INTENT" | "SLASH_PROPOSAL";
@@ -55,13 +55,6 @@ export type DisputeState =
   | "PARTIALLY_UPHELD"
   | "REJECTED"
   | "WITHDRAWN";
-
-export const TERMINAL_DISPUTE_STATES: readonly DisputeState[] = [
-  "UPHELD",
-  "PARTIALLY_UPHELD",
-  "REJECTED",
-  "WITHDRAWN",
-];
 
 /**
  * One dispute, as `GET /disputes` / `GET /disputes/:id` actually return it —
@@ -99,26 +92,6 @@ export interface Dispute {
 }
 
 /**
- * `GET /disputes`. `state`/`subjectType`/`claimType`/`providerId` all narrow
- * — see assay-backend `src/modules/dispute/dto/list-disputes.dto.ts`.
- */
-export interface ListDisputesQuery extends ListQuery {
-  state?: DisputeState[];
-  subjectType?: DisputeSubjectType;
-  claimType?: string;
-  providerId?: string;
-}
-
-/** `POST /disputes`'s body — the general path, used for anything not reached from a slash proposal. */
-export interface CreateDisputeBody {
-  subjectType: Exclude<DisputeSubjectType, "SLASH_PROPOSAL">;
-  subjectId: string;
-  claimType: string;
-  reason: string;
-  evidence?: unknown[];
-}
-
-/**
  * The dispute form's closed claim vocabulary. Mirrors
  * assay-backend `src/modules/slash/domain/arbitration.ts`'s `DisputeClaimType`
  * exactly — the seven values and their order. This enum is enforced ONLY on
@@ -135,16 +108,7 @@ export type SlashDisputeClaimType =
   | "DECLARED_INCIDENT"
   | "OTHER";
 
-/** `POST /providers/me/slash-proposals/:id/dispute`'s body. */
-export interface FileSlashDisputeBody {
-  claimType: SlashDisputeClaimType;
-  /** Optional in the UI's own copy; the wire requires 1–2048 chars. See the filing form for how the gap is closed. */
-  reason: string;
-  /** Ids of the calls the provider selected as supporting the claim. Defaults to `[]` server-side. */
-  selectedCallIds?: string[];
-}
-
-export type SlashProposalRunningClock = "PROVIDER" | "PLATFORM" | "NONE";
+export type SlashProposalRunningClock = "PROVIDER" | "NONE";
 
 /** `OnChainDisputeState` (assay-backend `slash/domain/on-chain-dispute.ts`). */
 export type OnChainDisputeState =
@@ -171,10 +135,6 @@ export interface SlashProposalClocks {
   /** Null until a notification channel confirms delivery. */
   notifiedAt: string | null;
   acknowledgedAt: string | null;
-  /** The provider's deadline to object in the app (Solana only). Null on EVM. */
-  respondByAt: string | null;
-  /** OUR deadline to decide an in-app objection (Solana only). Null on EVM. */
-  platformDecisionDueAt: string | null;
   /**
    * Assay's own floor: Assay's executor does not execute before this. It binds
    * only while the record is not on chain; once it is, `chainExecutableAt`
@@ -186,18 +146,17 @@ export interface SlashProposalClocks {
    * Config.slash_delay_seconds`, mirrored onto the row by the backend.
    *
    * Not the same instant as `earliestExecutionAt`, and later than it: the
-   * backend proposes on chain once delivery stamps `respondByAt`, so the chain
-   * clock starts at or after the off-chain one. Optional because older backends do not
-   * send it; a screen that requires it would break the case brief there.
+   * backend proposes on chain once delivery stamps `notifiedAt`, so the chain
+   * clock starts at or after the off-chain one.
    *
    * This is the instant after which `execute_slash` is permissionless —
    * `execute_slash`'s `payer` is a bare `Signer` and is consulted about
    * nothing. It is therefore the operator's real deadline to cancel, and it is
    * the one clock the operator cannot afford to read off the wrong row.
    */
-  chainExecutableAt?: string | null;
-  /** The mirrored on-chain lifecycle. `undefined` on older backends. */
-  chainStatus?:
+  chainExecutableAt: string | null;
+  /** The mirrored on-chain lifecycle. */
+  chainStatus:
     | "NONE"
     | "PROPOSING"
     | "PENDING"
@@ -209,31 +168,23 @@ export interface SlashProposalClocks {
   /**
    * The chain's `disputedAt`, mirrored: when the provider disputed the record
    * on chain. A record is disputed at most once, so it stays set after an
-   * uphold — `PENDING` with this set is an upheld dispute. `undefined` on
-   * older backends.
+   * uphold — `PENDING` with this set is an upheld dispute.
    */
-  chainDisputedAt?: string | null;
-  /** How many of the case's current parts are `Disputed` on chain. `undefined` on older backends. */
-  chainDisputedParts?: number;
-  /**
-   * True on EVM: the provider's dispute is `disputeSlash` from its own stake
-   * wallet, the arbiter rules on chain, and the in-app objection is refused.
-   * False on Solana, which keeps the in-app objection. `undefined` on older
-   * backends, read as on chain (the console's stake is on EVM).
-   */
-  disputeOnChain?: boolean;
+  chainDisputedAt: string | null;
+  /** How many of the case's current parts are `Disputed` on chain. */
+  chainDisputedParts: number;
   /** The state of the case's records, derived per record. Null off EVM or before a record stands. */
-  chainState?: OnChainDisputeState | null;
+  chainState: OnChainDisputeState | null;
   /**
    * The deadline to dispute on chain: the earliest `executableAt` of a record
    * still Pending and never disputed, whatever its siblings or the case status
    * say. Null when no record can be disputed.
    */
-  disputeBy?: string | null;
-  /** Review R2-3: how many on-chain records (current parts) the case has. `undefined` on older backends. */
-  chainRecords?: number;
+  disputeBy: string | null;
+  /** Review R2-3: how many on-chain records (current parts) the case has. */
+  chainRecords: number;
   /** Of those, how many were cancelled or expired on chain with nothing taken. */
-  cancelledRecords?: number;
+  cancelledRecords: number;
   secondsRemaining: number | null;
   runningClock: SlashProposalRunningClock;
 }
@@ -273,15 +224,14 @@ export interface SlashProposalSummary {
   bindingId: string;
   bindingLabel: string;
   toolId: string;
-  toolName: string;
+  /** Null when the catalogue cannot name the tool (never an id). */
+  toolName: string | null;
   windowId: string | null;
   windowLabel: string | null;
   penaltyAmount: Money;
   appliedAmount: Money | null;
   clocks: SlashProposalClocks;
   disputeId: string | null;
-  /** `ArbitrationOutcome`, one of six — null while unresolved or for an automatic resolution kind. */
-  outcome: string | null;
   /** `ResolutionKind` — null until resolved. */
   resolutionKind: string | null;
   resolvedAt: string | null;
@@ -314,9 +264,4 @@ export interface SlashRestorationRow {
   label: string;
   value: string;
   status: "ON_DECISION" | "RESTORED" | "NOT_APPLICABLE";
-}
-
-export interface SlashProposalTimeline {
-  events: SlashProposalEvent[];
-  restoration: SlashRestorationRow[];
 }

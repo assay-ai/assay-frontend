@@ -19,9 +19,6 @@ describe("record pages in the static export", () => {
   it("read record ids from the query string, not from route params", () => {
     const offenders = pages(APP)
       .filter((file) => {
-        const rel = relative(APP, file);
-        // A real `[segment]` with generateStaticParams is the one place params exist.
-        if (/\[[^\]]+\]/.test(rel)) return false;
         const source = readFileSync(file, "utf8");
         return /\bparams\s*:\s*Promise</.test(source) || /\buseParams\s*\(/.test(source);
       })
@@ -38,12 +35,10 @@ function viewDirs(dir: string): string[] {
   });
 }
 
-// `/provider/view` is the provider's own report, not one record named by an id.
 const NOT_A_RECORD = new Set([
-  "(minimal)/provider/view",
-  // Retired addresses: each page redirects on the client, and with no id it lands on the list.
-  "(console)/provider/cases/view",
-  "(console)/provider/disputes/view",
+  // A shared tool set: named by `?handle=&slug=` or by the `#token=` fragment, which a
+  // RecordGate cannot read; the page says "Not found" itself when neither names one.
+  "(public)/toolsets/view",
 ]);
 
 // BUG-R16-B1-01: a record screen opened with no id waited forever.

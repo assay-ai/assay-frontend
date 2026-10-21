@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 
+import type { SentAs } from "@/libs/ApiClient";
 import { loginHref } from "@/libs/login-redirect";
 
 import { settleCacheForIdentity } from "./identity-cache";
@@ -28,6 +29,11 @@ export interface BuyerSessionEffects {
   getAccessToken: () => Promise<string | null>;
   setSessionToken: (token: string) => void;
   startWalletLink: () => void;
+  /**
+   * Who this page load's requests went out as, against `identity`
+   * (`sessionRequestsSentAs`). Absent = `"unknown"`.
+   */
+  sentAs?: (identity: string) => SentAs;
 }
 
 export interface IdentityChange {
@@ -38,6 +44,43 @@ export interface IdentityChange {
   identity: string | null;
   /** `undefined` = this page load has not reacted to an identity yet. */
   previous: string | null | undefined;
+}
+
+/**
+ * The identity of a session Privy reports signed in before its `user` has
+ * loaded. It names nobody, so no token's subject ever matches it.
+ */
+export const UNRESOLVED_IDENTITY = "authenticated";
+
+/**
+ * What the cache does for an identity change (`settleCacheForIdentity`).
+ *
+ * A change after the first is a switch. The first identity of the page load
+ * is checked against who the requests so far went out as: all with its token,
+ * the cache is already its data (`"served"`); any with another identity's
+ * token, that data is someone else's and is dropped like a switch; anything
+ * else, refetched in place (`"boot"`).
+ *
+ * `UNRESOLVED_IDENTITY` is not checked against the requests — it would always
+ * count as someone else — and the identity that replaces it gets the same
+ * check as a first one, except that only `"only"` spares the reset: the
+ * placeholder proved nothing about who the earlier requests were for.
+ */
+export function cacheChangeFor(
+  identity: string | null,
+  previous: string | null | undefined,
+  sentAs: ((identity: string) => SentAs) | undefined,
+): "boot" | "served" | "switch" {
+  if (identity === UNRESOLVED_IDENTITY) return previous === undefined ? "boot" : "switch";
+  if (previous === UNRESOLVED_IDENTITY && identity !== null) {
+    return sentAs?.(identity) === "only" ? "served" : "switch";
+  }
+  if (previous !== undefined) return "switch";
+  if (identity === null) return "boot";
+  const sent = sentAs?.(identity) ?? "unknown";
+  if (sent === "only") return "served";
+  if (sent === "other") return "switch";
+  return "boot";
 }
 
 /**
@@ -62,7 +105,7 @@ export function applyIdentityChange(
   // A signed-out page load is not a change: nothing to reset or clear.
   if (identity === (previous ?? null)) return { reacted: identity, cancel: noop };
 
-  settleCacheForIdentity(effects.queryClient, previous === undefined ? "boot" : "switch");
+  settleCacheForIdentity(effects.queryClient, cacheChangeFor(identity, previous, effects.sentAs));
   // Whose wallet was being linked is part of who was signed in.
   effects.resetWalletLink();
 
@@ -90,22 +133,133 @@ export function applyIdentityChange(
 }
 
 /**
- * Where a buyer-API 401 sends this page.
+ * Whether a signed-in buyer still needs an embedded EVM wallet created.
  *
- * "Your session expired" is only true when this page load actually had a
- * signed-in identity (`previous` is a string). A visitor who never signed in
- * is not told their session expired: on `/` they get the product's front page
- * (How it works), anywhere else plain sign-in that returns them here.
+ * `createOnLogin: "users-without-wallets"` is not enough on its own: Privy
+ * left new accounts with only their email (seen on the local stack for every
+ * account made through the agent connect link), and the API links the
+ * account's EVM wallet as its spending account, so such an account is refused
+ * with AUTH_WALLET_NOT_LINKED everywhere and has no way out. An account that
+ * signed in with an external wallet still gets an embedded one, as on login.
  */
-export function unauthorizedTarget(input: {
+export function needsEmbeddedEvmWallet(
+  linkedAccounts: readonly { type: string; walletClientType?: string; chainType?: string }[],
+): boolean {
+  return !linkedAccounts.some(
+    (account) => account.type === "wallet" && account.walletClientType === "privy" && account.chainType === "ethereum",
+  );
+}
+
+/**
+ * The pages anyone may read without signing in: the `(public)` route group.
+ * Exact paths, plus everything under `/catalogue/`. `/toolsets/view` and
+ * `/toolsets/handle` are public, while `/toolsets/mine` is the signed-in list,
+ * so `/toolsets` is matched page by page, never as a prefix.
+ */
+const PUBLIC_PAGES = new Set([
+  "/how-it-works",
+  "/why-list-here",
+  "/catalogue",
+  "/demo",
+  "/reserves",
+  "/toolsets/view",
+  "/toolsets/handle",
+]);
+const PUBLIC_PREFIXES = ["/catalogue/"];
+
+/**
+ * Public shells now mounted (`components/layout/public-shell.tsx`). The 404
+ * page renders in the public shell at an address nobody can list, so it
+ * counts as public by what is on screen rather than by its path. Only the
+ * `(public)` layout and the 404 page render the shell (a test pins that).
+ */
+let publicShells = 0;
+
+/** Called by a mounting public shell; the returned function unregisters it. */
+export function markPublicShell(): () => void {
+  publicShells += 1;
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    publicShells -= 1;
+  };
+}
+
+/** Whether a public shell is on screen. */
+export function onPublicShell(): boolean {
+  return publicShells > 0;
+}
+
+/** Whether `pathname` is a public page, readable with no session. */
+export function isPublicPath(pathname: string | null | undefined): boolean {
+  if (!pathname || !pathname.startsWith("/") || pathname.split("/").some((seg) => seg === ".." || seg === ".")) {
+    return false;
+  }
+  const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
+  return PUBLIC_PAGES.has(path) || PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix));
+}
+
+export interface UnauthorizedInput {
   pathname: string;
   search: string;
   /** The identity this page load last resolved: string = signed in, null = signed out, undefined = not resolved yet. */
   previous: string | null | undefined;
-}): string {
+  /** A public shell is on screen (`onPublicShell()`): the 404 page, at an address that is not a public path. */
+  publicShell?: boolean;
+}
+
+/**
+ * Where a buyer-API 401 sends this page.
+ *
+ * A public page stays where it is: it needs no session, so a dead token
+ * (cleared by `handleUnauthorized`) is no reason to put sign-in in front of
+ * it. A stale token on How it works used to end at
+ * `/login?next=%2Fhow-it-works`.
+ *
+ * Every other page still goes to sign-in. "Your session expired" is only true
+ * when this page load actually had a signed-in identity (`previous` is a
+ * string). A visitor who never signed in is not told their session expired:
+ * on `/` they get the product's front page (How it works), anywhere else plain
+ * sign-in that returns them here.
+ */
+export function unauthorizedTarget(input: UnauthorizedInput): string {
+  if (isPublicPath(input.pathname) || input.publicShell) return `${input.pathname}${input.search}`;
   const hadSession = typeof input.previous === "string";
   if (!hadSession && input.pathname === "/") return "/how-it-works";
   return loginHref({ next: `${input.pathname}${input.search}`, reason: hadSession ? "expired" : undefined });
+}
+
+/** What a 401 does to this page. Injected for tests. */
+export interface UnauthorizedEffects {
+  clearSessionToken: () => void;
+  /** Drop every query: the page is about to be replaced. */
+  clearCache: () => void;
+  /** Empty every query and refetch the mounted ones: the page stays. */
+  resetCache: () => void;
+  logout: () => Promise<unknown>;
+  navigate: (href: string) => void;
+}
+
+/**
+ * The buyer API refused this page's session (after `ApiClient`'s one refresh
+ * and retry). On every page the dead token is cleared, the data it fetched is
+ * dropped and the Privy session is ended: a cleared local token with a live
+ * Privy session would silently re-authenticate on the next mount and mask the
+ * expiry. Then a protected page goes to sign-in, and a public page stays put,
+ * its queries reset so they refetch without the token.
+ */
+export function handleUnauthorized(input: UnauthorizedInput, effects: UnauthorizedEffects): "stay" | "navigate" {
+  effects.clearSessionToken();
+  const target = unauthorizedTarget(input);
+  const stay = target === `${input.pathname}${input.search}`;
+  if (stay) effects.resetCache();
+  else effects.clearCache();
+  // Best-effort: the redirect must not wait on it or get blocked by it failing.
+  void effects.logout().catch(() => {});
+  if (stay) return "stay";
+  effects.navigate(target);
+  return "navigate";
 }
 
 /**

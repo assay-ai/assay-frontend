@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 const get = vi.fn();
-vi.mock("@/services/api", () => ({
-  api: { get: (...args: unknown[]) => get(...args), post: vi.fn() },
+vi.mock("@/services/public-api", () => ({
+  publicApi: { get: (...args: unknown[]) => get(...args), post: vi.fn() },
 }));
 
 const { getDemoStatus } = await import("./demo.service");

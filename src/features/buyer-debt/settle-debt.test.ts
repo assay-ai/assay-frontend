@@ -29,6 +29,7 @@ const debt: BuyerDebt = {
   writeOffAt: "2026-11-15T00:00:00.000Z",
   replacedAt: null,
   createdAt: "2026-10-15T23:59:00.000Z",
+  replaceableAt: "2026-10-16T00:00:00.000Z",
 };
 
 function intent(overrides: {

@@ -59,11 +59,10 @@ const CHAIN_SDK_MESSAGE =
  * The chain-SDK boundary below is `error`, and it is the only `error` this
  * config adds.
  *
- *   react-hooks/set-state-in-effect        5   use-guarantee, use-overview,
- *                                              useThemeSettings, useViewSize x2
+ *   react-hooks/set-state-in-effect        3   use-guarantee, use-overview,
+ *                                              useThemeSettings
  *   react/no-unescaped-entities            3   not-found, limits-view
  *   react-hooks/refs                       3   mapping-editor
- *   react-hooks/purity                     1   provider/agent-traffic
  *   react-hooks/preserve-manual-memoization 1  limits-view
  *   react-hooks/globals                    1   useSigner.test.ts
  */
@@ -80,7 +79,6 @@ const PRE_EXISTING_ERRORS_DOWNGRADED = {
   // find plugin", so the line would break `pnpm lint` outright rather than
   // downgrading anything. If the plugin is ever added, add the downgrade back
   // with it.
-  "react-hooks/purity": "warn",
   "react-hooks/preserve-manual-memoization": "warn",
   "react-hooks/globals": "warn",
 };
@@ -101,11 +99,11 @@ export default [
   },
   ...nextCoreWebVitals,
   {
-    name: "x402/pre-existing",
+    name: "assay/pre-existing",
     rules: PRE_EXISTING_ERRORS_DOWNGRADED,
   },
   {
-    name: "x402/chain-sdk-boundary",
+    name: "assay/chain-sdk-boundary",
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/libs/chains/**"],
     rules: {
