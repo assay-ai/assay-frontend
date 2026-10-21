@@ -174,14 +174,21 @@ export function limitSentence(line: LimitLine): string {
  * The agent whose Assay-checked limits this session can read and write.
  * `GET`/`PATCH /spend-policy` act on the signed-in session's own agent (the
  * one the person's login is tied to), so that is the only agent the monthly
- * and Advanced limits can be shown or changed for. Found from the policy
- * itself, else the agent whose account owns the escrow, else the only agent.
+ * and Advanced limits can be shown or changed for. Newer servers name that
+ * agent (`subjectAgentId`), also when the policy is the organization default;
+ * it wins, and when it is not one of the agents on screen no agent is named
+ * (another agent's limits are never shown as this one's, BUG-BUY-CONNECT-05).
+ * Without it: the policy's own agent, else the agent whose account owns the
+ * escrow, else the only agent.
  */
 export function budgetAgentId(
   agents: readonly { agentId: string; agentAccount?: string | null }[],
-  policy: { agentId: string | null } | null | undefined,
+  policy: { agentId: string | null; subjectAgentId?: string | null } | null | undefined,
   escrowAccount: string | null | undefined,
 ): string | null {
+  if (policy?.subjectAgentId) {
+    return agents.some((a) => a.agentId === policy.subjectAgentId) ? policy.subjectAgentId : null;
+  }
   if (policy?.agentId && agents.some((a) => a.agentId === policy.agentId)) return policy.agentId;
   if (escrowAccount) {
     const owner = agents.find((a) => a.agentAccount && a.agentAccount.toLowerCase() === escrowAccount.toLowerCase());
