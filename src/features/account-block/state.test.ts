@@ -46,6 +46,13 @@ describe("bannerStateFor", () => {
     expect(state.kind).toBe("blocked");
   });
 
+  // BUG-X-02: the backend now refuses a blocked organization with ACCOUNT_BLOCKED and this wording.
+  it("an ACCOUNT_BLOCKED refusal worded as this account's is this account's own block", () => {
+    const refusal = { code: "ACCOUNT_BLOCKED", message: "Your account is blocked by Assay; contact support" };
+    expect(bannerStateFor(undefined, refusal).kind).toBe("blocked");
+    expect(bannerStateFor({ blocked: false, blocks: [] }, refusal).kind).toBe("blocked");
+  });
+
   it("an ACCOUNT_BLOCKED refusal the status does not confirm is worded as another party's", () => {
     const refusal = { code: "ACCOUNT_BLOCKED", message: "This account is blocked (payee)" };
     expect(bannerStateFor({ blocked: false, blocks: [] }, refusal)).toEqual({ kind: "refused", refusal });
@@ -165,6 +172,25 @@ describe("settleBlockStatus", () => {
       vi.setSystemTime(3_000);
       reportBlockedRefusal(SUSPENDED);
       expect(getAccountBlockSnapshot().refusal).toEqual(SUSPENDED);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a fresh blocked:false clears an own ACCOUNT_BLOCKED refusal, never another party's", () => {
+    vi.useFakeTimers({ now: 10_000 });
+    try {
+      reportBlockedRefusal({ code: "ACCOUNT_BLOCKED", message: "Your account is blocked by Assay; contact support" });
+      vi.setSystemTime(11_000);
+      settleBlockStatus(false, Date.now());
+      expect(getAccountBlockSnapshot().refusal).toBeNull();
+
+      const payee = { code: "ACCOUNT_BLOCKED", message: "This account is blocked (payee); contact support" };
+      reportBlockedRefusal(payee);
+      vi.setSystemTime(12_000);
+      settleBlockStatus(false, Date.now());
+      expect(getAccountBlockSnapshot().refusal).toEqual(payee);
+      dismissBlockedRefusal();
     } finally {
       vi.useRealTimers();
     }

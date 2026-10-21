@@ -311,7 +311,8 @@ const INELIGIBILITY: Record<string, string> = {
 const ERRORS: Record<string, string> = {
   AUTH_WALLET_NOT_LINKED: "Your wallet is still being linked to your account. Try again in a minute.",
   AUTH_AGENT_SUSPENDED: "This agent is suspended.",
-  AUTH_ORGANIZATION_SUSPENDED: "Your organization is suspended.",
+  // Suspension left the product (2026-10-20): an org the old code still names is a blocked one (BUG-X-02).
+  AUTH_ORGANIZATION_SUSPENDED: "Your account is blocked by Assay. Contact support.",
   AUTH_HUMAN_SESSION_REQUIRED: "Sign in as yourself to do this; an agent key cannot.",
   ACCOUNT_BLOCKED: "This account is blocked. Contact support.",
   SPEND_LIMIT_EXCEEDED: "This call would go over your spend limit.",
@@ -463,9 +464,26 @@ export function plainError(code: string | null | undefined, status?: number): st
  * (`retryAfterSeconds`), so the sentence says it; every other code is
  * `plainError(code, status)`.
  */
-export function plainApiError(error: { code?: string | null; status?: number; retryAfterSeconds?: number | null }): string {
+export function plainApiError(error: {
+  code?: string | null;
+  status?: number;
+  retryAfterSeconds?: number | null;
+  message?: string;
+}): string {
   if (error.code === "TOO_MANY_REQUESTS") return tooManyRequestsSentence(error.retryAfterSeconds);
+  if (error.code === "ACCOUNT_BLOCKED" && namesOwnAccount(error.message)) return OWN_ACCOUNT_BLOCKED;
   return plainError(error.code, error.status);
+}
+
+const OWN_ACCOUNT_BLOCKED = "Your account is blocked by Assay. Contact support.";
+
+/**
+ * `ACCOUNT_BLOCKED` names either this account ("Your account is blocked by
+ * Assay…", BUG-X-02) or another party of the request ("This account is blocked
+ * (payee)…"); only the first may say "your".
+ */
+export function namesOwnAccount(message: string | null | undefined): boolean {
+  return typeof message === "string" && /^your account is blocked\b/i.test(message.trim());
 }
 
 /** An unknown 5xx: Assay's side, and what to do. */
