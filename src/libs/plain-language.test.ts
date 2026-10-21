@@ -144,6 +144,21 @@ describe("plain (any key)", () => {
   });
 });
 
+// The group-3 backend codes get a sentence of their own, not the generic one.
+describe("plainError for the group-3 codes", () => {
+  it.each([
+    ["PAYLOAD_TOO_LARGE", "This is too large to send. Make it shorter and try again."],
+    ["ACCOUNT_AGENT_NOT_FOUND", "This agent was not found in your account. It may have been deleted."],
+    ["PROVIDER_STAKE_INSUFFICIENT_BONDED", "That is more than your staked amount. Enter at most what is staked."],
+    ["PROVIDER_STAKE_NOTHING_WITHDRAWABLE", "Nothing is ready to withdraw yet: unstaked money can be withdrawn once its waiting period ends."],
+    ["PROVIDER_TOO_MANY_MAPPING_HEADERS", "This mapping has too many headers. Remove some and try again."],
+    ["TOOLSET_ORGANIZATION_NOT_FOUND", "No organization has this id. Check it and try again."],
+    ["PAYMENT_ESCROW_NOT_OPEN", "Open your escrow first."],
+  ])("%s", (code, sentence) => {
+    expect(plainError(code, 409)).toBe(sentence);
+  });
+});
+
 describe("plainApiError", () => {
   // BUG-X-02: a blocked organization reads "Your account is blocked", another party's block does not.
   it("says the account is blocked in the backend's wording for the caller's own organization", () => {

@@ -439,6 +439,14 @@ const ERRORS: Record<string, string> = {
   CREDENTIALS_REQUIRED_FOR_AUTH_MODE: "Add your API key headers for the live address first, then switch to API key.",
   CREDENTIAL_ORIGIN_LIVE: "Your live tool uses these headers. Publish a new address first, then remove them.",
   URL_NOT_RECOGNISED: "We couldn't read this URL. Start a new one.",
+  // Codes added by the e2e run 2 group-3 backend fixes (be-g3a / be-g3b).
+  PAYLOAD_TOO_LARGE: "This is too large to send. Make it shorter and try again.",
+  ACCOUNT_AGENT_NOT_FOUND: "This agent was not found in your account. It may have been deleted.",
+  STAKE_INSUFFICIENT_BONDED: "That is more than your staked amount. Enter at most what is staked.",
+  STAKE_NOTHING_WITHDRAWABLE:
+    "Nothing is ready to withdraw yet: unstaked money can be withdrawn once its waiting period ends.",
+  TOO_MANY_MAPPING_HEADERS: "This mapping has too many headers. Remove some and try again.",
+  TOOLSET_ORGANIZATION_NOT_FOUND: "No organization has this id. Check it and try again.",
   MCP_URL_NOT_FOUND: "This server URL does not serve anything (yet).",
 };
 
