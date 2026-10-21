@@ -58,7 +58,7 @@ import { toast } from "@/utils/toast";
 
 import { ConnectPanel } from "./connect-panel";
 import { ShareDialog } from "./share-dialog";
-import { Chip, statusChipTone } from "./toolset-bits";
+import { Chip, makerOf, statusChipTone } from "./toolset-bits";
 import { PublisherStats, VersionHistory } from "./toolset-versions";
 import { errorText, toolsetKeys, useToolset, useToolsets } from "./use-toolsets";
 
@@ -325,6 +325,13 @@ function EntriesEditor({ set }: { set: Toolset }) {
         </ul>
       )}
 
+      {save.isError ? (
+        <p role="alert" className="flex items-start gap-1.5 text-body-13 text-danger-700" data-testid="entries-save-error">
+          <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          {errorText(save.error, "The change could not be saved")}
+        </p>
+      ) : null}
+
       <EntityPicker
         label="Add a tool"
         value={null}
@@ -492,7 +499,9 @@ export function RuleEditor({
       : missing.length > 0
         ? `${majorsChipText(majors).replace(/ only$/, "")} doesn't return ${fieldList(missing)}, so no provider could serve these calls. Untick it, or allow a version that has it.`
         : null;
-  const [mode, setMode] = React.useState<ProviderMode>(row.providerMode);
+  // `{maker}__{tool}`: a provider tool. The server accepts only "Any" for it.
+  const providerTool = makerOf(row.toolName) !== null;
+  const [mode, setMode] = React.useState<ProviderMode>(providerTool ? "BEST" : row.providerMode);
   const [ids, setIds] = React.useState<string[]>(row.providerIds);
   const [verified, setVerified] = React.useState(row.minTier !== null);
   const [max, setMax] = React.useState(row.maxPrice ? toDecimal({ ...row.maxPrice, decimals }).toString() : "");
@@ -526,22 +535,29 @@ export function RuleEditor({
     <div className="flex flex-col gap-3 rounded-lg bg-02 p-3" data-testid="rule-editor">
       <div className="flex flex-col gap-1.5">
         <span className="text-label-xs text-02">Providers</span>
-        <Segmented
-          value={mode}
-          onValueChange={(v) => {
-            // Only these and All except mean opposite things: the ticks start again.
-            if (v !== mode) setIds([]);
-            setMode(v as ProviderMode);
-            setTried(false);
-          }}
-          aria-label="Which providers"
-        >
-          {(Object.keys(PROVIDER_MODE_LABELS) as ProviderMode[]).map((m) => (
-            <SegmentedItem key={m} value={m}>
-              {PROVIDER_MODE_LABELS[m]}
-            </SegmentedItem>
-          ))}
-        </Segmented>
+        {providerTool ? (
+          // One maker's own tool has one provider, which the server only accepts as "Any".
+          <p className="text-body-xs text-03" data-testid="provider-tool-note">
+            This is one maker&apos;s own tool, so it has one provider and there is nothing to choose.
+          </p>
+        ) : (
+          <Segmented
+            value={mode}
+            onValueChange={(v) => {
+              // Only these and All except mean opposite things: the ticks start again.
+              if (v !== mode) setIds([]);
+              setMode(v as ProviderMode);
+              setTried(false);
+            }}
+            aria-label="Which providers"
+          >
+            {(Object.keys(PROVIDER_MODE_LABELS) as ProviderMode[]).map((m) => (
+              <SegmentedItem key={m} value={m}>
+                {PROVIDER_MODE_LABELS[m]}
+              </SegmentedItem>
+            ))}
+          </Segmented>
+        )}
       </div>
       {mode !== "BEST" ? (
         providers.length === 0 ? (
