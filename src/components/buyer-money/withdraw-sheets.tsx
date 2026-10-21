@@ -170,8 +170,16 @@ export function WithdrawSheet({
       id: "request",
       label: cancelling ? "Cancel the withdrawal request" : "Request the withdrawal",
       cost: "free",
-      run: async ({ report }) => {
-        const signer = requireSigner(money.signerState, money.ownerShort);
+      promptTitle: cancelling
+        ? "Cancel your withdrawal request"
+        : parsed.value
+          ? `Request a withdrawal of ${formatMoney({ amount: parsed.atomic!, asset: "", decimals: money.decimals })}`
+          : undefined,
+      promptDescription: cancelling
+        ? "Your whole balance stays in your escrow. Free, no gas."
+        : "Nothing moves yet: you claim it to your wallet after about an hour. Free, no gas.",
+      run: async ({ report, prompt }) => {
+        const signer = requireSigner(money.signerState, money.ownerShort, prompt);
         report({ stage: "preparing" });
         const requestedAmount = cancelling ? "0" : parsed.atomic!;
         const intent = await createEscrowWithdrawIntent({ amount: requestedAmount });
@@ -310,8 +318,11 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
       id: "claim",
       label,
       cost: evm ? "gas" : "free",
-      run: async ({ report, previousAttempt }) => {
-        const signer = requireSigner(money.signerState, money.ownerShort);
+      promptDescription: payout
+        ? `Moves ${formatLimit(payout)} from your escrow to your wallet.${evm ? " You pay the network fee." : ""}`
+        : undefined,
+      run: async ({ report, previousAttempt, prompt }) => {
+        const signer = requireSigner(money.signerState, money.ownerShort, prompt);
         let hash = previousAttempt?.data as string | undefined;
         if (!hash) {
           report({ stage: "preparing" });

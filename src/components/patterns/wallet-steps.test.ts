@@ -5,6 +5,8 @@ import {
   isUserRejection,
   lastExplorerUrl,
   runWalletSteps,
+  signatureCountNote,
+  stepPrompt,
   stepStatuses,
   trackerHeadline,
   type WalletRunState,
@@ -149,5 +151,34 @@ describe("tracker", () => {
     expect(stepStatuses(3, { phase: "declined", index: 1, results: [{}] })).toEqual(["done", "declined", "upcoming"]);
     expect(stepStatuses(2, { phase: "success", results: [{}, {}] })).toEqual(["done", "done"]);
     expect(stepStatuses(2, IDLE)).toEqual(["upcoming", "upcoming"]);
+  });
+});
+
+/* Lot 1 D14: the wallet prompt names the amount, and a second signature is announced. */
+describe("wallet prompt text", () => {
+  it("titles a prompt with the step and numbers it in a multi-step flow", () => {
+    expect(stepPrompt({ label: "Deposit 20 USDG" }, 0, 1)).toEqual({ title: "Deposit 20 USDG" });
+    expect(stepPrompt({ label: "Allow", promptTitle: "Allow 20 USDG", promptDescription: "Then the deposit." }, 0, 2)).toEqual({
+      title: "Allow 20 USDG",
+      description: "Signature 1 of 2. Then the deposit.",
+    });
+  });
+
+  it("hands each step its prompt", async () => {
+    const seen: unknown[] = [];
+    await runWalletSteps([
+      { id: "a", label: "First", cost: "free", promptDescription: "$1.00 a call.", run: async ({ prompt }) => void seen.push(prompt) },
+      { id: "b", label: "Second", cost: "free", run: async ({ prompt }) => void seen.push(prompt) },
+    ]);
+    expect(seen).toEqual([
+      { title: "First", description: "Signature 1 of 2. $1.00 a call." },
+      { title: "Second", description: "Signature 2 of 2." },
+    ]);
+  });
+
+  it("announces two signatures before the flow, and 'up to' when one may need none", () => {
+    expect(signatureCountNote([{}])).toBeNull();
+    expect(signatureCountNote([{}, {}])).toBe("2 signatures in your wallet, one after the other");
+    expect(signatureCountNote([{ mayNotPrompt: true }, {}])).toBe("Up to 2 signatures in your wallet, one after the other");
   });
 });
