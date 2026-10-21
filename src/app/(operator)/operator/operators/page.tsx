@@ -25,6 +25,8 @@ import {
   deriveSubject,
   directoryErrorMessage,
   limitInputFromChoice,
+  NO_LIMIT_CHOICE,
+  parseLimitChoice,
   mayEditRow,
   mayManageOperators,
   validateAddOperator,
@@ -47,7 +49,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
 import { addOperator, changeOperator, listOperators, removeOperator } from "@/services/operator.service";
 import { cn } from "@/utils";
-import { formatMoney, parseAmountInput } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 import { operatorQueries } from "@/features/operator/queries";
 
 /**
@@ -466,13 +468,7 @@ function useLimit(initial: string) {
   return { choice, setChoice };
 }
 
-function parseLimit(choice: string, decimals: number): { atomic: string | null; error: string | null } {
-  if (choice === "unlimited") return { atomic: null, error: null };
-  if (choice === "") return { atomic: null, error: "Choose a limit." };
-  if (choice === "0") return { atomic: "0", error: null };
-  const parsed = parseAmountInput(choice, { decimals });
-  return { atomic: parsed.atomic, error: parsed.error };
-}
+const parseLimit = parseLimitChoice;
 
 function LimitField({
   roles,
@@ -494,7 +490,7 @@ function LimitField({
       <span className="text-label-13 text-01">The most they can act on, per action</span>
       <PresetChips
         label="Authority limit"
-        presets={["0", "100", { value: "1000", label: "$1,000" }, { value: "unlimited", label: "No limit" }]}
+        presets={["0", "100", { value: "1000", label: "$1,000" }, { value: NO_LIMIT_CHOICE, label: "No limit" }]}
         value={choice}
         onChange={onChange}
         error={error ?? undefined}
@@ -514,7 +510,7 @@ function sameRoles(a: readonly OperatorRole[], b: readonly OperatorRole[]): bool
 }
 
 function initialLimit(row: Pick<OperatorDirectoryEntry, "authorityLimit">): string {
-  if (row.authorityLimit === null) return "unlimited";
+  if (row.authorityLimit === null) return NO_LIMIT_CHOICE;
   return formatMoney(row.authorityLimit, { symbol: "", grouped: false }).replace(/\.00$/, "");
 }
 
@@ -841,7 +837,7 @@ function ChangeSheet({
   // Nothing to apply until the role or the limit differs from what they have now.
   const sameLimit =
     parsedLimit.error === null &&
-    (row.authorityLimit === null ? parsedLimit.atomic === null && choice === "unlimited" : parsedLimit.atomic !== null && BigInt(parsedLimit.atomic) === BigInt(row.authorityLimit.amount));
+    (row.authorityLimit === null ? parsedLimit.atomic === null && choice === NO_LIMIT_CHOICE : parsedLimit.atomic !== null && BigInt(parsedLimit.atomic) === BigInt(row.authorityLimit.amount));
   const changed = !sameRoles(roles, row.roles) || !sameLimit;
   const raisesLimit =
     parsedLimit.error === null &&
@@ -880,7 +876,7 @@ function ChangeSheet({
   };
 
   const newLimit =
-    choice === "unlimited" ? "no limit" : parsedLimit.atomic !== null ? limitMoney({ amount: parsedLimit.atomic, asset, decimals }) : "—";
+    choice === NO_LIMIT_CHOICE ? "no limit" : parsedLimit.atomic !== null ? limitMoney({ amount: parsedLimit.atomic, asset, decimals }) : "—";
 
   return (
     <Sheet open onOpenChange={(next) => (!next && !change.isPending ? onClose() : undefined)}>

@@ -16,7 +16,7 @@ import { approvalChanges, approvalNeeds, approvalTargetId } from "./approvals";
 import { disputeAmount, durationText } from "./arbiter";
 import { evmAddressOf, noTargetText, pickedTarget, searchBlockTargets, walletLabel } from "./block-targets";
 import { cancelDeadlineSentence, caseAuthority, caseFacts, caseNextStep, caseTimelineSteps } from "./case-flow";
-import { deriveSubject, limitInputFromChoice } from "./directory";
+import { deriveSubject, limitInputFromChoice, NO_LIMIT_CHOICE, parseLimitChoice } from "./directory";
 import { allWaitingLabel, checkedAgo, disputeUrgency, eligibleApprovers, groupApprovals, healthIssues, needsYouBadgeText, needsYouBreakdown, needsYouCount, sortDisputesByDaysLeft, waitingSummary } from "./inbox";
 import { activeOperatorNav, operatorNavFor, operatorTitleFor } from "./nav";
 import { penaltySplit } from "./penalty-money";
@@ -529,9 +529,22 @@ describe("team forms", () => {
     expect(deriveSubject("")).toBe("");
   });
   it("reads the limit choice", () => {
-    expect(limitInputFromChoice("unlimited", null)).toEqual({ mode: "unbounded", amount: "" });
+    expect(limitInputFromChoice(NO_LIMIT_CHOICE, null)).toEqual({ mode: "unbounded", amount: "" });
     expect(limitInputFromChoice("0", "0")).toEqual({ mode: "zero", amount: "" });
     expect(limitInputFromChoice("100", "100000000")).toEqual({ mode: "amount", amount: "100000000" });
+  });
+  // Review I2 of BUG-BUY-MONEY-03: "No limit" comes from the chip only.
+  it("reads no limit only from the chip, and a typed 'unlimited' as an invalid amount", () => {
+    expect(parseLimitChoice(NO_LIMIT_CHOICE, 6)).toEqual({ atomic: null, error: null });
+    expect(parseLimitChoice("unlimited", 6)).toEqual({ atomic: null, error: "Enter an amount like 20 or 20.50." });
+    expect(limitInputFromChoice("unlimited", null)).toEqual({ mode: "amount", amount: "" });
+  });
+  // Review M2: a typed zero stays the zero limit, spaces around it too.
+  it("keeps a typed 0 as the zero limit", () => {
+    expect(parseLimitChoice(" 0", 6)).toEqual({ atomic: "0", error: null });
+    expect(limitInputFromChoice(" 0", "0")).toEqual({ mode: "zero", amount: "" });
+    expect(parseLimitChoice("", 6).error).toBe("Choose a limit.");
+    expect(parseLimitChoice("250", 6)).toEqual({ atomic: "250000000", error: null });
   });
 });
 

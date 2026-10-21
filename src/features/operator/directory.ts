@@ -8,6 +8,7 @@ import type {
 } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress } from "@/libs/chains/evm/operator-wallet";
+import { parseAmountInput } from "@/utils/money";
 
 /**
  * The operator directory's forms (`A-12` add, `A-13` change, `A-14` remove)
@@ -259,11 +260,32 @@ export function deriveSubject(name: string): string {
 }
 
 /**
- * The limit chosen in dollars ("0", "100", "1000", "unlimited" or a typed
- * amount already converted to minor units) as the form's `LimitInput`.
+ * The "No limit" chip's value. It ends in a line break, which a single-line
+ * text field can never hold (browsers strip it from `<input>` values), so
+ * typing "unlimited" in Custom is an invalid amount, never "no limit" (review
+ * I2 of BUG-BUY-MONEY-03: the Custom field no longer strips what is typed).
+ */
+export const NO_LIMIT_CHOICE = "unlimited\n";
+
+/**
+ * The limit picked or typed, in dollars, → minor units or one sentence. "No
+ * limit" comes only from the chip (`NO_LIMIT_CHOICE`); a typed "0" (spaces
+ * around it too) is the zero limit, as before.
+ */
+export function parseLimitChoice(choice: string, decimals: number): { atomic: string | null; error: string | null } {
+  if (choice === NO_LIMIT_CHOICE) return { atomic: null, error: null };
+  if (choice.trim() === "") return { atomic: null, error: "Choose a limit." };
+  if (choice.trim() === "0") return { atomic: "0", error: null };
+  const parsed = parseAmountInput(choice, { decimals });
+  return { atomic: parsed.atomic, error: parsed.error };
+}
+
+/**
+ * The limit chosen in dollars ("0", "100", "1000", `NO_LIMIT_CHOICE` or a
+ * typed amount already converted to minor units) as the form's `LimitInput`.
  */
 export function limitInputFromChoice(choice: string, atomic: string | null): LimitInput {
-  if (choice === "unlimited") return { mode: "unbounded", amount: "" };
-  if (choice === "0" || atomic === "0") return { mode: "zero", amount: "" };
+  if (choice === NO_LIMIT_CHOICE) return { mode: "unbounded", amount: "" };
+  if (choice.trim() === "0" || atomic === "0") return { mode: "zero", amount: "" };
   return { mode: "amount", amount: atomic ?? "" };
 }
