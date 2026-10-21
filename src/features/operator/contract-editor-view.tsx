@@ -442,11 +442,11 @@ function DraftEditor({
   const locked = !canEdit || frozen;
 
   React.useEffect(() => {
-    if (!dirty) return;
+    if (!dirty || locked) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  }, [dirty, locked]);
 
   const save = useMutation({
     mutationFn: () => saveContractDraft(tool.id, parsed.body!),
@@ -508,7 +508,7 @@ function DraftEditor({
           ) : (
             "Write what agents send and get back. Nobody sees it until it is published."
           )}
-          {dirty ? <span className="text-warning-700"> Unsaved changes.</span> : null}
+          {dirty && !locked ? <span className="text-warning-700"> Unsaved changes.</span> : null}
         </p>
         {preview.changes.length > 0 && preview.baseSemver ? (
           <p className="rounded-lg bg-02 px-3 py-2 text-body-13 text-01 [overflow-wrap:anywhere]">
