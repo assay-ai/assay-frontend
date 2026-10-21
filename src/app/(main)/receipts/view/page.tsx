@@ -31,6 +31,7 @@ import {
   StateCardBlock,
 } from "@/features/g30/receipt-parts";
 import {
+  expiredNeverHeld,
   isFinalNotCharged,
   receiptStory,
   relevanceReached,
@@ -333,7 +334,8 @@ function ReceiptPageContent() {
           failedChecks={story.reason === "FAILED_CHECKS"}
           listed={listed}
           paid={paid}
-          notCharged={withheld}
+          // Nothing was ever held: no "Not charged $0.00" beside the price (fe-followup M2).
+          notCharged={expiredNeverHeld(receipt) ? null : withheld}
         />
       ) : null}
 
