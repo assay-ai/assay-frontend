@@ -150,7 +150,11 @@ export interface SummaryFigures {
   /** Calls not finished yet, at their listed price. */
   inProgressTotal: Money;
   inProgressCalls: number;
-  /** Calls listed at zero (free tier), counted in `calls`. */
+  /**
+   * Free calls. Newer servers count free-tier calls (no payment record) here
+   * and NOT in `calls` or any amount: a key with only those is a group with
+   * `calls: 0`. A rare zero-price intent is in both. Older servers sent 0.
+   */
   freeCalls: number;
   failRate: number | null;
 }
