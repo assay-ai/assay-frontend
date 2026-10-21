@@ -15,6 +15,7 @@ import {
   confirmingPollMs,
   escrowLedgerRow,
   readyForPaidCalls,
+  uncreditedLine,
 } from "./confirming";
 
 const ASSET = "eip155:46630/erc20:0x915E";
@@ -104,5 +105,28 @@ describe("the /balances poll backs off for a deposit stuck confirming", () => {
     expect(confirmingPollMs(119_999)).toBe(3_000);
     expect(confirmingPollMs(120_000)).toBe(30_000);
     expect(confirmingPollMs(3_600_000)).toBe(30_000);
+  });
+});
+
+/* Lot 1 A3: money on chain the ledger has not credited is not what agents can spend. */
+describe("uncredited on-chain money", () => {
+  const settled = (available: string) => row({ available: m(available), pending: m("0") });
+
+  it("caps the headline at the ledger's available, and at chain minus uncredited without a ledger row", () => {
+    expect(readyForPaidCalls(m("25000000"), settled("20000000"), m("5000000"))?.amount).toBe("20000000");
+    expect(readyForPaidCalls(m("25000000"), null, m("5000000"))?.amount).toBe("20000000");
+    expect(readyForPaidCalls(m("3000000"), null, m("5000000"))?.amount).toBe("0");
+  });
+
+  it("changes nothing when the field is zero, null or absent (older backend)", () => {
+    expect(readyForPaidCalls(m("25000000"), settled("20000000"), m("0"))?.amount).toBe("25000000");
+    expect(readyForPaidCalls(m("25000000"), settled("20000000"), null)?.amount).toBe("25000000");
+    expect(readyForPaidCalls(m("25000000"), settled("20000000"))?.amount).toBe("25000000");
+  });
+
+  it("says how much is on chain and not yet usable", () => {
+    expect(uncreditedLine(m("5000000"))).toBe("$5.00 on chain, not yet usable by agents");
+    expect(uncreditedLine(m("0"))).toBeNull();
+    expect(uncreditedLine(undefined)).toBeNull();
   });
 });
