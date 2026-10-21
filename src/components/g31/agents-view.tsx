@@ -355,6 +355,7 @@ export function AgentsView() {
             keys={data.keys[agent.agentId]}
             keysPending={data.keysQuery.isPending}
             keysFailed={data.keysQuery.isError}
+            keysHidden={data.keysHiddenFor.has(agent.agentId)}
             onRetryKeys={data.refetchKeys}
             readiness={data.readiness[agent.agentId]!}
             escrowReady={
@@ -667,6 +668,7 @@ function AgentCard({
   keys,
   keysPending,
   keysFailed,
+  keysHidden = false,
   onRetryKeys,
   readiness,
   escrowReady,
@@ -685,6 +687,8 @@ function AgentCard({
   keysPending: boolean;
   /** The keys could not be read: say so, never "no key". */
   keysFailed: boolean;
+  /** The keys are not shown to this session (agent-kind, BUG-DEMO-02): say so, no retry. */
+  keysHidden?: boolean;
   onRetryKeys: () => void;
   readiness: AgentReadiness;
   escrowReady: boolean;
@@ -759,7 +763,11 @@ function AgentCard({
       </header>
 
       <SubRow n={1} title="Keys">
-        {keysFailed ? (
+        {keysHidden ? (
+          <p className="text-body-13 text-02" data-testid="keys-hidden">
+            {plainError("AGENT_KEYS_HIDDEN")} This does not change what it can call.
+          </p>
+        ) : keysFailed ? (
           <div className="flex flex-wrap items-center gap-2" role="alert" data-testid="keys-unreadable">
             <p className="text-body-13 text-02">We could not read this agent&apos;s keys. This does not change what it can call.</p>
             <Button size="sm" variant="secondary" type="button" onClick={onRetryKeys}>

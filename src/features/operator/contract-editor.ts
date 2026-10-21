@@ -435,6 +435,17 @@ export function toolNameProblem(name: string): string | null {
   return null;
 }
 
+/**
+ * The name check of "Make a standard tool" (/operator/tools/promotions): the
+ * same rule as the accept sheet, so `tide__x` is refused before the API
+ * refuses it (BUG-OPS-MARKET-03). Empty is not a problem yet.
+ */
+export function standardToolNameProblem(name: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed || toolNameProblem(trimmed) === null) return null;
+  return "snake_case, starting with a letter, no “__”, at most 48 characters.";
+}
+
 export function categoryProblem(category: string): string | null {
   return CATEGORY_RE.test(category) ? null : "Use lower-case letters, digits or -, starting with a letter (like weather).";
 }

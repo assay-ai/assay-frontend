@@ -65,3 +65,20 @@ export function forgetRequestId(win: Window = window): void {
     /* nothing to remove */
   }
 }
+
+/**
+ * Whether this tab holds a consent request id (in the fragment or saved),
+ * without reading it out or touching the address bar. The sign-in guard asks
+ * it: `/connect/authorize` with no request has nothing to sign in for
+ * (BUG-BUY-CONNECT-02).
+ */
+export function hasRequestId(win: Window = window): boolean {
+  try {
+    const hash = win.location.hash;
+    if (hash && hash !== "#" && RID_PATTERN.test(new URLSearchParams(hash.slice(1)).get("request") ?? "")) return true;
+    const saved = storage(win)?.getItem(RID_STORAGE_KEY) ?? null;
+    return saved !== null && RID_PATTERN.test(saved);
+  } catch {
+    return false;
+  }
+}

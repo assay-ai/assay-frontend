@@ -206,12 +206,9 @@ export function PresetChips({
               disabled={disabled}
               aria-invalid={error ? true : undefined}
               aria-describedby={error || hint ? `${id}-help` : undefined}
-              // Digits and one point only; parseAmountInput says the rest in words.
-              onChange={(event) => {
-                const cleaned = event.target.value.replace(/[^0-9.]/g, "");
-                const [whole, ...fraction] = cleaned.split(".");
-                onChange(fraction.length ? `${whole}.${fraction.join("")}` : (whole ?? ""));
-              }}
+              // The text as typed: never rewritten ("-5" must not become 5,
+              // "1,5" must not become 15). parseAmountInput says what is wrong.
+              onChange={(event) => onChange(event.target.value)}
               className="w-full min-w-0 bg-transparent font-mono text-mono-sm text-01 outline-none placeholder:text-03"
             />
           </div>

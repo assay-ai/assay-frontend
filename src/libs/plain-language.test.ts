@@ -144,7 +144,43 @@ describe("plain (any key)", () => {
   });
 });
 
+// The group-3 backend codes get a sentence of their own, not the generic one.
+describe("plainError for the group-3 codes", () => {
+  it.each([
+    ["PAYLOAD_TOO_LARGE", "This is too large to send. Make it shorter and try again."],
+    ["ACCOUNT_AGENT_NOT_FOUND", "This agent was not found in your account. It may have been deleted."],
+    ["PROVIDER_STAKE_INSUFFICIENT_BONDED", "That is more than your staked amount. Enter at most what is staked."],
+    ["PROVIDER_STAKE_NOTHING_WITHDRAWABLE", "Nothing is ready to withdraw yet: unstaked money can be withdrawn once its waiting period ends."],
+    ["PROVIDER_TOO_MANY_MAPPING_HEADERS", "This mapping has too many headers. Remove some and try again."],
+    ["TOOLSET_ORGANIZATION_NOT_FOUND", "No organization has this id. Check it and try again."],
+    ["PAYMENT_ESCROW_NOT_OPEN", "Open your escrow first."],
+  ])("%s", (code, sentence) => {
+    expect(plainError(code, 409)).toBe(sentence);
+  });
+});
+
 describe("plainApiError", () => {
+  // BUG-X-02: a blocked organization reads "Your account is blocked", another party's block does not.
+  it("says the account is blocked in the backend's wording for the caller's own organization", () => {
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "Your account is blocked by Assay; contact support" })).toBe(
+      "Your account is blocked by Assay. Contact support.",
+    );
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "This account is blocked (payee); contact support" })).toBe(
+      "This account is blocked. Contact support.",
+    );
+    expect(plainApiError({ code: "AUTH_ORGANIZATION_SUSPENDED", status: 403 })).toBe("Your account is blocked by Assay. Contact support.");
+  });
+
+  // Review M5: the blocked role decides when the body carries it; the sentence is the fallback.
+  it("prefers the refusal's role to its wording", () => {
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "anything", context: { role: "ORGANIZATION" } })).toBe(
+      "Your account is blocked by Assay. Contact support.",
+    );
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "Your account is blocked by Assay", context: { role: "PAYEE" } })).toBe(
+      "This account is blocked. Contact support.",
+    );
+  });
+
   it("names the wait of a 429", () => {
     expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 26 })).toBe("Too many requests. Try again in 26 s.");
   });

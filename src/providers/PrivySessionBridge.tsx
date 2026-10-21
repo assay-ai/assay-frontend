@@ -16,6 +16,7 @@ import {
 
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { stopLimitsRereads } from "@/features/escrow/after-set-limits";
+import { hasRequestId } from "@/features/oauth/request-id";
 import { appNavigate } from "@/features/oauth/strict-pages";
 
 import {
@@ -137,7 +138,13 @@ export function PrivySessionBridge({ children }: { children: React.ReactNode }) 
       // no session.
       const search = typeof window === "undefined" ? "" : window.location.search;
       const outcome = handleUnauthorized(
-        { pathname: pathnameRef.current, search, previous: lastIdentityRef.current, publicShell: onPublicShell() },
+        {
+          pathname: pathnameRef.current,
+          search,
+          previous: lastIdentityRef.current,
+          publicShell: onPublicShell(),
+          consentRequest: typeof window !== "undefined" && hasRequestId(),
+        },
         {
           clearSessionToken,
           clearCache: () => queryClient.clear(),
