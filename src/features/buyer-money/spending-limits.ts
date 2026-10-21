@@ -211,3 +211,33 @@ export function ceilingCountsMoreThanAgents(
   const total = agentSpent.reduce((sum, m) => sum + BigInt(m?.amount || "0"), 0n);
   return BigInt(ceilingSpent.amount || "0") > total;
 }
+
+/**
+ * Whether "Use account default" is offered for an agent (lot 1 B6): only for
+ * the agent whose policy this page read, and only when that policy is its own
+ * (`scope: "AGENT"`). The account default itself is never dropped.
+ */
+export function canUseAccountDefault(
+  policy: { scope: "ORGANIZATION" | "AGENT"; agentId: string | null } | null | undefined,
+  agentId: string,
+  applies: boolean,
+): boolean {
+  return applies && policy?.scope === "AGENT" && (policy.agentId === null || policy.agentId === agentId);
+}
+
+/** One sentence for a refused "Use account default". */
+export function accountDefaultError(error: { code?: string; status?: number; context?: Readonly<Record<string, unknown>> } | null | undefined): string {
+  const code = error?.code;
+  if (code === "SPEND_POLICY_DROP_REFUSED") {
+    if (error?.context?.reason === "ACCESS_DIFFERS") {
+      return "This agent has its own tool access in the same settings, so they cannot be dropped together. Change its limits instead.";
+    }
+    if (error?.context?.reason === "PAUSED") return "This agent is paused and the account default is not. Resume it first.";
+    return "Its own limits could not be dropped. Nothing changed.";
+  }
+  if (code === "SPEND_POLICY_NOT_FOUND") return "Your account has no default limits to fall back to. Nothing changed.";
+  if (code === "AUTH_HUMAN_SESSION_REQUIRED") return "Only you, signed in yourself, can do this; an agent's key cannot. Nothing changed.";
+  if (code === "ACCOUNT_AGENT_NOT_FOUND") return "That agent is not in your account. Nothing changed.";
+  if (error?.status === 404) return "This server cannot do this yet. Nothing changed.";
+  return "That did not go through. Nothing changed; try again.";
+}
