@@ -31,7 +31,7 @@ import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import type { EscrowDelegate } from "@/interfaces";
 import { formatDate } from "@/libs/utc-time";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { shortAddress } from "@/libs/chains/format";
 import { firstDepositOpensEscrow } from "@/libs/chains/registry";
 import { renameAgent, revokeCredential } from "@/services/account.service";
@@ -334,7 +334,7 @@ export function AgentsView() {
         <PageState
           kind="error"
           title="Your agents could not be loaded"
-          description={data.agentsQuery.error instanceof ApiError ? plainError(data.agentsQuery.error.code) : undefined}
+          description={data.agentsQuery.error instanceof ApiError ? plainApiError(data.agentsQuery.error) : undefined}
           code={data.agentsQuery.error instanceof ApiError ? data.agentsQuery.error.code : null}
           onRetry={() => void data.agentsQuery.refetch()}
         />
@@ -393,7 +393,7 @@ export function AgentsView() {
         tightenDelaySeconds={data.delegatesQuery.data?.tightenDelaySeconds}
         onRevoke={() => revokeCredential(lastRevoke!.agent.agentId, lastRevoke!.key.id)}
         onStopOnChain={() => stopPaymentKey(lastRevoke!.key.delegateAccount!)}
-        describeRevokeError={(error) => (error instanceof ApiError ? plainError(error.code) : "It could not be revoked. Nothing changed; try again.")}
+        describeRevokeError={(error) => (error instanceof ApiError ? plainApiError(error) : "It could not be revoked. Nothing changed; try again.")}
         describeStopError={explainStopFailure}
         onDone={(outcome, keyState) => {
           refresh();
@@ -982,7 +982,7 @@ function AgentName({ agent }: { agent: AgentRow }) {
             ? problem
             : rename.isError
               ? rename.error instanceof ApiError
-                ? plainError(rename.error.code)
+                ? plainApiError(rename.error)
                 : "The name could not be saved. Try again."
               : undefined
         }

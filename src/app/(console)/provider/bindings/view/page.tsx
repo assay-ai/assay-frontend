@@ -25,7 +25,7 @@ import { isAssetMismatch, readableDerivation } from "@/features/provider-stake/d
 import { useChains } from "@/hooks/useChains";
 import type { SlaWindow, ToolBindingDetail } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { getPublishCheck, pauseToolBinding, resumeToolBinding } from "@/services/provider-tool-bindings.service";
 import { getProviderEarnings } from "@/services/provider-reports.service";
@@ -438,7 +438,7 @@ function OverviewContent() {
         changes={[{ label: "Status", before: "Live", after: "Paused" }]}
         confirmLabel="Pause tool"
         onConfirm={() => pause.mutateAsync()}
-        describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "It could not be paused. Try again.")}
+        describeError={(error) => (error instanceof ApiError ? plainApiError(error) : "It could not be paused. Try again.")}
       />
     </>
   );

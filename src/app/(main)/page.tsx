@@ -47,7 +47,7 @@ import { ATTENTION_SHOWN, useOverview } from "@/features/buyer/use-overview";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -244,7 +244,7 @@ export default function OverviewPage() {
         <PageState
           kind="error"
           title="The overview could not be loaded"
-          description={plainError(error.code)}
+          description={plainApiError(error)}
           onRetry={reload}
           code={error.code}
           details={error.message}

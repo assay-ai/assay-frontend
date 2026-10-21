@@ -4,6 +4,7 @@ import {
   humanize,
   knowsError,
   plain,
+  plainApiError,
   plainAuditAction,
   plainDecision,
   plainError,
@@ -140,5 +141,18 @@ describe("plain (any key)", () => {
     ["NOT_A_KNOWN_KEY", "Not a known key"],
   ])("%s → %s", (key, expected) => {
     expect(plain(key)).toBe(expected);
+  });
+});
+
+describe("plainApiError", () => {
+  it("names the wait of a 429", () => {
+    expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 26 })).toBe("Too many requests. Try again in 26 s.");
+  });
+  it("falls back to the fixed sentence without a wait", () => {
+    expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429 })).toBe(plainError("TOO_MANY_REQUESTS"));
+  });
+  it("is plainError for other codes", () => {
+    expect(plainApiError({ code: "SPEND_LIMIT_EXCEEDED", status: 402 })).toBe(plainError("SPEND_LIMIT_EXCEEDED"));
+    expect(plainApiError({ code: "WEIRD", status: 503 })).toBe(plainError("WEIRD", 503));
   });
 });

@@ -25,7 +25,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { ApiError } from "@/libs/ApiClient";
 import { GLOSSARY } from "@/libs/glossary";
-import { knowsError, plainError } from "@/libs/plain-language";
+import { knowsError, plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
@@ -161,7 +161,7 @@ export default function ProviderSetupPage() {
 
 /** A plain sentence for an API error; the server's own message when the dictionary has none. */
 function errorSentence(error: unknown): string {
-  if (error instanceof ApiError) return knowsError(error.code) ? plainError(error.code) : error.message;
+  if (error instanceof ApiError) return knowsError(error.code) ? plainApiError(error) : error.message;
   return error instanceof Error && error.message ? error.message : "That did not go through. Try again.";
 }
 

@@ -31,7 +31,7 @@ import {
 } from "@/features/buyer/call-outcome";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { listToolCalls } from "@/services/tool-calls.service";
 import { cn } from "@/utils";
@@ -176,7 +176,7 @@ function CallsList() {
       ) : query.isError ? (
         <PageState
           kind="error"
-          description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+          description={query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
           onRetry={() => void query.refetch()}
           code={query.error instanceof ApiError ? query.error.code : null}
           details={query.error.message}

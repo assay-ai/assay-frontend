@@ -28,7 +28,7 @@ import { useChains } from "@/hooks/useChains";
 import type { Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { freeOnlyCeilingText, freeOnlyLimitsText } from "@/libs/chains/paid-rails";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
 import { getReceiptsSummary } from "@/services/receipts.service";
 import { cn } from "@/utils";
@@ -205,7 +205,7 @@ export function BudgetOnlySheet({
       onOpenChange(false);
       onSaved?.();
     } catch (caught) {
-      setError(caught instanceof ApiError ? plainError(caught.code) : "The limits could not be saved. Try again.");
+      setError(caught instanceof ApiError ? plainApiError(caught) : "The limits could not be saved. Try again.");
     } finally {
       setBusy(false);
     }
@@ -540,7 +540,7 @@ export function OldRuleLine({ policy, freeOnly = false }: { policy: SpendPolicy 
         changes={[{ label: "Refuse calls above", before: amount, after: "No rule" }]}
         confirmLabel="Remove the rule"
         onConfirm={() => remove.mutateAsync()}
-        describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "That did not go through. Try again.")}
+        describeError={(error) => (error instanceof ApiError ? plainApiError(error) : "That did not go through. Try again.")}
       />
     </div>
   );

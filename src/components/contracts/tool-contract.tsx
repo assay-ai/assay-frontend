@@ -15,7 +15,7 @@ import {
 } from "@/features/contracts/text";
 import type { ToolContractVersion, ToolVersionProvider } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { cn } from "@/utils";
 
 import { DeprecatedBadge, RetiredBadge, VersionChip } from "./version-badges";
@@ -82,7 +82,7 @@ export function ToolContractView({
         kind="error"
         bare
         title="Couldn't load the versions"
-        description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+        description={query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
         onRetry={() => void query.refetch()}
       />,
     );

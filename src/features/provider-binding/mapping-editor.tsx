@@ -22,7 +22,7 @@ import type {
   ValidateMappingResponse,
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { validateToolMapping } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 
@@ -955,7 +955,7 @@ export function MappingEditor({
   const status: MappingEditorStatus = {
     editing: jsonError ? `the ${label} JSON does not parse` : null,
     document: validation.error
-      ? `${direction === "REQUEST" ? "how a call reaches your API" : "how your answer becomes the result"}: ${plainError(validation.error.code)}`
+      ? `${direction === "REQUEST" ? "how a call reaches your API" : "how your answer becomes the result"}: ${plainApiError(validation.error)}`
       : (problems[0] ?? null),
   };
   const report = React.useRef(onStatus);
@@ -1276,7 +1276,7 @@ export function MappingEditor({
 
       {validation.error ? (
         <div role="alert" className="flex flex-col gap-1 px-1 text-body-13 text-danger-500">
-          <p>{plainError(validation.error.code)}</p>
+          <p>{plainApiError(validation.error)}</p>
           <details className="text-body-xs text-03">
             <summary className="cursor-pointer select-none">Details</summary>
             <p className="break-words font-mono text-mono-12 [overflow-wrap:anywhere]">

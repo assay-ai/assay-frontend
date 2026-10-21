@@ -31,7 +31,7 @@ import type {
   UpdateToolBindingBody,
 } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import {
   createToolBinding,
@@ -237,7 +237,7 @@ function WizardContent() {
       await applyPublished(queryClient, published, binding);
       toast.success(`${tool?.name ?? "Your tool"} is live`);
     } catch (error) {
-      if (!isAlreadyLive(error)) throw error instanceof ApiError ? new Error(plainError(error.code)) : error;
+      if (!isAlreadyLive(error)) throw error instanceof ApiError ? new Error(plainApiError(error)) : error;
       void queryClient.invalidateQueries({ queryKey: bindingQueryKey(binding.id) });
     }
     router.push(back ?? `${routes.binding(binding.id)}&welcome=1`);

@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import type { BindingAuthMode, BindingTestReport, CatalogueTool, ToolBindingDetail, ToolMapping } from "@/interfaces";
 import type { CredentialHeaderInput } from "@/interfaces/provider-bindings";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { testToolBinding } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
 
@@ -222,7 +222,7 @@ export function ConnectStage({
     }
     setError(
       caught instanceof ApiError
-        ? plainError(caught.code, caught.status)
+        ? plainApiError(caught)
         : caught instanceof Error && caught.message
           ? caught.message
           : "That did not work. Check your connection and try again.",

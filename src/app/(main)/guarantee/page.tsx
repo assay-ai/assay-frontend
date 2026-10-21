@@ -35,7 +35,7 @@ import { MATCHES_SENTENCE, ReconcileNote } from "@/features/buyer/reconcile-note
 import { useGuarantee, type FailureReason, type MonthRow } from "@/features/buyer/use-guarantee";
 import { usePublicFeatures } from "@/features/explorer/use-public-explorer";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { SUPPORT_URL } from "@/libs/support";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
@@ -228,7 +228,7 @@ export default function GuaranteePage() {
         <PageState
           kind="error"
           title="These figures could not be loaded"
-          description={plainError(error.code)}
+          description={plainApiError(error)}
           onRetry={reload}
           code={error.code}
           details={error.message}
