@@ -127,7 +127,7 @@ export default function ProviderVerdictDetailPage() {
         </p>
         <p className="text-body-xs text-03">
           <UtcTime value={detail.createdAt} />
-          {detail.sampleDisplay ? ` · picked for a deeper check (${detail.sampleDisplay})` : ""}
+          {detail.sampled === true && detail.sampleDisplay ? ` · picked for a deeper check (${detail.sampleDisplay})` : ""}
         </p>
       </header>
 
