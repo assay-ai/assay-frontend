@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { NO_LIMIT_CHOICE, parseLimitChoice } from "@/features/operator/directory";
 import { parseAmountInput } from "@/utils/money";
 
 import { PresetChips } from "./preset-chips";
@@ -50,5 +51,43 @@ describe("PresetChips custom amount", () => {
     typeCustom(text);
     expect(screen.queryByText("Enter an amount like 20 or 20.50.")).toBeNull();
     expect(screen.getByTestId("atomic").textContent).toBe(atomic);
+  });
+});
+
+// Review I2: the operator limit's "No limit" chip cannot be reached by typing its key in Custom.
+function LimitHarness() {
+  const [value, setValue] = React.useState("");
+  const parsed = parseLimitChoice(value, 6);
+  return (
+    <>
+      <PresetChips
+        label="Authority limit"
+        presets={["0", "100", { value: NO_LIMIT_CHOICE, label: "No limit" }]}
+        value={value}
+        onChange={setValue}
+        error={value ? parsed.error : null}
+      />
+      <output data-testid="unbounded">{value === NO_LIMIT_CHOICE ? "yes" : "no"}</output>
+    </>
+  );
+}
+
+describe("the operator limit chips", () => {
+  afterEach(cleanup);
+
+  it("reads a typed 'unlimited' as an invalid amount, never as No limit", () => {
+    render(<LimitHarness />);
+    fireEvent.click(screen.getByRole("radio", { name: "Custom" }));
+    fireEvent.change(screen.getByLabelText("Authority limit, custom amount"), { target: { value: "unlimited" } });
+    expect(screen.getByText("Enter an amount like 20 or 20.50.")).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "No limit" }).getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByTestId("unbounded").textContent).toBe("no");
+  });
+
+  it("still sets No limit from the chip", () => {
+    render(<LimitHarness />);
+    fireEvent.click(screen.getByRole("radio", { name: "No limit" }));
+    expect(screen.getByRole("radio", { name: "No limit" }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByTestId("unbounded").textContent).toBe("yes");
   });
 });
