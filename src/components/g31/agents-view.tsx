@@ -10,6 +10,7 @@ import { PaidByInvitation } from "@/components/buyer-money/get-started";
 import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
 import { EffectiveLimitLines, type LimitsContext, rowsFor, SpendingLimitsActions, useLimitsContext } from "@/components/buyer-money/agent-limits";
 import { type AgentRow, type KeyRow } from "@/components/buyer-money/use-agents";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { limitLines } from "@/features/buyer-money/spending-limits";
 import { CapMeter } from "@/components/patterns/cap-meter";
 import { CopyChip } from "@/components/patterns/copy-chip";
@@ -334,7 +335,7 @@ export function AgentsView() {
         <PageState
           kind="error"
           title="Your agents could not be loaded"
-          description={data.agentsQuery.error instanceof ApiError ? plainApiError(data.agentsQuery.error) : undefined}
+          description={data.agentsQuery.error instanceof ApiError ? <ApiErrorSentence error={data.agentsQuery.error} /> : undefined}
           code={data.agentsQuery.error instanceof ApiError ? data.agentsQuery.error.code : null}
           onRetry={() => void data.agentsQuery.refetch()}
         />

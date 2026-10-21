@@ -16,10 +16,14 @@ export function nothingWithheldHeading(notRunCalls: number): string {
   return notRunCalls > 0 ? "No call this month failed our checks" : "Every call this month passed";
 }
 
-/** The note on calls that never ran (EXPIRED, nothing held): in no line, never charged. */
-export function notRunSentence(notRunCalls: number): string {
+/**
+ * The note on calls that never ran (EXPIRED, nothing held): in no line, never
+ * charged. `complete: false` when the calls read stopped at its page cap, so
+ * the count is a floor ("at least", fe-followup M1).
+ */
+export function notRunSentence(notRunCalls: number, complete = true): string {
   return (
-    `Separately, ${plural(notRunCalls, "call")} this month did not run: the payment could not be set up in time, ` +
+    `Separately, ${complete ? "" : "at least "}${plural(notRunCalls, "call")} this month did not run: the payment could not be set up in time, ` +
     "so nothing was held and nothing was charged. They are not counted above."
   );
 }

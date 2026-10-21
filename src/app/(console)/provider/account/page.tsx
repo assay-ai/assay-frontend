@@ -5,6 +5,7 @@ import { KeyRound, Pencil, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
@@ -615,7 +616,7 @@ export default function ProviderAccountPage() {
               <Banner
                 tone="danger"
                 title="The API key could not be created"
-                description={plainApiError(createMutation.error)}
+                description={<ApiErrorSentence error={createMutation.error} fallback={plainError(undefined)} />}
               />
             ) : null}
             <Button

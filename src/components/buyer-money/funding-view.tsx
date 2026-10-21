@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
 import { formatLimit } from "@/components/g31/format";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { CapMeter } from "@/components/patterns/cap-meter";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { MoneyFlow, MoneySplit } from "@/components/patterns/money-flow";
@@ -16,7 +17,7 @@ import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
-import { confirmingLine, confirmingOnChain, escrowLedgerRow, readyForPaidCalls } from "@/features/buyer-money/confirming";
+import { confirmingLine, confirmingOnChain, escrowFreeSplit, escrowLedgerRow, readyForPaidCalls, uncreditedLine } from "@/features/buyer-money/confirming";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
 import { escrowHeldText, heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
@@ -33,7 +34,7 @@ import type { Money } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
 import { freeCallsOnlyText, freeOnlyCeilingText, servesPaidCalls } from "@/libs/chains/paid-rails";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import { getHolds } from "@/services/balances.service";
 import { assetName, chainDisplayName, findChain } from "@/services/chains.service";
 import { listDeposits, type Deposit } from "@/services/funding.service";
@@ -154,7 +155,9 @@ export function FundingView() {
   const confirming = noEscrow ? null : confirmingLine(ledgerRow);
   const spendable = noEscrow
     ? null
-    : readyForPaidCalls(escrow?.spendable ?? (balances.length === 1 ? balances[0]!.available : null), ledgerRow);
+    : readyForPaidCalls(escrow?.spendable ?? (balances.length === 1 ? balances[0]!.available : null), ledgerRow, escrow?.uncreditedOnChain);
+  // On chain, not credited by the ledger: agents cannot spend it (lot 1 A3).
+  const uncredited = noEscrow ? null : uncreditedLine(escrow?.uncreditedOnChain);
   const runway = noEscrow ? null : runwayLine(runwayDays(spendable, charged7d));
   const withdrawalPending = positive(escrow?.withdrawRequested);
   const { hasPassed: matured } = useCountdown(escrow?.withdrawAvailableAt);
@@ -185,7 +188,7 @@ export function FundingView() {
           <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-warning-600" />
           <p className="min-w-0 flex-1 text-body-13 text-warning-700">
             {escrowQuery.isError
-              ? (escrowQuery.error ? plainApiError(escrowQuery.error) : plainError(undefined))
+              ? (escrowQuery.error ? <ApiErrorSentence error={escrowQuery.error} /> : plainError(undefined))
               : `We couldn't read ${money.chainName ?? "the chain"} just now, so on-chain figures are missing (not zero).`}
           </p>
           <Button size="sm" variant="secondary" icon={<RotateCw />} type="button" onClick={() => void escrowQuery.refetch()}>
@@ -225,6 +228,11 @@ export function FundingView() {
             </span>
           )}
           {confirming ? <ConfirmingNote line={confirming} /> : null}
+          {uncredited ? (
+            <span className="text-body-13 text-warning-700" data-testid="funding-uncredited">
+              {uncredited}. Agents can spend it once Assay credits it.
+            </span>
+          ) : null}
           {/* No runway on a free-only chain: nothing is spent from the escrow there. */}
           {runway && !freeOnly ? <span className="text-body-13 text-02">{runway}</span> : null}
         </div>
@@ -287,7 +295,7 @@ export function FundingView() {
           withdrawalPending={withdrawalPending}
           freeOnly={freeOnly}
           heldLabel={heldSegmentLabel(openHoldIds, owedIntentIds)}
-          ready={confirmingOnChain(ledgerRow) ? spendable : null}
+          ready={confirmingOnChain(ledgerRow) || uncredited ? spendable : null}
           onAction={onAction}
         />
       ) : null}
@@ -319,7 +327,10 @@ function EscrowCard({
   freeOnly: boolean;
   /** The held segment's label: calls being checked, unpaid calls (held until collected), or both. */
   heldLabel: string;
-  /** While a deposit is confirming: what paid calls can use; the rest of `spendable` is shown as confirming. */
+  /**
+   * While a deposit is confirming or money is uncredited: what agents can spend (the headline); the rest of
+   * `spendable` is shown as uncredited or confirming.
+   */
   ready?: Money | null;
   onAction: (next: MoneyAction) => void;
 }) {
@@ -337,11 +348,11 @@ function EscrowCard({
   const held = escrow.openHolds;
   const requested = escrow.withdrawRequested;
   const chainFree = escrow.spendable;
-  const free = ready && chainFree ? ready : chainFree;
-  const notFinal =
-    ready && chainFree && BigInt(chainFree.amount || "0") > BigInt(ready.amount || "0")
-      ? { ...chainFree, amount: (BigInt(chainFree.amount) - BigInt(ready.amount || "0")).toString() }
-      : null;
+  // "Available" is the headline (what agents can spend); the rest is uncredited or still confirming (lot 1 A3).
+  const split = escrowFreeSplit(chainFree, ready, escrow.uncreditedOnChain);
+  const free = split.available;
+  const notFinal = split.confirming;
+  const notCredited = split.uncredited;
   const refillsAt = windowRefillAt(escrow.windowStartedAt, escrow.windowSeconds);
 
   return (
@@ -368,6 +379,9 @@ function EscrowCard({
         <MoneySplit
           segments={[
             { label: "Available", value: free ? toDecimal(free).toNumber() : 0, amount: formatLimit(free), tone: "primary" },
+            ...(notCredited
+              ? [{ label: "Not yet usable by agents", value: toDecimal(notCredited).toNumber(), amount: formatLimit(notCredited), tone: "neutral" as const }]
+              : []),
             ...(notFinal
               ? [{ label: "Confirming on chain", value: toDecimal(notFinal).toNumber(), amount: formatLimit(notFinal), tone: "neutral" as const }]
               : []),

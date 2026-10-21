@@ -86,6 +86,14 @@ export interface ProviderEarningsFigures {
   debtOutstandingCalls?: number;
   uncollected?: Money | null;
   uncollectedCalls?: number;
+  /**
+   * SETTLED calls whose payment is still held for the dispute window or by an
+   * open dispute (rail B: in the escrow's hold; rail A: credit withheld), not
+   * yet paid. Paid once collected; never if an upheld dispute refunds it. Not
+   * in `earned`. Optional: older backends do not send it.
+   */
+  pendingInWindow?: Money | null;
+  pendingInWindowCalls?: number;
 }
 
 export interface ProviderEarningsGroup extends ProviderEarningsFigures {

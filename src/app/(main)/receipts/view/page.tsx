@@ -5,6 +5,7 @@ import { ArrowLeft, Braces } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { EntityName } from "@/components/patterns/entity-name";
 import { UtcTime } from "@/components/patterns/utc-time";
@@ -30,6 +31,7 @@ import {
   StateCardBlock,
 } from "@/features/g30/receipt-parts";
 import {
+  expiredNeverHeld,
   isFinalNotCharged,
   receiptStory,
   relevanceReached,
@@ -57,7 +59,7 @@ import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
 import { responseClassLabel } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney } from "@/utils/money";
 
@@ -208,7 +210,7 @@ function ReceiptPageContent() {
           <PageState
             kind="error"
             title="This receipt could not be loaded"
-            description={(err ? plainApiError(err) : plainError("ERR_NETWORK"))}
+            description={(err ? <ApiErrorSentence error={err} /> : plainError("ERR_NETWORK"))}
             onRetry={() => void receiptQuery.refetch()}
             code={err?.code ?? null}
             details={err?.message ?? null}
@@ -332,7 +334,8 @@ function ReceiptPageContent() {
           failedChecks={story.reason === "FAILED_CHECKS"}
           listed={listed}
           paid={paid}
-          notCharged={withheld}
+          // Nothing was ever held: no "Not charged $0.00" beside the price (fe-followup M2).
+          notCharged={expiredNeverHeld(receipt) ? null : withheld}
         />
       ) : null}
 

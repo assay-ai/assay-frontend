@@ -143,3 +143,12 @@ describe("paymentNotFound — a bad link says not found, not try again", () => {
     expect(paymentNotFound(new Error("offline"))).toBe(false);
   });
 });
+
+describe("outcomeOf — an EXPIRED call that never held money (lot 1 E18)", () => {
+  it("says it did not run, not 'Not charged'", () => {
+    expect(outcomeOf("EXPIRED", null, false, true)).toEqual({ chip: "not-run", headline: "Did not run" });
+    // A hold that expired (money was held, then released) stays "Not charged".
+    expect(outcomeOf("EXPIRED", null, false, false).chip).toBe("not-charged");
+    expect(outcomeOf("EXPIRED").chip).toBe("not-charged");
+  });
+});
