@@ -17,7 +17,7 @@ import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
-import { confirmingLine, confirmingOnChain, escrowLedgerRow, readyForPaidCalls } from "@/features/buyer-money/confirming";
+import { confirmingLine, confirmingOnChain, escrowLedgerRow, readyForPaidCalls, uncreditedLine } from "@/features/buyer-money/confirming";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
 import { escrowHeldText, heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
@@ -155,7 +155,9 @@ export function FundingView() {
   const confirming = noEscrow ? null : confirmingLine(ledgerRow);
   const spendable = noEscrow
     ? null
-    : readyForPaidCalls(escrow?.spendable ?? (balances.length === 1 ? balances[0]!.available : null), ledgerRow);
+    : readyForPaidCalls(escrow?.spendable ?? (balances.length === 1 ? balances[0]!.available : null), ledgerRow, escrow?.uncreditedOnChain);
+  // On chain, not credited by the ledger: agents cannot spend it (lot 1 A3).
+  const uncredited = noEscrow ? null : uncreditedLine(escrow?.uncreditedOnChain);
   const runway = noEscrow ? null : runwayLine(runwayDays(spendable, charged7d));
   const withdrawalPending = positive(escrow?.withdrawRequested);
   const { hasPassed: matured } = useCountdown(escrow?.withdrawAvailableAt);
@@ -226,6 +228,11 @@ export function FundingView() {
             </span>
           )}
           {confirming ? <ConfirmingNote line={confirming} /> : null}
+          {uncredited ? (
+            <span className="text-body-13 text-warning-700" data-testid="funding-uncredited">
+              {uncredited}. Agents can spend it once Assay credits it.
+            </span>
+          ) : null}
           {/* No runway on a free-only chain: nothing is spent from the escrow there. */}
           {runway && !freeOnly ? <span className="text-body-13 text-02">{runway}</span> : null}
         </div>
