@@ -31,7 +31,7 @@ describe("pasting a tool-set link into the Connect sheet", () => {
   });
 
   it("refuses what is not a tool set", () => {
-    expect(readSharedLink("https://mcp.assay.ai/u/abc123token", HOST)).toBeNull();
+    expect(readSharedLink("https://mcp.goassay.ai/u/abc123token", HOST)).toBeNull();
     expect(readSharedLink(`${HOST}/`, HOST)).toBeNull();
     expect(readSharedLink("hello", HOST)).toBeNull();
     expect(readSharedLink("", HOST)).toBeNull();

@@ -75,7 +75,7 @@ changing them. See `.env.local.example` for the full list and comments.
 | `NEXT_PUBLIC_BASE_URL`     | yes      | Absolute URL this app is served from            |
 | `NEXT_PUBLIC_API_BASE_URL` | yes      | Backend API base URL                            |
 | `NEXT_PUBLIC_PRIVY_APP_ID` | yes      | Privy app id (must be 25 characters)            |
-| `NEXT_PUBLIC_MCP_URL`      | yes      | Public URL of the MCP host, e.g. `https://mcp.assay.ai/` (`https`, or `http` on localhost); the build fails without it, and the consent page only redirects to this origin |
+| `NEXT_PUBLIC_MCP_URL`      | yes      | Public URL of the MCP host, e.g. `https://mcp.goassay.ai/` (`https`, or `http` on localhost); the build fails without it, and the consent page only redirects to this origin |
 | `NEXT_PUBLIC_ASSAY_MCP_VERSION` | yes | Exact `@goassay-ai/mcp` version every install command pins (no range, no tag); the build fails without it |
 | `NEXT_PUBLIC_DEMO_CHAINS`  | no       | `robinhood` enables demo fixture data (never on a live deployment) |
 
