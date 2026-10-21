@@ -285,6 +285,21 @@ describe("runStakeIntent on eip155", () => {
     expect(order).toEqual([`sign:${USDG}`, `send:${STAKE}`]);
   });
 
+  it("forces Privy's confirmation screen, naming the amount, on the approval and the deposit", async () => {
+    const { signer } = evmSigner();
+
+    await runStakeIntent(evmDeposit(), signer, DEPOSIT);
+
+    expect(signer.signTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ showWalletUIs: true, title: "Approve the stake contract", description: expect.stringContaining("50000000") }),
+    );
+    expect(signer.signAndSend).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ showWalletUIs: true, title: "Stake", description: expect.stringContaining("50000000") }),
+    );
+  });
+
   it("lets an injected wallet SEND the approval, waits for it to land, then deposits", async () => {
     // MetaMask/Rabby cannot sign without sending; `signTransaction` refuses
     // them, so the approval must go through `signAndSend` like the deposit.

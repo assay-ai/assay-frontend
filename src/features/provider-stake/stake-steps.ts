@@ -10,7 +10,7 @@
 
 import type { WalletStep } from "@/components/patterns/wallet-steps";
 import { signProofChallenge } from "@/features/provider-proof/sign-proof-challenge";
-import type { Signer } from "@/hooks/useSigner";
+import { type Signer, withWalletPrompt } from "@/hooks/useSigner";
 import type { Chain } from "@/interfaces/chain";
 import type { StakeIntent } from "@/interfaces/provider-stake";
 import { assertStakeIntent, type StakeExpectation } from "@/features/provider-stake/run-stake-intent";
@@ -51,6 +51,16 @@ const NOT_READY = "Your stake wallet is not connected in this browser. Connect i
 function need(signer: Signer | null): Signer {
   if (!signer) throw new Error(NOT_READY);
   return signer;
+}
+
+/**
+ * The stake signer with the text of Privy's own confirmation screen: the
+ * runner's prompt for the step, else the step's label (every label that moves
+ * money names its amount). The calls below force the screen with
+ * `showWalletUIs: true`.
+ */
+function confirming(signer: Signer, prompt: { title?: string; description?: string } | undefined, label: string): Signer {
+  return withWalletPrompt(signer, prompt?.title || prompt?.description ? prompt : { title: label });
 }
 
 /** One sentence for whatever a stake step threw. The raw message stays under Details. */
@@ -111,7 +121,7 @@ async function sendIntent(
   }
   assertStakeIntent(intent, expected);
   report({ stage: "wallet" });
-  const hash = await signer.signAndSend(intent.transaction);
+  const hash = await signer.signAndSend(intent.transaction, { showWalletUIs: true });
   const explorerUrl = txLink(chain, hash);
   report({ stage: "submitted", data: hash, explorerUrl });
   if (intent.transaction.namespace === "eip155") await waitForSuccess(intent.transaction.chainId, hash as `0x${string}`);
@@ -139,8 +149,8 @@ export function depositSteps(input: {
     label: `Step 1: approve. Let the stake contract move ${amountLabel} from your wallet`,
     cost: "gas",
     skip: !isEvm,
-    run: async ({ report, previousAttempt }) => {
-      const signer = need(input.signer);
+    run: async ({ report, previousAttempt, prompt }) => {
+      const signer = confirming(need(input.signer), prompt, allow.label);
       if (previousAttempt?.data) {
         await waitForSuccess(signer.chainId, previousAttempt.data as `0x${string}`);
         return;
@@ -182,9 +192,9 @@ export function depositSteps(input: {
       report({ stage: "wallet" });
       let hash: string;
       if (signer.kind === "external") {
-        hash = await signer.signAndSend(approve);
+        hash = await signer.signAndSend(approve, { showWalletUIs: true });
       } else {
-        const signed = await signer.signTransaction(approve);
+        const signed = await signer.signTransaction(approve, { showWalletUIs: true });
         if (signed.namespace !== "eip155") throw new Error("Expected an EVM signature.");
         hash = await broadcast(tx.chainId, signed.rawTransaction);
       }
@@ -198,8 +208,8 @@ export function depositSteps(input: {
     label: "Open your stake account",
     cost: "gas",
     skip: isEvm,
-    run: async ({ report, previousAttempt }) => {
-      const signer = need(input.signer);
+    run: async ({ report, previousAttempt, prompt }) => {
+      const signer = confirming(need(input.signer), prompt, open.label);
       if (previousAttempt?.data) return;
       report({ stage: "preparing" });
       try {
@@ -217,8 +227,8 @@ export function depositSteps(input: {
     id: "deposit",
     label: isEvm ? `Step 2: deposit ${amountLabel} into your stake` : `Stake ${amountLabel}`,
     cost: "gas",
-    run: async ({ report, previousAttempt }) => {
-      const signer = need(input.signer);
+    run: async ({ report, previousAttempt, prompt }) => {
+      const signer = confirming(need(input.signer), prompt, stake.label);
       if (previousAttempt?.data) {
         if (isEvm) await waitForSuccess(signer.chainId, previousAttempt.data as `0x${string}`);
         return;
@@ -237,8 +247,8 @@ export function unstakeStep(input: { amountAtomic: string; amountLabel: string; 
     id: "unstake",
     label: `Start withdrawing ${input.amountLabel}`,
     cost: "gas",
-    run: async ({ report, previousAttempt }) => {
-      const signer = need(input.signer);
+    run: async ({ report, previousAttempt, prompt }) => {
+      const signer = confirming(need(input.signer), prompt, `Start withdrawing ${input.amountLabel}`);
       if (previousAttempt?.data) {
         if (signer.chainId.startsWith("eip155:")) await waitForSuccess(signer.chainId, previousAttempt.data as `0x${string}`);
         return;
@@ -261,8 +271,8 @@ export function withdrawStep(input: { amountAtomic: string; amountLabel: string;
     id: "withdraw",
     label: `Withdraw ${input.amountLabel} to your wallet`,
     cost: "gas",
-    run: async ({ report, previousAttempt }) => {
-      const signer = need(input.signer);
+    run: async ({ report, previousAttempt, prompt }) => {
+      const signer = confirming(need(input.signer), prompt, `Withdraw ${input.amountLabel} to your wallet`);
       if (previousAttempt?.data) {
         if (signer.chainId.startsWith("eip155:")) await waitForSuccess(signer.chainId, previousAttempt.data as `0x${string}`);
         return;

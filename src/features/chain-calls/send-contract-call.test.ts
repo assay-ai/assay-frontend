@@ -81,7 +81,7 @@ describe("sendSlashContractCall", () => {
     const wait = vi.fn(async () => undefined);
     await expect(sendSlashContractCall(call(), s, EXPECTED, { fill, wait })).resolves.toBe(`0x${"f".repeat(64)}`);
     expect(fill).toHaveBeenCalledWith({ chainId: "eip155:46630", from: ARBITER, to: call().to, data: DATA });
-    expect(signAndSend).toHaveBeenCalledWith(filled);
+    expect(signAndSend).toHaveBeenCalledWith(filled, { showWalletUIs: true, title: "upholdSlashBatch" });
     expect(wait).toHaveBeenCalledWith("eip155:46630", `0x${"f".repeat(64)}`, "upholdSlashBatch");
   });
 

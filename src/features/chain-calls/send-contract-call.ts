@@ -108,7 +108,7 @@ export async function sendSlashContractCall(
     }
     throw error;
   }
-  const hash = (await signer.signAndSend(tx)) as `0x${string}`;
+  const hash = (await signer.signAndSend(tx, { showWalletUIs: true, title: call.functionName })) as `0x${string}`;
   await deps.wait(call.chainId, hash, call.functionName);
   return hash;
 }
