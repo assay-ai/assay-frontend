@@ -13,6 +13,25 @@ const entry = (over: Partial<Parameters<typeof auditSentence>[0]>) => ({
 });
 
 describe("auditSentence", () => {
+  it("says policy amounts in dollars and times in UTC, without version counters", () => {
+    expect(
+      auditSentence(
+        entry({
+          before: { perCallMax: "400000", dailyCap: "370000", policyVersion: 3 },
+          after: { perCallMax: "500000", dailyCap: "10000000", changeReason: "restore", policyVersion: 4 },
+        }),
+        () => null,
+        "me@example.com",
+      ).line,
+    ).toBe("You changed per call max from $0.40 to $0.50, and changed daily spending limit from $0.37 to $10.00");
+    expect(
+      auditSentence(
+        entry({ action: "signer.authorized", after: { validUntil: "2026-11-19T10:34:47.000Z", maxPerWindow: "5000000" } }),
+        () => null,
+        "me@example.com",
+      ).line,
+    ).toBe("You set valid until to Nov 19, 10:34 UTC, and set max per window to $5.00");
+  });
   it("never puts an email inside a change; only the actor may be named by one", () => {
     const line = auditSentence(
       entry({ actorId: "ops@team.example", before: { dailyCap: "40.00" }, after: { dailyCap: "75.00", changedBy: "ops@team.example" } }),
