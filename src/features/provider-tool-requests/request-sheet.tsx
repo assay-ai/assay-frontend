@@ -53,6 +53,7 @@ export function ToolRequestSheet({
   const [url, setUrl] = React.useState("");
   const [volume, setVolume] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = React.useState<Partial<Record<"name" | "returns" | "url" | "volume", string>>>({});
   const [filed, setFiled] = React.useState<ToolRequest | null>(null);
 
   React.useEffect(() => {
@@ -68,6 +69,7 @@ export function ToolRequestSheet({
         setFiled(null);
       }
       setError(null);
+      setFieldErrors({});
     }
   }, [open, initialName, filed]);
 
@@ -87,22 +89,22 @@ export function ToolRequestSheet({
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
-    if (!name.trim() || !returns.trim()) {
-      setError("Give the tool a name and say what it returns.");
-      return;
-    }
-    if (url.trim() && !isHttpsUrl(url.trim())) {
-      setError("The API address must start with https://.");
-      return;
-    }
+    // Each problem sits on its own field; focus goes to the first one.
+    const problems: Partial<Record<"name" | "returns" | "url" | "volume", string>> = {};
+    if (!name.trim()) problems.name = "Give the tool a name.";
+    if (!returns.trim()) problems.returns = "Say what it returns.";
+    if (url.trim() && !isHttpsUrl(url.trim())) problems.url = "The API address must start with https://.";
     let calls: number | undefined;
     if (volume.trim()) {
       const parsed = parseMonthlyCalls(volume);
-      if (parsed === null) {
-        setError("Calls a month must be a whole number.");
-        return;
-      }
-      calls = parsed;
+      if (parsed === null) problems.volume = "Calls a month must be a whole number.";
+      else calls = parsed;
+    }
+    setFieldErrors(problems);
+    const first = (["name", "returns", "url", "volume"] as const).find((key) => problems[key]);
+    if (first) {
+      document.getElementById(`tool-request-${first}`)?.focus();
+      return;
     }
     create.mutate({
       title: name.trim(),
@@ -136,7 +138,7 @@ export function ToolRequestSheet({
             </SheetFooter>
           </>
         ) : (
-          <form onSubmit={submit} className="flex flex-col">
+          <form onSubmit={submit} noValidate className="flex flex-col">
             <SheetHeader className="tablet:pt-5">
               <SheetTitle className="pr-8">Request a tool</SheetTitle>
               <SheetDescription>
@@ -144,23 +146,29 @@ export function ToolRequestSheet({
               </SheetDescription>
             </SheetHeader>
             <div className="flex flex-col gap-4 px-[18px] pt-4">
-              <Field label="Tool name" placeholder="Weather now" value={name} onChange={(e) => setName(e.target.value)} maxLength={160} />
+              <Field id="tool-request-name" label="Tool name" placeholder="Weather now" value={name} error={fieldErrors.name} onChange={(e) => setName(e.target.value)} maxLength={160} />
               <Field
+                id="tool-request-returns"
                 label="What it returns"
+                error={fieldErrors.returns}
                 placeholder="Temperature and conditions for a city"
                 value={returns}
                 onChange={(e) => setReturns(e.target.value)}
                 maxLength={1000}
               />
               <Field
+                id="tool-request-url"
                 label="Your API address (optional)"
+                error={fieldErrors.url}
                 placeholder="https://api.example.com/v1/weather"
                 type="url"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
               />
               <Field
+                id="tool-request-volume"
                 label="Calls a month you expect (optional)"
+                error={fieldErrors.volume}
                 placeholder="40000"
                 inputMode="numeric"
                 value={volume}
