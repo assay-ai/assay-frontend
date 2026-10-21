@@ -53,6 +53,11 @@ describe("bannerStateFor", () => {
     expect(bannerStateFor({ blocked: false, blocks: [] }, refusal).kind).toBe("blocked");
   });
 
+  it("an ACCOUNT_BLOCKED refusal whose role is given is read by its role", () => {
+    expect(bannerStateFor(undefined, { code: "ACCOUNT_BLOCKED", message: "x", role: "ORGANIZATION" }).kind).toBe("blocked");
+    expect(bannerStateFor(undefined, { code: "ACCOUNT_BLOCKED", message: "Your account is blocked by Assay", role: "PAYEE" }).kind).toBe("refused");
+  });
+
   it("an ACCOUNT_BLOCKED refusal the status does not confirm is worded as another party's", () => {
     const refusal = { code: "ACCOUNT_BLOCKED", message: "This account is blocked (payee)" };
     expect(bannerStateFor({ blocked: false, blocks: [] }, refusal)).toEqual({ kind: "refused", refusal });

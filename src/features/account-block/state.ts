@@ -30,6 +30,8 @@ import type { AccountBlockStatus, AccountBlockStatusEntry } from "@/interfaces/a
 export interface BlockedRefusal {
   readonly code: string;
   readonly message: string;
+  /** `context.role` of the refusal, when the body carries it (`namesOwnAccount`). */
+  readonly role?: string;
 }
 
 interface Snapshot {
@@ -71,11 +73,12 @@ export function setAccountBlockConfirmed(confirmed: boolean): void {
 let refusalAt = 0;
 
 /** Fed from `ApiClient`'s interceptor, for every blocked refusal. */
-export function reportBlockedRefusal(error: Pick<ApiError, "code" | "message">): void {
+export function reportBlockedRefusal(error: Pick<ApiError, "code" | "message"> & { readonly context?: ApiError["context"] }): void {
   refusalAt = Date.now();
+  const role = typeof error.context?.role === "string" ? error.context.role : undefined;
   const current = snapshot.refusal;
-  if (current && current.code === error.code && current.message === error.message) return;
-  set({ refusal: { code: error.code, message: error.message } });
+  if (current && current.code === error.code && current.message === error.message && current.role === role) return;
+  set({ refusal: role ? { code: error.code, message: error.message, role } : { code: error.code, message: error.message } });
 }
 
 export function dismissBlockedRefusal(): void {
@@ -113,7 +116,7 @@ export function settleBlockStatus(blocked: boolean, requestedAt: number): void {
 export function isOwnAccountRefusal(refusal: BlockedRefusal): boolean {
   return (
     refusal.code === "AUTH_ORGANIZATION_SUSPENDED" ||
-    (refusal.code === "ACCOUNT_BLOCKED" && namesOwnAccount(refusal.message))
+    (refusal.code === "ACCOUNT_BLOCKED" && namesOwnAccount(refusal.message, refusal.role ? { role: refusal.role } : null))
   );
 }
 
