@@ -86,6 +86,9 @@ export function ToolRequestSheet({
     onError: (e) => setError(e instanceof ApiError ? plainError(e.code) : "The request could not be sent. Try again."),
   });
 
+  const clearFieldError = (key: "name" | "returns" | "url" | "volume") =>
+    setFieldErrors((current) => (current[key] ? { ...current, [key]: undefined } : current));
+
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -146,14 +149,20 @@ export function ToolRequestSheet({
               </SheetDescription>
             </SheetHeader>
             <div className="flex flex-col gap-4 px-[18px] pt-4">
-              <Field id="tool-request-name" label="Tool name" placeholder="Weather now" value={name} error={fieldErrors.name} onChange={(e) => setName(e.target.value)} maxLength={160} />
+              <Field id="tool-request-name" label="Tool name" placeholder="Weather now" value={name} error={fieldErrors.name} onChange={(e) => {
+                  setName(e.target.value);
+                  clearFieldError("name");
+                }} maxLength={160} />
               <Field
                 id="tool-request-returns"
                 label="What it returns"
                 error={fieldErrors.returns}
                 placeholder="Temperature and conditions for a city"
                 value={returns}
-                onChange={(e) => setReturns(e.target.value)}
+                onChange={(e) => {
+                  setReturns(e.target.value);
+                  clearFieldError("returns");
+                }}
                 maxLength={1000}
               />
               <Field
@@ -163,7 +172,10 @@ export function ToolRequestSheet({
                 placeholder="https://api.example.com/v1/weather"
                 type="url"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  clearFieldError("url");
+                }}
               />
               <Field
                 id="tool-request-volume"
@@ -172,7 +184,10 @@ export function ToolRequestSheet({
                 placeholder="40000"
                 inputMode="numeric"
                 value={volume}
-                onChange={(e) => setVolume(e.target.value)}
+                onChange={(e) => {
+                  setVolume(e.target.value);
+                  clearFieldError("volume");
+                }}
               />
               <p aria-live="polite" className="min-h-5 text-body-xs text-danger-600">
                 {error}
