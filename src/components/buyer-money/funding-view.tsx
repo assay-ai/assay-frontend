@@ -7,6 +7,7 @@ import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 
 import { formatLimit } from "@/components/g31/format";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { CapMeter } from "@/components/patterns/cap-meter";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { MoneyFlow, MoneySplit } from "@/components/patterns/money-flow";
@@ -33,7 +34,7 @@ import type { Money } from "@/interfaces";
 import { explorerTxUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
 import { freeCallsOnlyText, freeOnlyCeilingText, servesPaidCalls } from "@/libs/chains/paid-rails";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import { getHolds } from "@/services/balances.service";
 import { assetName, chainDisplayName, findChain } from "@/services/chains.service";
 import { listDeposits, type Deposit } from "@/services/funding.service";
@@ -185,7 +186,7 @@ export function FundingView() {
           <TriangleAlert aria-hidden="true" className="size-4 shrink-0 text-warning-600" />
           <p className="min-w-0 flex-1 text-body-13 text-warning-700">
             {escrowQuery.isError
-              ? (escrowQuery.error ? plainApiError(escrowQuery.error) : plainError(undefined))
+              ? (escrowQuery.error ? <ApiErrorSentence error={escrowQuery.error} /> : plainError(undefined))
               : `We couldn't read ${money.chainName ?? "the chain"} just now, so on-chain figures are missing (not zero).`}
           </p>
           <Button size="sm" variant="secondary" icon={<RotateCw />} type="button" onClick={() => void escrowQuery.refetch()}>

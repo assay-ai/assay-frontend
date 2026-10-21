@@ -5,6 +5,7 @@ import { ArrowLeft, Braces } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { EntityName } from "@/components/patterns/entity-name";
 import { UtcTime } from "@/components/patterns/utc-time";
@@ -57,7 +58,7 @@ import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
 import { responseClassLabel } from "@/features/call-classes/labels";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney } from "@/utils/money";
 
@@ -208,7 +209,7 @@ function ReceiptPageContent() {
           <PageState
             kind="error"
             title="This receipt could not be loaded"
-            description={(err ? plainApiError(err) : plainError("ERR_NETWORK"))}
+            description={(err ? <ApiErrorSentence error={err} /> : plainError("ERR_NETWORK"))}
             onRetry={() => void receiptQuery.refetch()}
             code={err?.code ?? null}
             details={err?.message ?? null}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { PageState } from "@/components/patterns/page-state";
 import { majorChoices } from "@/features/contracts/entry-contract";
 import {
@@ -15,7 +16,7 @@ import {
 } from "@/features/contracts/text";
 import type { ToolContractVersion, ToolVersionProvider } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainError } from "@/libs/plain-language";
 import { cn } from "@/utils";
 
 import { DeprecatedBadge, RetiredBadge, VersionChip } from "./version-badges";
@@ -82,7 +83,7 @@ export function ToolContractView({
         kind="error"
         bare
         title="Couldn't load the versions"
-        description={query.error instanceof ApiError ? plainApiError(query.error) : plainError("ERR_NETWORK")}
+        description={query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
         onRetry={() => void query.refetch()}
       />,
     );
