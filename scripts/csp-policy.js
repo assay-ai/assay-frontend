@@ -13,6 +13,8 @@ const STRICT_RPC_ORIGINS = require("../src/config/strict-rpc-origins.json");
 /** Frames Privy opens: its auth iframe, WalletConnect verification, Turnstile. */
 const PRIVY_FRAMES = [
   "https://auth.privy.io",
+  // Privy's HttpOnly-cookie domain: with cookies on, the SDK talks to it instead of auth.privy.io.
+  "https://privy.goassay.ai",
   "https://verify.walletconnect.com",
   "https://verify.walletconnect.org",
   "https://challenges.cloudflare.com",
@@ -21,6 +23,7 @@ const PRIVY_FRAMES = [
 /** Origins the app fetches from besides its own API: Privy, WalletConnect, and the chains' RPCs. */
 const CONNECT_ORIGINS = [
   "https://auth.privy.io",
+  "https://privy.goassay.ai",
   "https://*.rpc.privy.systems",
   "wss://relay.walletconnect.com",
   "wss://relay.walletconnect.org",
