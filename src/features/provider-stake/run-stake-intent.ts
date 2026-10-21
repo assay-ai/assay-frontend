@@ -109,6 +109,29 @@ export function assertStakeIntent(intent: StakeIntent, expected: StakeExpectatio
   assertContractCall(transaction, { contract: "stake", functionName, args: [expected.amount] });
 }
 
+const KIND_VERB: Partial<Record<StakeIntentKind, string>> = {
+  OPEN_STAKE: "Open your stake account",
+  DEPOSIT: "Stake",
+  UNSTAKE: "Start withdrawing",
+  WITHDRAW: "Withdraw",
+};
+
+/** Text of Privy's confirmation screen for the stake call, naming the amount. */
+function stakePrompt(intent: StakeIntent): { title: string; description?: string } {
+  const verb = KIND_VERB[intent.kind] ?? "Confirm stake change";
+  const amount = intent.amount?.amount;
+  return amount ? { title: verb, description: `${verb} ${amount} (atomic units of the stake asset).` } : { title: verb };
+}
+
+/** Text of Privy's confirmation screen for the approval before a stake deposit. */
+function approvePrompt(intent: StakeIntent): { title: string; description?: string } {
+  const amount = intent.amount?.amount;
+  return {
+    title: "Approve the stake contract",
+    ...(amount ? { description: `Let the stake contract move ${amount} (atomic units) from your wallet.` } : {}),
+  };
+}
+
 export async function runStakeIntent(
   intent: StakeIntent,
   signer: Signer,
@@ -137,7 +160,7 @@ export async function runStakeIntent(
   ) {
     await approveStakeDeposit(intent, transaction, signer);
   }
-  return { signature: await signer.signAndSend(transaction) };
+  return { signature: await signer.signAndSend(transaction, { showWalletUIs: true, ...stakePrompt(intent) }) };
 }
 
 /**
@@ -189,10 +212,10 @@ async function approveStakeDeposit(
   if (signer.kind === "external") {
     // An injected wallet cannot sign without sending, so it sends the approval
     // itself; `depositStake` is only estimable once that has landed.
-    await waitForSuccess(deposit.chainId, (await signer.signAndSend(approve)) as `0x${string}`);
+    await waitForSuccess(deposit.chainId, (await signer.signAndSend(approve, { showWalletUIs: true, ...approvePrompt(intent) })) as `0x${string}`);
     return;
   }
-  const signed = await signer.signTransaction(approve);
+  const signed = await signer.signTransaction(approve, { showWalletUIs: true, ...approvePrompt(intent) });
   if (signed.namespace !== "eip155") {
     throw new Error(`Expected an eip155 signature, got ${signed.namespace}.`);
   }
