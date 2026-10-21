@@ -94,6 +94,22 @@ describe("the agent card while its keys load", () => {
     expect(out).not.toContain("Payment key");
   });
 
+  // BUG-DEMO-02: an agent-kind session sees the agent card, with its keys not shown, no dead page.
+  it("for an agent session, shows the card and says the keys show when you sign in as yourself", () => {
+    const html = render((client) =>
+      client.setQueryData(AGENTS_WITH_KEYS_KEY, {
+        ...demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent", agentAccount: ACCOUNT }] }),
+        keysHiddenFor: [AGENT],
+      }),
+    );
+    const out = text(html);
+    expect(html).toContain('data-testid="agent-card"');
+    expect(html).toContain('data-testid="keys-hidden"');
+    expect(out).toContain("Agent keys show when you sign in as yourself");
+    expect(html).not.toContain('data-testid="keys-unreadable"');
+    expect(out).not.toMatch(/no live key|could not be loaded/i);
+  });
+
   it("on a failed first read, the page says it could not load the agents", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false, refetchOnMount: false } } });
     client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });

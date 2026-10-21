@@ -46,9 +46,16 @@ describe("readAgentsWithKeys", () => {
     ]);
   });
 
-  it("refuses a row without its keys rather than reading it as 'No key'", async () => {
-    answer.items = [{ agentId: "a-1" }];
-    await expect(readAgentsWithKeys()).rejects.toMatchObject({ code: "AGENT_KEYS_MISSING" });
+  // BUG-DEMO-02: an agent session is given its own agent's keys only.
+  it("marks a row without its keys hidden rather than reading it as 'No key'", async () => {
+    answer.items = [
+      { agentId: "a-1", credentials: { items: [key("k-1", "a-1")], hasMore: false }, health: demoAgentHealth([key("k-1", "a-1")]) },
+      { agentId: "a-2" },
+    ];
+    const page = await readAgentsWithKeys();
+    expect(page.keysHiddenFor).toEqual(["a-2"]);
+    expect(keysByAgent(page)).toEqual({ "a-1": [key("k-1", "a-1")] });
+    expect(Object.keys(healthByAgent(page))).toEqual(["a-1"]);
   });
 
   // BUG-DEMO-02: an agent-kind session may read the list but not the keys.
@@ -57,7 +64,7 @@ describe("readAgentsWithKeys", () => {
     answer.items = [{ agentId: "a-1", label: "Funded" }];
     const page = await readAgentsWithKeys();
     expect(calls).toEqual([{ limit: 50, include: "credentials,health" }, { limit: 50 }]);
-    expect(page.keysHidden).toBe(true);
+    expect(page.keysHiddenFor).toEqual(["a-1"]);
     expect(page.items.map((agent) => agent.agentId)).toEqual(["a-1"]);
     // Hidden keys are unknown, never "no key".
     expect(keysByAgent(page)).toEqual({});
