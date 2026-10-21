@@ -34,7 +34,16 @@ import { formatVersionRange } from "@/features/contracts/semver";
 import { fieldList } from "@/features/contracts/text";
 import type { ToolVersionBrief } from "@/interfaces/contracts";
 import { defaultEntry, entryChipLabel, entryInput, entryProblem, providersLeft } from "@/features/toolsets/entry-rules";
-import { DRAFT_NOTICE, ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
+import {
+  DRAFT_NOTICE,
+  draftToolCountText,
+  ON_EMPTY_LABELS,
+  PROVIDER_MODE_LABELS,
+  TAKEN_DOWN_LABEL,
+  TAKEN_DOWN_NOTE,
+  takenDownToolIds,
+  VERIFIED_ONLY_LABEL,
+} from "@/features/toolsets/labels";
 import { nothingRunsWarning, type ProviderOffer } from "@/features/toolsets/provider-fit";
 import { shareStatus, sharedPage } from "@/features/toolsets/sharing";
 import { failRateShort, formatCallPrice } from "@/features/explorer/explorer-text";
@@ -195,7 +204,7 @@ function ToolsetHeader({ set }: { set: Toolset }) {
         <Chip tone={statusChipTone(status.tone)}>{status.label}</Chip>
         <span className="break-all font-mono">/my/{set.slug}</span>
         <span>
-          · {set.toolCount} tool{set.toolCount === 1 ? "" : "s"}
+          · {draftToolCountText(set.toolCount, set.entries)}
         </span>
         {page ? (
           <Link href={page} className="min-h-10 content-center text-primary-600 hover:underline">
@@ -245,6 +254,8 @@ function EntriesEditor({ set }: { set: Toolset }) {
   const policy = useSpendPolicyQuery();
   const [open, setOpen] = React.useState<string | null>(null);
   const rows = rowsOf(set);
+  // Read only: `takenDown` is never part of a saved row.
+  const takenDown = takenDownToolIds(set.entries);
   const save = useMutation({
     mutationFn: (next: Row[]) => replaceToolsetEntries(set.id, next.map(({ toolName: _n, decimals: _d, ...e }) => e)),
     onSuccess: (next) => {
@@ -309,6 +320,7 @@ function EntriesEditor({ set }: { set: Toolset }) {
               decimals={row.decimals ?? decimals}
               asset={asset}
               providers={serving(row.toolId)}
+              takenDown={takenDown.has(row.toolId)}
               versions={catalogue.tools.find((t) => t.toolId === row.toolId)?.versions ?? []}
               open={open === row.toolId}
               onToggle={() => setOpen(open === row.toolId ? null : row.toolId)}
@@ -358,6 +370,7 @@ export function EntryRow({
   decimals,
   asset,
   providers,
+  takenDown = false,
   versions,
   open,
   onToggle,
@@ -370,6 +383,8 @@ export function EntryRow({
   decimals: number;
   asset: string;
   providers: ProviderRow[];
+  /** Assay took the tool down: say so instead of "No provider yet" (BUG-X-05). */
+  takenDown?: boolean;
   /** The tool's published versions, from the catalogue card (T3); empty when the card is not at hand. */
   versions: readonly ToolVersionBrief[];
   open: boolean;
@@ -407,7 +422,11 @@ export function EntryRow({
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {providers.length === 0 ? (
+          {takenDown ? (
+            <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700" data-testid="entry-taken-down">
+              {TAKEN_DOWN_LABEL}
+            </span>
+          ) : providers.length === 0 ? (
             <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">No provider yet</span>
           ) : left === 1 ? (
             <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">No backup provider</span>
@@ -437,6 +456,11 @@ export function EntryRow({
           </button>
         </div>
       </div>
+      {takenDown ? (
+        <p role="status" className="rounded-lg bg-danger-10 px-3 py-2 text-body-13 text-danger-700" data-testid="entry-taken-down-note">
+          {TAKEN_DOWN_NOTE}
+        </p>
+      ) : null}
       {warning ? (
         <p
           role="status"
