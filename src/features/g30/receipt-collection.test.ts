@@ -42,6 +42,10 @@ describe("collectionView", () => {
 
   it("tells a REFUND void (failed checks) from a VOID void (no usable result)", () => {
     expect(collectionView("DEBT_VOIDED", { listedPrice, chargeNote: "voided:REFUND" }).explain).toMatch(/failed its checks/);
+    const upheld = collectionView("DEBT_VOIDED", { listedPrice, chargeNote: "voided:DISPUTE_UPHELD" });
+    expect(upheld.headline).toBe("Refunded: your report was accepted");
+    expect(upheld.explain).not.toMatch(/lapsed|failed its checks|debt/);
+    expect(upheld.timeline.label).toBe("Refunded: your report was accepted");
     const view = collectionView("DEBT_VOIDED", { listedPrice, chargeNote: "voided:VOID" });
     expect(view.explain).toMatch(/had no usable result/);
     expect(view.explain).not.toMatch(/failed its checks/);

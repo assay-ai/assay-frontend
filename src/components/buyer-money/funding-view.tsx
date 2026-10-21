@@ -74,8 +74,11 @@ export function MoneyDrawers({
   action,
   onAction,
   capsNeed,
+  freeOnly = false,
 }: {
   action: MoneyAction | null;
+  /** The chain serves free calls only: no deposit is offered, so `?action=deposit` opens nothing. */
+  freeOnly?: boolean;
   onAction: (next: MoneyAction | null) => void;
   /** The ceiling a deep link asks for (`?perCall=` / `?perDay=`), prefilled in the caps drawer. */
   capsNeed?: { perCall?: string | null; perDay?: string | null };
@@ -85,7 +88,7 @@ export function MoneyDrawers({
   };
   return (
     <>
-      <DepositSheet open={action === "deposit"} onOpenChange={close} onSetCaps={() => onAction("caps")} />
+      <DepositSheet open={action === "deposit" && !freeOnly} onOpenChange={close} onSetCaps={() => onAction("caps")} />
       <CapsSheet open={action === "caps"} onOpenChange={close} need={capsNeed} />
       <WithdrawSheet open={action === "withdraw"} onOpenChange={close} />
       <WithdrawSheet open={action === "cancel-withdraw"} onOpenChange={close} mode="cancel" />
@@ -295,7 +298,7 @@ export function FundingView() {
 
       {escrow?.exists ? <WithdrawalsList pending={withdrawalPending} /> : null}
 
-      <MoneyDrawers action={action} onAction={onAction} capsNeed={{ perCall: needPerCall, perDay: needPerDay }} />
+      <MoneyDrawers action={action} onAction={onAction} freeOnly={freeOnly} capsNeed={{ perCall: needPerCall, perDay: needPerDay }} />
     </div>
   );
 }
