@@ -171,6 +171,16 @@ describe("plainApiError", () => {
     expect(plainApiError({ code: "AUTH_ORGANIZATION_SUSPENDED", status: 403 })).toBe("Your account is blocked by Assay. Contact support.");
   });
 
+  // Review M5: the blocked role decides when the body carries it; the sentence is the fallback.
+  it("prefers the refusal's role to its wording", () => {
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "anything", context: { role: "ORGANIZATION" } })).toBe(
+      "Your account is blocked by Assay. Contact support.",
+    );
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "Your account is blocked by Assay", context: { role: "PAYEE" } })).toBe(
+      "This account is blocked. Contact support.",
+    );
+  });
+
   it("names the wait of a 429", () => {
     expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 26 })).toBe("Too many requests. Try again in 26 s.");
   });

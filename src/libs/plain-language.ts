@@ -478,9 +478,10 @@ export function plainApiError(error: {
   status?: number;
   retryAfterSeconds?: number | null;
   message?: string;
+  context?: Readonly<Record<string, unknown>>;
 }): string {
   if (error.code === "TOO_MANY_REQUESTS") return tooManyRequestsSentence(error.retryAfterSeconds);
-  if (error.code === "ACCOUNT_BLOCKED" && namesOwnAccount(error.message)) return OWN_ACCOUNT_BLOCKED;
+  if (error.code === "ACCOUNT_BLOCKED" && namesOwnAccount(error.message, error.context)) return OWN_ACCOUNT_BLOCKED;
   return plainError(error.code, error.status);
 }
 
@@ -490,8 +491,15 @@ const OWN_ACCOUNT_BLOCKED = "Your account is blocked by Assay. Contact support."
  * `ACCOUNT_BLOCKED` names either this account ("Your account is blocked by
  * Assay…", BUG-X-02) or another party of the request ("This account is blocked
  * (payee)…"); only the first may say "your".
+ *
+ * The blocked role decides when the body carries it (`context.role`,
+ * `ORGANIZATION` = the caller's own organization). Today the backend keeps
+ * the role out of the body (the error has no `publicContext`), so the
+ * backend's fixed organization sentence is the fallback.
  */
-export function namesOwnAccount(message: string | null | undefined): boolean {
+export function namesOwnAccount(message: string | null | undefined, context?: Readonly<Record<string, unknown>> | null): boolean {
+  const role = context?.role;
+  if (typeof role === "string" && role !== "") return role.toUpperCase() === "ORGANIZATION";
   return typeof message === "string" && /^your account is blocked\b/i.test(message.trim());
 }
 
