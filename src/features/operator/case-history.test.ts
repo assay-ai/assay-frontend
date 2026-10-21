@@ -21,15 +21,21 @@ describe("operator penalty History (BUG-OPS-CASES-03)", () => {
   it("names the tool on a newer dollar row and formats an older de-minimis row", () => {
     expect(operatorEventSummary("Penalty of $28.47 proposed", context)).toBe("Penalty of $28.47 proposed against get_weather");
     expect(operatorEventSummary("Penalty of 5000000 is below the de-minimis floor; recorded, not levied", context)).toBe(
-      "Penalty of $5.00 is below the de-minimis floor; recorded, not levied",
+      "Penalty of $5.00 is below the minimum penalty; it is recorded but not charged",
     );
     expect(operatorEventSummary("28470000 of stake is reserved on chain", context)).toBe("$28.47 of stake is reserved on chain");
   });
 
-  it("leaves any other sentence as it is", () => {
+  it("says a dollar de-minimis row plainly and stamps raw instants (lot 1 E18)", () => {
     expect(operatorEventSummary("Penalty of $5.00 is below the de-minimis floor; recorded, not levied", context)).toBe(
-      "Penalty of $5.00 is below the de-minimis floor; recorded, not levied",
+      "Penalty of $5.00 is below the minimum penalty; it is recorded but not charged",
     );
+    expect(operatorEventSummary("$28.47 of stake is reserved; nothing can execute before 2026-10-22T16:51:00.000Z", context)).toBe(
+      "$28.47 of stake is reserved; nothing can execute before 2026-10-22 16:51 UTC",
+    );
+  });
+
+  it("leaves any other sentence as it is", () => {
     expect(operatorEventSummary("Assigned to riley", context)).toBe("Assigned to riley");
   });
 });
