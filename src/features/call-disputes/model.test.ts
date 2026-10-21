@@ -18,6 +18,7 @@ import {
   disputeErrorText,
   disputeTimeline,
   providerStatus,
+  refundPlanText,
   replyDueAt,
   reportWindow,
   slaMarks,
@@ -293,5 +294,36 @@ describe("B7 report copy", () => {
     expect(reportUntilText("2026-10-25T10:00:00.000Z", t0)).toBe("You can report this call until Oct 25, 10:00 UTC.");
     expect(reportUntilText("2026-10-25T10:00:00.000Z", Date.parse("2026-10-26T00:00:00.000Z"))).toBeNull();
     expect(reportUntilText(null, t0)).toBeNull();
+  });
+});
+
+// BUG-RETEST-R5a-03: decided in its first minute, the reply window never closed.
+describe("the reply row of a dispute decided early", () => {
+  it("says the reply was not needed, never 'Window closed' with a future date", () => {
+    const early = dispute({ state: "UPHELD", resolvedAt: "2026-10-18T10:01:00.000Z", refundState: "REFUNDED" });
+    const reply = disputeTimeline(early, t0 + 2 * 60_000).find((step) => step.id === "reply")!;
+    expect(reply).toMatchObject({
+      label: "No reply needed: decided before the reply window ended",
+      state: "skipped",
+      date: "2026-10-19T10:00:00.000Z",
+      dateLabel: "Would have closed",
+    });
+  });
+
+  it("keeps 'Window closed' when the window had closed before the decision", () => {
+    const late = dispute({ state: "UPHELD", resolvedAt: "2026-10-19T12:00:00.000Z", refundState: "REFUNDED" });
+    const reply = disputeTimeline(late, t0 + 30 * H).find((step) => step.id === "reply")!;
+    expect(reply).toMatchObject({ label: "No reply from the provider", dateLabel: "Window closed" });
+  });
+});
+
+// BUG-RETEST-R5a-02: a normal decided dispute is not "a decision being retried".
+describe("refundPlanText", () => {
+  it("says plainly that the refund landed", () => {
+    expect(refundPlanText("ALREADY_REFUNDED", "UPHELD")).toBe("Refunded to the buyer. Deciding again moves no money.");
+    expect(refundPlanText("ALREADY_REFUNDED", "OPEN")).toBe("Already refunded to the buyer. Deciding moves no money.");
+    expect(refundPlanText("RELEASE_HELD", "OPEN")).toMatch(/^Upholding returns the held payment/);
+    expect(refundPlanText("SOMETHING_NEW", "OPEN")).toBe("SOMETHING_NEW");
+    expect(refundPlanText("ALREADY_REFUNDED", "UPHELD")).not.toMatch(/retried/);
   });
 });
