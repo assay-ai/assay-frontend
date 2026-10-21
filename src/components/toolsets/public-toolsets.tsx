@@ -72,7 +72,7 @@ function badgeTone(badge: string): "primary" | "success" | "neutral" {
 }
 
 /** One card: name, @handle, badge, tool count, active users, price range, and the chips that matter. */
-export function ToolsetCard({ card, catalogue }: { card: PublicToolsetCard; catalogue: readonly PublicTool[] }) {
+export function ToolsetCard({ card, catalogue }: { card: PublicToolsetCard; catalogue: readonly PublicTool[] | null }) {
   const facts = trustFacts(card, catalogue);
   return (
     <li>
@@ -97,6 +97,7 @@ export function ToolsetCard({ card, catalogue }: { card: PublicToolsetCard; cata
           {facts.priceRange ? ` · ${facts.priceRange}` : ""}
         </p>
         <div className="mt-auto flex flex-wrap items-center gap-1.5">
+          {facts.unserved.length > 0 ? <Chip tone="warning">A tool has no provider</Chip> : null}
           {facts.noBackup.length > 0 ? <Chip tone="warning">No backup provider</Chip> : null}
           {facts.routesToPublisher ? <Chip tone="warning">Routes to its maker&apos;s own provider</Chip> : null}
           <ChevronRight aria-hidden="true" className="ml-auto size-4 shrink-0 text-03 group-hover:text-02" />
@@ -204,7 +205,7 @@ export function ToolsetCatalogue({ query, onClearQuery }: { query: string; onCle
       ) : (
         <ul className="grid grid-cols-1 gap-3 tablet:grid-cols-2">
           {cards.map((card) => (
-            <ToolsetCard key={`${card.handle}/${card.slug}`} card={card} catalogue={tools.data?.tools ?? []} />
+            <ToolsetCard key={`${card.handle}/${card.slug}`} card={card} catalogue={tools.data?.tools ?? null} />
           ))}
         </ul>
       )}
@@ -295,7 +296,15 @@ export function PublicToolsetView() {
   const byName = usePublicToolset(params?.token ? null : params?.handle ?? null, params?.token ? null : params?.slug ?? null);
   const byToken = useToolsetByToken(params?.token ?? null, params?.v ?? null, params?.from ?? null);
   const query = params?.token ? byToken : byName;
-  useDocumentTitle(query.data ? `${query.data.name} — Assay` : query.isError ? "Tool set not found — Assay" : null);
+  useDocumentTitle(
+    query.data
+      ? `${query.data.name} — Assay`
+      : query.isError
+        ? query.error instanceof ApiError && query.error.status === 404
+          ? "Tool set not found — Assay"
+          : "Tool set could not be loaded — Assay"
+        : null,
+  );
 
   const frame = (children: React.ReactNode) => <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">{children}</div>;
   if (!params || ((params.token || (params.handle && params.slug)) && query.isPending)) {
@@ -331,7 +340,7 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
   const tools = usePublicTools();
   const catalogue = tools.data?.tools ?? [];
   const versions = usePublicToolsetVersions(token ? null : page.handle, token ? null : page.slug);
-  const facts = trustFacts(page, catalogue);
+  const facts = trustFacts(page, tools.data?.tools ?? null);
   const signedIn = useSignedIn() || demoEnabled();
   const [copying, setCopying] = React.useState(false);
   const [reporting, setReporting] = React.useState(false);
@@ -400,10 +409,16 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
         <h2 className="text-label-13 text-01">Before you connect</h2>
         <ul className="flex flex-col gap-1.5 text-body-13">
           <li className="text-01">{facts.priceRange ? `Costs ${facts.priceRange.replace(/^Free calls, then /, "free calls, then ")}.` : tools.isPending ? "Prices loading…" : "Prices not known yet."}</li>
+          {facts.unserved.length > 0 ? (
+            <li className="flex items-start gap-1.5 text-warning-700">
+              <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+              Nobody serves {facts.unserved.join(", ")} yet: calls to {facts.unserved.length === 1 ? "it" : "them"} fail.
+            </li>
+          ) : null}
           {facts.noBackup.length > 0 ? (
             <li className="flex items-start gap-1.5 text-warning-700">
               <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              No backup provider for {facts.noBackup.join(", ")}: a call fails if the tool has no provider, or its one provider is down.
+              No backup provider for {facts.noBackup.join(", ")}: if its one provider is down, the call fails.
             </li>
           ) : facts.allBackedUp ? (
             <li className="text-02">Every tool has a backup provider.</li>
@@ -630,7 +645,7 @@ export function PublicHandleView() {
         ) : null}
         <ul className="grid grid-cols-1 gap-3 tablet:grid-cols-2" data-testid="handle-toolsets">
           {data.toolsets.map((card) => (
-            <ToolsetCard key={card.slug} card={card} catalogue={tools.data?.tools ?? []} />
+            <ToolsetCard key={card.slug} card={card} catalogue={tools.data?.tools ?? null} />
           ))}
         </ul>
         </>
