@@ -21,6 +21,7 @@ import { addressFamily, useProviderSetup, type ProviderSetup } from "@/features/
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { waitingPeriodOf, waitingPeriodPhrase } from "@/features/provider-stake/withdraw-state";
 import { useChainName } from "@/hooks/useChainName";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { ApiError } from "@/libs/ApiClient";
 import { GLOSSARY } from "@/libs/glossary";
@@ -68,6 +69,8 @@ function stageDone(setup: ProviderSetup, stage: Exclude<Stage, "done">): boolean
 }
 
 export default function ProviderSetupPage() {
+  // This page sits outside the console layout, so it names its own tab (BUG-NF-06).
+  useDocumentTitle("Set up — Assay");
   const setup = useProviderSetup();
   const params = useSearchParams();
   const requested = STAGE_FROM_PARAM[params.get("step") ?? ""] ?? null;
