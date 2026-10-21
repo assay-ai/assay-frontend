@@ -39,3 +39,25 @@ export function combinedProgress(accountDone: number, listing: WizardStage | nul
   const step = listing ? WIZARD_STAGES.findIndex((stage) => stage.id === listing) + 1 : 0;
   return `Account ${accountDone}/${ACCOUNT_STEP_COUNT} · Listing ${step}/${WIZARD_STAGES.length}`;
 }
+
+/**
+ * The stage to show. An explicit, valid `?stage=` wins, then the draft's state; a stage that needs
+ * something it has not got (a draft for Go live, a tool for Connect) falls back to picking a tool.
+ * `waitingOnDraft` is true only while a draft named in the URL is still loading.
+ */
+export function resolveStage(input: {
+  stageParam: string | null;
+  draft: { status: string } | null;
+  testPassed: boolean;
+  hasTool: boolean;
+  waitingOnDraft: boolean;
+}): WizardStage {
+  const { stageParam, draft, testPassed, hasTool, waitingOnDraft } = input;
+  let stage: WizardStage;
+  if (isWizardStage(stageParam)) stage = stageParam;
+  else if (draft) stage = draft.status === "DRAFT" && !testPassed ? "connect" : "live";
+  else stage = hasTool ? "connect" : "tool";
+  if (stage === "live" && !draft) stage = hasTool ? "connect" : "tool";
+  if (stage === "connect" && !hasTool && !waitingOnDraft) stage = "tool";
+  return stage;
+}

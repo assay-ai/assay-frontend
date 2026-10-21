@@ -56,7 +56,7 @@ export function readLastKnown(address: string, nowSeconds: number): PenaltyRow[]
   }
 }
 
-function writeLastKnown(address: string, rows: readonly PenaltyRow[]): void {
+export function writeLastKnown(address: string, rows: readonly PenaltyRow[]): void {
   try {
     window.localStorage.removeItem(LEGACY_KEY(address));
     window.localStorage.setItem(LAST_KNOWN_KEY(address), JSON.stringify(rows));

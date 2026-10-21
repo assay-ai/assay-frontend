@@ -68,7 +68,7 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
   const { themeType } = useTheme();
   const queryClient = useQueryClient();
   const pathname = usePathname();
-  // The tab names the page ("Activity — Assay — Operator"), not the generic site title.
+  // The tab names the page ("Activity — Assay operator"), not the generic site title.
   useDocumentTitle(`${operatorTitleFor(pathname)} — Assay operator`);
 
   /** `null` = signed out. `undefined` = storage not read yet (first render / SSR). */
