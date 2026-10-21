@@ -17,7 +17,7 @@ import { recentMonths } from "@/features/buyer/period";
 import { statementCheckSentence, statementMoneyLines } from "@/features/buyer-money/funding-lines";
 import { MATCHES_SENTENCE, ReconcileNote, reconcileState } from "@/features/buyer/reconcile-note";
 import { readWithheld } from "@/features/buyer/wire";
-import { spendCsv } from "@/features/g30/spend-view";
+import { paidGroups, spendCsv } from "@/features/g30/spend-view";
 import type { ReceiptsSummary, SummaryFigures } from "@/features/g30/wire";
 import type { Money } from "@/interfaces";
 import { useChains } from "@/hooks/useChains";
@@ -180,12 +180,13 @@ function StatementsContent() {
   const totals = summary.data?.totals;
   // Why calls were not charged, from `GET /withheld`: the three lines add up to Not charged.
   const lines = withheld ? notChargedLines(withheld) : null;
-  const groups = summary.data?.groups ?? [];
+  // Only groups with paid calls: a free-tier-only group (calls 0) is no statement line.
+  const groups = paidGroups(summary.data?.groups ?? []);
 
   const download = React.useCallback(() => {
     if (!summary.data) return;
     const assetLabel = summary.data.asset ? displayAssetLabel(summary.data.asset, chains) : "";
-    const body = spendCsv(summary.data.groups, {
+    const body = spendCsv(paidGroups(summary.data.groups), {
       dimensionHeader: "Tool",
       labelOf: (key) => names.name("tool", key),
       assetLabel,
