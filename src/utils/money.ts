@@ -203,7 +203,8 @@ export function parseAmountInput(
   // separator ("1,000"), never as a decimal point ("1,5" is not 15).
   const trimmed = raw.trim().replace(/^\$\s*/, "");
   if (trimmed === "") return { value: null, atomic: null, error: required ? "Enter an amount." : null };
-  if (trimmed.includes(",") && !/^\d{1,3}(,\d{3})+(\.\d*)?$/.test(trimmed)) {
+  // The first group never starts with 0: "0,500" is a decimal comma, not 500.
+  if (trimmed.includes(",") && !/^[1-9]\d{0,2}(,\d{3})+(\.\d*)?$/.test(trimmed)) {
     return { value: null, atomic: null, error: "Enter an amount like 20 or 20.50." };
   }
   const text = trimmed.replace(/,/g, "");
