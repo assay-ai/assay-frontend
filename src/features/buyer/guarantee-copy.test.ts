@@ -11,6 +11,8 @@ describe("guarantee copy", () => {
     expect(notRunSentence(2)).toMatch(/^Separately, 2 calls this month did not run/);
     expect(notRunSentence(1)).toMatch(/^Separately, 1 call this month did not run/);
     expect(notRunSentence(2)).toMatch(/nothing was held and nothing was charged/);
+    // fe-followup M1: a capped read is a floor.
+    expect(notRunSentence(2, false)).toMatch(/^Separately, at least 2 calls this month did not run/);
   });
   it("counts a nested reason as a part of its line, not a second count (BUG-X-01)", () => {
     expect(partOfLine(4, 4)).toBe("4 of 4 calls");
