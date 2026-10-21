@@ -26,15 +26,14 @@ import {
   callOutcome,
   matchesFilter,
   parseCallsFilter,
-  refundableOnly,
-  statusesFor,
   type CallsFilter,
 } from "@/features/buyer/call-outcome";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
-import { listToolCalls } from "@/services/tool-calls.service";
+import { listCalls } from "@/features/buyer/calls-list";
+import { isFreeToolCall, type FreeToolCall } from "@/services/tool-calls.service";
 import { cn } from "@/utils";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 
@@ -53,6 +52,7 @@ import { formatMoney, notCharged, toDecimal } from "@/utils/money";
  */
 
 const PAGE = 50;
+
 
 function CallsList() {
   const params = useSearchParams();
@@ -85,14 +85,7 @@ function CallsList() {
 
   const query = useInfiniteQuery({
     queryKey: ["tool-calls", "list", filter, toolId],
-    queryFn: ({ pageParam }) =>
-      listToolCalls({
-        limit: PAGE,
-        status: statusesFor(filter),
-        refundable: refundableOnly(filter),
-        toolId: toolId ?? undefined,
-        cursor: pageParam ?? undefined,
-      }),
+    queryFn: ({ pageParam }) => listCalls(filter, { limit: PAGE, toolId: toolId ?? undefined, cursor: pageParam ?? undefined }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.pageInfo?.hasMore ? (last.pageInfo.nextCursor ?? null) : null),
     retry: 0,
@@ -103,7 +96,7 @@ function CallsList() {
     () =>
       (query.data?.pages ?? [])
         .flatMap((page) => page.items ?? [])
-        .filter((call) => matchesFilter(call, filter) && (!toolId || call.toolId === toolId)),
+        .filter((call) => (isFreeToolCall(call) || matchesFilter(call, filter)) && (!toolId || call.toolId === toolId)),
     [query.data, filter, toolId],
   );
 
@@ -232,6 +225,7 @@ function CallsList() {
         <>
           <ul className="flex w-full flex-col overflow-hidden rounded-xl border border-01 bg-01 shadow-soft">
             {calls.map((call) => {
+              if (isFreeToolCall(call)) return <FreeCallRow key={`free:${call.callId}`} call={call} providerName={names.lookup("provider", call.providerId)} />;
               const outcome = callOutcome(call);
               const uncharged = notCharged(call.price, call.charged);
               // Buyer debt or a forfeited payment: say why, beside the verdict.
@@ -311,6 +305,35 @@ function CallsList() {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * A served free call: no intent, so no receipt to open; the tool, when, the
+ * provider and "Free" (lot 1 B5).
+ */
+function FreeCallRow({ call, providerName }: { call: FreeToolCall; providerName: string | null | undefined }) {
+  return (
+    <li className="border-b border-01 last:border-b-0" data-testid="free-call-row">
+      <div className="flex w-full items-center gap-3 px-4 py-3.5 tablet:px-5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate font-mono text-mono-13 font-semibold text-01">
+            {call.toolId ? <EntityName kind="tool" id={call.toolId} copyable={false} /> : (call.toolName ?? "A tool no longer listed")}
+          </span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
+            <StatusChip status="free" />
+            <UtcTime value={call.createdAt} relative />
+            {providerName ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="truncate">{providerName}</span>
+              </>
+            ) : null}
+          </span>
+        </div>
+        <span className="shrink-0 font-mono text-mono-13 font-semibold text-01">Free</span>
+      </div>
+    </li>
   );
 }
 
