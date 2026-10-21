@@ -31,9 +31,12 @@ const KEY = {
   createdAt: "2026-10-17T00:00:00Z",
 };
 
-function render(keys: unknown[]): string {
+const OTHER = "22222222-2222-2222-2222-222222222222";
+
+function render(keys: unknown[], otherKeys?: unknown[]): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: [{ agentId: AGENT, label: "My agent" }] }, { [AGENT]: keys }));
+  const agents = [{ agentId: AGENT, label: "My agent" }, ...(otherKeys ? [{ agentId: OTHER, label: "Other agent" }] : [])];
+  client.setQueryData(AGENTS_WITH_KEYS_KEY, demoAgentsWithKeys({ items: agents }, { [AGENT]: keys, ...(otherKeys ? { [OTHER]: otherKeys } : {}) }));
   client.setQueryData(toolsetKeys.servers(AGENT), { servers: [] });
   client.setQueryData(toolsetKeys.all, { items: [], pageInfo: { nextCursor: null, hasMore: false } });
   client.setQueryData(["spend-policy"], null);
@@ -57,5 +60,12 @@ describe("Connect's 'Is it working?', from the agents' key health", { timeout: 3
     const html = render([{ ...KEY, lastUsedAt: "2026-10-18T00:00:00Z", expiresAt: "2026-10-18T02:00:00Z" }]);
     expect(html).toContain('data-testid="connect-working"');
     expect(html).toContain("Key 1");
+  });
+
+  it("is about the first agent only: another agent's used key does not say connected", () => {
+    const html = render([KEY], [{ ...KEY, id: "k9", agentId: OTHER, name: "Other key", prefix: "assay_sk_live_zz99", lastUsedAt: "2026-10-18T00:00:00Z" }]);
+    expect(html).toContain('data-testid="connect-waiting"');
+    expect(html).not.toContain("Other key");
+    expect(html).not.toContain("assay_sk_live_zz99");
   });
 });

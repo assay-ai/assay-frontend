@@ -395,7 +395,7 @@ export function PayerDelegationsPanel({
                 </span>
               ) : null}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <StatusPill
                 label={
                   delegation.status === "EXPIRED" ? "EXPIRED" : "CAN PAY"

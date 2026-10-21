@@ -2,6 +2,8 @@ import Decimal from "decimal.js";
 
 import { reasonLabel } from "@/features/call-disputes/model";
 import { humanize, plainAuditAction } from "@/libs/plain-language";
+import { formatDateTime } from "@/libs/utc-time";
+import { formatMoney } from "@/utils/money";
 
 /**
  * Account history (`/audit-log`), pure: one entry as a plain sentence, and the
@@ -34,6 +36,20 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 /** Field names whose values are money in major units. */
 const MONEY_KEY = /(cap|limit|amount|budget|charged|price|balance)$/i;
 
+/**
+ * Money fields the backend writes in minor units ("400000" is $0.40 at six
+ * decimals): spending limits and the on-chain permission's caps. A value with a
+ * decimal point is already in major units and is left to MONEY_KEY.
+ */
+const MINOR_MONEY_KEY = /^(perCallMax|dailyCap|monthlyCap|maxSpendPerHour|requireApprovalAbove|maxPerWindow|maxVoucherAmount)$/;
+/** Assumes the six-decimal assets served today; read the entry's own decimals if the backend adds them. */
+const MINOR_DECIMALS = 6;
+
+/** Bookkeeping fields of a policy version: never part of a sentence a person would say. */
+const HIDDEN_KEY = /^(policyVersion|changeReason|changedBy|transactionHash)$/;
+
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
 /** Field names said in the product's words rather than humanized. */
 const KEY_WORDS: Record<string, string> = {
   dailyCap: "daily spending limit",
@@ -41,14 +57,19 @@ const KEY_WORDS: Record<string, string> = {
   perCallCap: "per-call limit",
   maxCallsPerMinute: "calls per minute limit",
   revokedAt: "revoked",
+  validUntil: "end date",
 };
 
 function shown(value: unknown, key = ""): string | null {
   if (value === null || value === undefined || value === "") return "none";
   if (typeof value === "boolean") return value ? "on" : "off";
+  if (MINOR_MONEY_KEY.test(key) && /^\d+$/.test(String(value))) {
+    return formatMoney({ amount: String(value), asset: "", decimals: MINOR_DECIMALS }, { decimals: MINOR_DECIMALS });
+  }
   if (typeof value === "number") return value.toLocaleString("en-US");
   if (typeof value === "string") {
     if (UUID.test(value) || RAW_VALUE.test(value) || EMAIL.test(value)) return null;
+    if (ISO_TIME.test(value)) return formatDateTime(value);
     if (MONEY_KEY.test(key) && /^\d+(\.\d+)?$/.test(value)) return `$${value}`;
     return value;
   }
@@ -83,8 +104,8 @@ export function auditChanges(entry: AuditEntryLike): string[] {
   const after = entry.after ?? {};
   const before = entry.before ?? {};
   const phrases: string[] = [];
-  for (const [key, next] of Object.entries(after).slice(0, 3)) {
-    if (/Ids?$|_ids?$/.test(key)) continue;
+  const fields = Object.entries(after).filter(([key]) => !HIDDEN_KEY.test(key) && !/Ids?$|_ids?$/.test(key));
+  for (const [key, next] of fields.slice(0, 3)) {
     const label = KEY_WORDS[key] ?? humanize(key).toLowerCase();
     const to = shown(next, key);
     if (to === null) continue;

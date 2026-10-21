@@ -237,6 +237,14 @@ describe("deriveReceiptState — collection", () => {
     expect(deriveReceiptState(settledReceipt({ ...zero, debt: "VOIDED" }))).toBe("DEBT_VOIDED");
   });
 
+  it("draws a call refunded by an upheld report as a refund, not a cancelled debt", () => {
+    const zero = { chargedPrice: usd("0"), withheld: usd("0") };
+    const refunded = settledReceipt({ ...zero, debt: "VOIDED", chargeNote: "voided:DISPUTE_UPHELD" });
+    expect(receiptFlow(refunded, "DEBT_VOIDED").map((n) => n.label)).toEqual(["Held", "Report accepted, refunded", "Released to you"]);
+    const lapsed = settledReceipt({ ...zero, debt: "VOIDED", chargeNote: "voided:REFUND" });
+    expect(receiptFlow(lapsed, "DEBT_VOIDED").map((n) => n.label)).toEqual(["Held", "Debt cancelled", "Released to you"]);
+  });
+
   it("has a card for every collection state", () => {
     for (const state of COLLECTION_STATES) {
       expect(STATE_CARDS[state as keyof typeof STATE_CARDS].sentence.length).toBeGreaterThan(0);

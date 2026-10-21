@@ -66,8 +66,8 @@ export function ConnectView() {
   }, []);
   const agent = data.agents[0] ?? null;
   const servers = useAgentServers(agent?.agentId, { pollMs: poll });
-  const live = data.agents
-    .flatMap((a) => data.keys[a.agentId] ?? [])
+  // Keys, last call and prefix all belong to the one agent this page hands URLs and keys out for.
+  const live = (agent ? (data.keys[agent.agentId] ?? []) : [])
     .filter((k) => !k.revokedAt)
     .sort((a, b) => ((a.lastUsedAt ?? "") < (b.lastUsedAt ?? "") ? 1 : -1));
   // The key made here, in memory only: never stored, never in the URL.
@@ -80,7 +80,7 @@ export function ConnectView() {
   const rootCalled = Boolean(root && (root.firstCallAt || root.lastCallAt));
   const waitingOnRoot = Boolean(root?.waitingForFirstCall);
   // A key that is not revoked has been used (the keys' health): its first call arrived.
-  const firstCallSeen = data.agents.some((a) => data.health[a.agentId]?.firstCallSeen === true);
+  const firstCallSeen = agent ? data.health[agent.agentId]?.firstCallSeen === true : false;
   const done = waitingOnRoot ? false : rootCalled || firstCallSeen;
   React.useEffect(() => setPoll(done ? false : POLL_MS), [done]);
   const failed = data.agentsQuery.isError || data.keysQuery.isError;
