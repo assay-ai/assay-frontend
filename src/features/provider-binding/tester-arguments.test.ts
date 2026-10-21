@@ -57,4 +57,42 @@ describe("argumentsProblem", () => {
       "a, b and c cannot be null: enter a value or remove them."
     );
   });
+
+  // BUG-PRV-CATALOG-07: count 99 against maximum 10 went to the real upstream.
+  describe("schema bounds, checked before any request", () => {
+    const geocode = {
+      type: "object",
+      required: ["name"],
+      properties: {
+        name: { type: "string", minLength: 2, maxLength: 20 },
+        count: { type: "integer", minimum: 1, maximum: 10 },
+        ratio: { type: "number", exclusiveMinimum: 0, exclusiveMaximum: 1 },
+        old: { type: "number", minimum: 0, exclusiveMinimum: true },
+        unit: { type: "string", enum: ["metric", "imperial"] },
+      },
+    };
+
+    it("refuses a number outside minimum/maximum", () => {
+      expect(argumentsProblem({ name: "Berlin", count: 99 }, geocode)).toBe("“count” must be at most 10.");
+      expect(argumentsProblem({ name: "Berlin", count: 0 }, geocode)).toBe("“count” must be at least 1.");
+    });
+
+    it("refuses a number on an exclusive bound, in both draft styles", () => {
+      expect(argumentsProblem({ name: "Berlin", ratio: 1 }, geocode)).toBe("“ratio” must be less than 1.");
+      expect(argumentsProblem({ name: "Berlin", ratio: 0 }, geocode)).toBe("“ratio” must be more than 0.");
+      expect(argumentsProblem({ name: "Berlin", old: 0 }, geocode)).toBe("“old” must be more than 0.");
+    });
+
+    it("refuses a string outside minLength/maxLength and a value not in enum", () => {
+      expect(argumentsProblem({ name: "B" }, geocode)).toBe("“name” must be at least 2 characters.");
+      expect(argumentsProblem({ name: "x".repeat(21) }, geocode)).toBe("“name” must be at most 20 characters.");
+      expect(argumentsProblem({ name: "Berlin", unit: "kelvin" }, geocode)).toBe("“unit” must be one of metric, imperial.");
+    });
+
+    it("still runs values on and inside the bounds", () => {
+      expect(argumentsProblem({ name: "Berlin", count: 10, ratio: 0.5, old: 3, unit: "metric" }, geocode)).toBeNull();
+      expect(argumentsProblem({ name: "Be", count: 1 }, geocode)).toBeNull();
+      expect(argumentsProblem({ query: "x402", limit: 10 }, wikipedia)).toBeNull();
+    });
+  });
 });
