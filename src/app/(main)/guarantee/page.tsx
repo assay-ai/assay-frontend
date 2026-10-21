@@ -6,6 +6,7 @@ import { Fragment, useMemo } from "react";
 
 import { DisplayAssetSelect, useDisplayAssetPick } from "@/components/display-asset-select";
 import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
+import { plainError } from "@/libs/plain-language";
 import { MoneySplit, type MoneyTone } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -228,7 +229,7 @@ export default function GuaranteePage() {
         <PageState
           kind="error"
           title="These figures could not be loaded"
-          description={<ApiErrorSentence error={error} />}
+          description={<ApiErrorSentence error={error} fallback={plainError(undefined)} />}
           onRetry={reload}
           code={error.code}
           details={error.message}

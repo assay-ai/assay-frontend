@@ -616,7 +616,7 @@ export default function ProviderAccountPage() {
               <Banner
                 tone="danger"
                 title="The API key could not be created"
-                description={<ApiErrorSentence error={createMutation.error} />}
+                description={<ApiErrorSentence error={createMutation.error} fallback={plainError(undefined)} />}
               />
             ) : null}
             <Button

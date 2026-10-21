@@ -26,6 +26,18 @@ describe("ApiErrorSentence", () => {
     expect(container.textContent).toBe("Too many requests earlier. You can try again now.");
   });
 
+  it("never shows a larger wait than the header named, even from an old clock tick (review M5)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-10-21T00:00:00Z"));
+    // Mount once and unmount: the shared clock keeps that old tick.
+    const first = render(<ApiErrorSentence error={new ApiError(TOO_MANY_REQUESTS, "x", 429, "/a", undefined, 1, Date.parse("2026-10-21T00:00:01Z"))} />);
+    first.unmount();
+    vi.setSystemTime(Date.parse("2026-10-21T01:00:00Z"));
+    const error = new ApiError(TOO_MANY_REQUESTS, "x", 429, "/a", undefined, 15, Date.parse("2026-10-21T01:00:15Z"));
+    const { container } = render(<ApiErrorSentence error={error} />);
+    expect(container.textContent).toBe("Too many requests. Try again in 15 s.");
+  });
+
   it("keeps any other error's sentence, and a fallback for a non-API failure", () => {
     const { container, rerender } = render(<ApiErrorSentence error={new ApiError("AUTH_INVALID", "nope", 401)} />);
     const sentence = container.textContent;
