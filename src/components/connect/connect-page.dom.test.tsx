@@ -9,7 +9,7 @@ import { AdvancedUrlKinds } from "./advanced-url-kinds";
 import { ClientPicker } from "./client-picker";
 
 afterEach(cleanup);
-const URL_ROOT = "https://mcp.assay.ai/";
+const URL_ROOT = "https://mcp.goassay.ai/";
 const body = () => document.body.textContent ?? "";
 
 describe("client picker", () => {
@@ -38,7 +38,7 @@ describe("one action per client", () => {
 
   it("claude.ai shows https://…/?free=1 and the toggle", () => {
     render(<McpConfigTabs guide token={null} url={URL_ROOT} client="claude-ai" />);
-    expect(body()).toContain("https://mcp.assay.ai/?free=1");
+    expect(body()).toContain("https://mcp.goassay.ai/?free=1");
     const toggle = screen.getByLabelText("Show paid tools too (they will explain how to pay)") as HTMLInputElement;
     fireEvent.click(toggle);
     expect(body()).not.toContain("?free=1");

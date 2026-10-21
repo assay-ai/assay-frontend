@@ -17,7 +17,7 @@ import { HostedConnector } from "./hosted-connector";
   compiles the two files with Next's own SWC.
 */
 afterEach(cleanup);
-const URL_ROOT = "https://mcp.assay.ai/";
+const URL_ROOT = "https://mcp.goassay.ai/";
 const body = () => document.body.textContent ?? "";
 
 describe("Connect copy keeps the space after the app name", () => {

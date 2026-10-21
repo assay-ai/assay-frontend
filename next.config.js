@@ -58,7 +58,7 @@ const mcpUrlProblem = (() => {
   if (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return null;
   return "must be https (http only on localhost)";
 })();
-if (mcpUrlProblem) throw new Error(`NEXT_PUBLIC_MCP_URL ${mcpUrlProblem}, e.g. https://mcp.assay.ai/`);
+if (mcpUrlProblem) throw new Error(`NEXT_PUBLIC_MCP_URL ${mcpUrlProblem}, e.g. https://mcp.goassay.ai/`);
 
 /**
  * Security headers (frontend review 2026-10-15, F2).
