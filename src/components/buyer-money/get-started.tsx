@@ -42,6 +42,7 @@ import { useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { assayMcpRun, keyForHint, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { GasHelpNote } from "./gas-help-note";
+import { readyForPaidCalls } from "@/features/buyer-money/confirming";
 import { useAgentsAndKeys } from "./use-agents";
 
 /**
@@ -213,6 +214,8 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     if (agent) recordConnect.mutate({ url: copied ?? urlForClient(client, mcpEndpointUrl()), serverName: "assay", client });
   };
   const states = getStartedStates(facts);
+  // What agents can spend, the same figure as Funding's headline: no uncredited on-chain money (lot 1 A3).
+  const fundsAvailable = readyForPaidCalls(escrow?.spendable ?? null, null, escrow?.uncreditedOnChain);
   const { chains } = useChains();
   const chainId = chainIdOfAccount(escrow?.account ?? agent?.agentAccount);
   const chain = chainId ? findChain(chains, chainId) : null;
@@ -350,7 +353,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         freeOnlyNote
       ) : states.funds === "done" ? (
           <p className="text-body-13 text-02" data-testid="step-funds-done">
-            Your escrow is open{escrow?.spendable ? ` with ${formatLimit(escrow.spendable)} available` : ""}. Add more any time
+            Your escrow is open{fundsAvailable ? ` with ${formatLimit(fundsAvailable)} available` : ""}. Add more any time
             on{" "}
             <Link href="/funding" className="font-semibold text-primary-600 hover:underline">
               Money
