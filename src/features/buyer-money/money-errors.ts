@@ -11,9 +11,12 @@ import { knowsError, plainApiError, plainError } from "@/libs/plain-language";
  * One sentence for a failed money action (deposit, caps, withdraw, claim,
  * pay permission). The raw message stays under SignAction's Details.
  */
+/** Said up front when `GET /escrow` reports `withdrawalsFrozen`, and on the refusal itself. */
+export const WITHDRAWALS_FROZEN_TEXT =
+  "Withdrawals are paused for everyone while we check a reconciliation difference. Nothing was taken from your escrow. Try again later.";
+
 const ESCROW_REFUSALS: Record<string, string> = {
-  SETTLEMENT_WITHDRAWALS_FROZEN:
-    "Withdrawals are paused for everyone while we check a reconciliation difference. Nothing was taken from your escrow. Try again later.",
+  SETTLEMENT_WITHDRAWALS_FROZEN: WITHDRAWALS_FROZEN_TEXT,
   SETTLEMENT_WITHDRAWAL_NOT_YET_AVAILABLE:
     "There is nothing to claim yet: either no request is standing, or its wait has not finished.",
   PAYMENT_ESCROW_NOT_OPEN: "You have no escrow yet. Your first deposit opens it.",

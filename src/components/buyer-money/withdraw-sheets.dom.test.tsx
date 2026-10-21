@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
   and paid calls can land before the request is on chain).
 */
 const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x1", decimals: 6 });
-const money = vi.hoisted(() => ({ openHolds: "0" }));
+const money = vi.hoisted(() => ({ openHolds: "0", frozen: undefined as boolean | null | undefined }));
 
 vi.mock("./use-buyer-money", () => ({
   useBuyerMoney: () => ({
@@ -23,6 +23,7 @@ vi.mock("./use-buyer-money", () => ({
       openHolds: usd(money.openHolds),
       withdrawRequested: usd("0"),
       withdrawAvailableAt: null,
+      withdrawalsFrozen: money.frozen,
     },
     chain: { chainId: "eip155:46630", displayName: "Robinhood Chain testnet" },
     chainId: "eip155:46630",
@@ -39,11 +40,12 @@ vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIn
 vi.mock("@/features/buyer-debt/use-owed-intent-ids", () => ({ useOwedIntentIds: () => new Set<string>() }));
 vi.mock("@/features/buyer-debt/settle-debt-sheet", () => ({ useSettleDebt: () => ({ openSettle: () => undefined }) }));
 
-import { WithdrawSheet, withdrawAcknowledgement, withdrawHeldNote, withdrawPauseWarning, withdrawReceiveNote } from "./withdraw-sheets";
+import { WithdrawSheet, withdrawalsFrozen, withdrawAcknowledgement, withdrawHeldNote, withdrawPauseWarning, withdrawReceiveNote } from "./withdraw-sheets";
 
 afterEach(() => {
   cleanup();
   money.openHolds = "0";
+  money.frozen = undefined;
 });
 
 function open() {
@@ -143,5 +145,24 @@ describe("Withdraw: Use all is preselected (B7)", () => {
     open();
     enter("5");
     expect(screen.getByRole("button", { name: /Request \$5\.00 \(free\)/ })).toBeTruthy();
+  });
+});
+
+/* Lot 1 D16: a frozen withdrawal path is said before any signature. */
+describe("Withdraw while withdrawals are frozen", () => {
+  it("shows the frozen banner up front and no request can be signed", () => {
+    money.frozen = true;
+    open();
+    expect(screen.getByTestId("withdrawals-frozen").textContent).toMatch(/Withdrawals are paused for everyone/);
+    expect((screen.getByRole("button", { name: /Request/ }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("keeps today's sheet when the field is unknown or absent (older backend)", () => {
+    money.frozen = null;
+    open();
+    expect(screen.queryByTestId("withdrawals-frozen")).toBeNull();
+    expect(withdrawalsFrozen({})).toBe(false);
+    expect(withdrawalsFrozen({ withdrawalsFrozen: null })).toBe(false);
+    expect(withdrawalsFrozen({ withdrawalsFrozen: true })).toBe(true);
   });
 });
