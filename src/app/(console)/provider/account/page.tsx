@@ -385,7 +385,10 @@ export default function ProviderAccountPage() {
             // attach one to, so the control says it cannot act instead of
             // failing on the click.
             disabled={agentIds.length === 0}
-            onClick={() => setCreating(true)}
+            onClick={() => {
+              createMutation.reset();
+              setCreating(true);
+            }}
           >
             New API key
           </Button>
@@ -408,14 +411,6 @@ export default function ProviderAccountPage() {
               ? "Finish setup to add your contacts and accept the terms."
               : plainError(registrationError.code)
           }
-        />
-      ) : null}
-
-      {createMutation.error instanceof ApiError ? (
-        <Banner
-          tone="danger"
-          title="The API key could not be created"
-          description={plainError(createMutation.error.code)}
         />
       ) : null}
 
@@ -612,8 +607,17 @@ export default function ProviderAccountPage() {
               placeholder="CI deploy"
               value={name}
               onChange={(event) => setName(event.target.value)}
+              maxLength={128}
               hint="For a deploy pipeline or a script that manages your tools."
             />
+            {/* Inside the sheet: a banner on the page would sit behind the overlay. */}
+            {createMutation.error instanceof ApiError ? (
+              <Banner
+                tone="danger"
+                title="The API key could not be created"
+                description={plainError(createMutation.error.code, createMutation.error.status)}
+              />
+            ) : null}
             <Button
               type="button"
               loading={createMutation.isPending}

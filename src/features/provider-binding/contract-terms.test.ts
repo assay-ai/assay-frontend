@@ -178,7 +178,7 @@ describe("the publish check, one tester row per major", () => {
       ],
     };
     const rows = majorTestRows(check, [1, 2]);
-    expect(rows.map(majorTestText)).toEqual(["Contract v1: tested and passed", "Contract v2: No test has run at revision 3 yet."]);
+    expect(rows.map(majorTestText)).toEqual(["Contract v1: tested and passed", "Contract v2: needs a new passing test"]);
     expect(gateRows(check, [1, 2]).filter((r) => r.major === 2).map((r) => r.detail)).toEqual([
       "No test has run at revision 3 yet.",
       "Run a passing test first.",
