@@ -8,6 +8,8 @@ const require = createRequire(import.meta.url);
 // next.config.js refuses to load without the MCP host (and the pinned version).
 process.env.NEXT_PUBLIC_MCP_URL ??= "https://mcp.example.com/";
 process.env.NEXT_PUBLIC_ASSAY_MCP_VERSION ??= "1.2.3";
+// The site-wide Report-Only policy names the API origin of the environment.
+process.env.NEXT_PUBLIC_API_BASE_URL ??= "https://api.example.com/api/v1";
 
 async function headersFor(nodeEnv: string): Promise<Record<string, string>> {
   const previous = process.env.NODE_ENV;
@@ -36,6 +38,16 @@ describe("security headers", () => {
     expect(headers["Strict-Transport-Security"]).toBeUndefined();
   });
 
+  it("next dev sends the site-wide Report-Only policy with the API and MCP origins of the env, and 'unsafe-eval'", async () => {
+    const headers = await headersFor("development");
+    const api = new URL(process.env.NEXT_PUBLIC_API_BASE_URL!).origin;
+    const mcp = new URL(process.env.NEXT_PUBLIC_MCP_URL!).origin;
+    expect(headers["Content-Security-Policy-Report-Only"]).toBe(csp.sitePolicy({ connectOrigins: [api, mcp], dev: true }));
+    const policy = directives(headers["Content-Security-Policy-Report-Only"]);
+    expect(policy["connect-src"].split(" ")).toEqual(expect.arrayContaining(["'self'", api, mcp, "https://auth.privy.io"]));
+    expect(policy["script-src"]).toContain("'unsafe-eval'");
+  });
+
   it("adds HSTS in production only", async () => {
     // Production is a static export: next.config sends nothing there, and
     // Cloudflare Pages serves `public/_headers` instead. Its `/*` block must be
@@ -54,8 +66,11 @@ describe("security headers", () => {
     const enforced = Object.fromEntries(
       Object.entries(dev).filter(([key]) => key !== "Content-Security-Policy-Report-Only"),
     );
-    const { "Strict-Transport-Security": hsts, ...rest } = all;
+    const { "Strict-Transport-Security": hsts, "Content-Security-Policy-Report-Only": reportOnly, ...rest } = all;
     expect(rest).toEqual(enforced);
+    // The site-wide Report-Only policy, without origins (the build adds them) and never 'unsafe-eval'.
+    expect(reportOnly).toBe(csp.sitePolicy());
+    expect(reportOnly).not.toContain("unsafe-eval");
     expect(hsts).toMatch(/^max-age=\d+/);
     expect(dev["Strict-Transport-Security"]).toBeUndefined();
 
@@ -74,6 +89,9 @@ describe("security headers", () => {
 
 /* Spec R-WEB-2 and R-WEB-4: the consent and enable-paid pages. */
 const csp = require("../../scripts/csp-policy.js") as {
+  sitePolicy: (options?: { connectOrigins?: string[]; dev?: boolean }) => string;
+  originsOf: (...values: (string | undefined)[]) => string[];
+  SITE_CONNECT_ORIGINS: string[];
   PRIVY_FRAMES: string[];
   CONNECT_ORIGINS: string[];
   STRICT_SCRIPT_ORIGINS: string[];
@@ -82,7 +100,12 @@ const csp = require("../../scripts/csp-policy.js") as {
   fallbackPolicy: (options?: { scriptHashes?: string[] }) => string;
 };
 const connectCsp = require("../../scripts/connect-csp.js") as {
-  completeHeaders: (text: string, pages: Record<string, Record<string, string>>, connectOrigins: string[]) => string;
+  completeHeaders: (
+    text: string,
+    pages: Record<string, Record<string, string>>,
+    connectOrigins: string[],
+    siteConnectOrigins?: string[],
+  ) => string;
   inlineScriptHashes: (html: string) => Set<string>;
   SPLAT_HEADERS: Record<string, Record<string, string>>;
 };
@@ -205,8 +228,11 @@ describe("scripts/connect-csp.js", () => {
       "Referrer-Policy": "no-referrer",
       "Cross-Origin-Opener-Policy": "same-origin-allow-popups",
     });
-    // The site-wide block is untouched.
-    expect(block(out, "/*")).toEqual(block(text, "/*"));
+    // The site-wide block is untouched but for its Report-Only policy, which gains the API origin.
+    expect(block(out, "/*")).toEqual({
+      ...block(text, "/*"),
+      "Content-Security-Policy-Report-Only": csp.sitePolicy({ connectOrigins: ["https://api.example.com"] }),
+    });
   });
 
   it("keeps Cross-Origin-Opener-Policy same-origin-allow-popups on /connect/*, once, never in a per-page block (R1-m4)", async () => {
@@ -307,5 +333,82 @@ describe("_headers is well formed", () => {
         ["https://api.example.com"],
       ),
     );
+  });
+});
+
+/* Security checklist P12: the site-wide policy, Report-Only first. */
+describe("site-wide Report-Only policy", () => {
+  const SITE = "Content-Security-Policy-Report-Only";
+
+  it("is a full policy: Privy, WalletConnect, Turnstile, no plugins, own base and forms, framing as enforced", () => {
+    const policy = directives(csp.sitePolicy());
+    expect(policy["default-src"]).toBe("'self'");
+    expect(policy["script-src"]).toBe("'self' 'unsafe-inline' https://challenges.cloudflare.com");
+    expect(policy["object-src"]).toBe("'none'");
+    expect(policy["base-uri"]).toBe("'self'");
+    expect(policy["form-action"]).toBe("'self'");
+    expect(policy["frame-ancestors"]).toBe("'self'");
+    expect(policy["frame-src"]).toBe(csp.PRIVY_FRAMES.join(" "));
+    expect(policy["child-src"]).toBe(csp.PRIVY_FRAMES.join(" "));
+    expect(policy["connect-src"]).toBe(["'self'", ...csp.CONNECT_ORIGINS, ...csp.SITE_CONNECT_ORIGINS].join(" "));
+    for (const origin of ["https://auth.privy.io", "https://*.rpc.privy.systems", "wss://relay.walletconnect.com"]) {
+      expect(policy["connect-src"].split(" ")).toContain(origin);
+    }
+    expect(csp.sitePolicy()).not.toMatch(/unsafe-eval|report-uri|report-to/);
+    expect(csp.sitePolicy({ dev: true })).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval'");
+  });
+
+  it("takes origins, not URLs, from the env, and skips unset or invalid ones", () => {
+    expect(csp.originsOf("https://api.example.com/api/v1", "https://mcp.example.com/", undefined, "not a url", "https://api.example.com/x")).toEqual([
+      "https://api.example.com",
+      "https://mcp.example.com",
+    ]);
+  });
+
+  it("the build adds the API and MCP origins to /* and leaves every other block as it was", async () => {
+    const text = await headersFile();
+    const pages = {
+      "/connect/*": { "/connect/authorize": "<script>a()</script>" },
+      "/agents/enable-paid": { "/agents/enable-paid": "<script>b()</script>" },
+    };
+    const before = connectCsp.completeHeaders(text, pages, ["https://api.example.com"], []);
+    const out = connectCsp.completeHeaders(text, pages, ["https://api.example.com"], ["https://api.example.com", "https://mcp.example.com"]);
+    expect(block(out, "/*")[SITE]).toBe(csp.sitePolicy({ connectOrigins: ["https://api.example.com", "https://mcp.example.com"] }));
+    const policy = directives(block(out, "/*")[SITE]);
+    expect(policy["connect-src"].split(" ")).toEqual(expect.arrayContaining(["https://api.example.com", "https://mcp.example.com"]));
+    // Only that one line differs.
+    const diff = out.split("\n").filter((line, i) => line !== before.split("\n")[i]);
+    expect(diff).toEqual([`  ${SITE}: ${block(out, "/*")[SITE]}`]);
+    // Defaults to the strict pages' origins when no site list is given.
+    expect(block(connectCsp.completeHeaders(text, pages, ["https://api.example.com"]), "/*")[SITE]).toBe(
+      csp.sitePolicy({ connectOrigins: ["https://api.example.com"] }),
+    );
+  });
+
+  it("the strict pages detach it and keep their enforced policy, unchanged", async () => {
+    const text = await headersFile();
+    for (const path of csp.STRICT_PATHS) {
+      const lines = text.split("\n");
+      const start = lines.indexOf(path);
+      const end = lines.indexOf("", start);
+      expect(lines.slice(start, end)).toContain(`  ! ${SITE}`);
+      expect(block(text, path)[SITE]).toBeUndefined();
+      expect(block(text, path)["Content-Security-Policy"]).toBe(csp.strictPolicy());
+    }
+    // The strict policy gains nothing from the site-wide list.
+    for (const origin of csp.SITE_CONNECT_ORIGINS) expect(csp.strictPolicy()).not.toContain(origin);
+  });
+
+  it("fails the build on an edited policy, a missing detach, or the header in another block", async () => {
+    const text = await headersFile();
+    const line = `  ${SITE}: ${csp.sitePolicy()}\n`;
+    expect(text).toContain(line);
+    expect(() => connectCsp.completeHeaders(text.replace(line, line.replace("object-src 'none'", "object-src *")), {}, [])).toThrow(/is not sitePolicy/);
+    expect(() => connectCsp.completeHeaders(text.replace(line, ""), {}, [])).toThrow(/needs exactly one Content-Security-Policy-Report-Only/);
+    const detach = `  ! ${SITE}\n`;
+    expect(() => connectCsp.completeHeaders(text.replace(detach, ""), {}, [])).toThrow(/\/connect\/\*: needs exactly one "! Content-Security-Policy-Report-Only"/);
+    expect(() =>
+      connectCsp.completeHeaders(text.replace("  Cache-Control: public", `  ${SITE}: default-src *\n  Cache-Control: public`), {}, []),
+    ).toThrow(/only \/\* may set it, not \/_next\/static\/\*/);
   });
 });
