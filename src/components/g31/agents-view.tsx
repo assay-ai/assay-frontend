@@ -46,6 +46,7 @@ import { AgentAccessCard } from "@/components/toolsets/agent-access-card";
 import { ServersInUse } from "@/components/toolsets/servers-in-use";
 import { UpdateFromAlert } from "@/components/toolsets/update-sheet";
 
+import { DiscardPendingKey } from "./discard-pending-key";
 import { explainStopFailure, PayerDelegationsPanel, StopPaymentKeySheet, useStopPaymentKey } from "./agent-payment-delegation";
 import { relativeTime } from "./format";
 import {
@@ -504,6 +505,7 @@ function CredentialRowItem({
   onEditAccess,
   onPaymentLimits,
   onRevoke,
+  onChanged,
 }: {
   credential: KeyRow;
   view: CredentialRowView;
@@ -512,6 +514,8 @@ function CredentialRowItem({
   onEditAccess: () => void;
   onPaymentLimits: () => void;
   onRevoke: () => void;
+  /** The list is read again (after a key waiting for approval is discarded). */
+  onChanged: () => void;
 }) {
   // Only a key the buyer already authorised on chain (active or expired) is changed here. A new
   // key goes through the enable-paid page, which checks it against the one on the agent's
@@ -552,6 +556,7 @@ function CredentialRowItem({
         <div className="flex flex-col gap-0.5 rounded-md bg-warning-10 px-2.5 py-1.5" data-testid="credential-pending-key">
           <span className="text-body-xs text-warning-700">{view.pending.text}</span>
           <span className="text-body-xs text-02">{view.pending.note}</span>
+          <DiscardPendingKey agentId={credential.agentId} credentialId={credential.id} onDiscarded={onChanged} />
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -847,6 +852,7 @@ function AgentCard({
                   onLetPay(key.delegateAccount, capsToForm(view.chain.delegation), purpose);
                 }}
                 onRevoke={() => onRevokeKey(key)}
+                onChanged={onChanged}
               />
             ))}
           </ul>

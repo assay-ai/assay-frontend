@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DEFAULT_CAPS,
+  ENABLE_PAID_STRINGS,
   enablePaidState,
   parseEnablePaidCaps,
   type CapsDraft,
@@ -47,7 +48,15 @@ function replacing(): Extract<EnablePaidState, { kind: "ready" }> {
   return state;
 }
 
-function Harness({ run, onStopOldKey }: { run: () => Promise<undefined>; onStopOldKey?: (account: string) => void }) {
+function Harness({
+  run,
+  onStopOldKey,
+  onNotWaiting,
+}: {
+  run: () => Promise<{ data?: unknown } | undefined>;
+  onStopOldKey?: (account: string) => void;
+  onNotWaiting?: () => void;
+}) {
   const [draft, setDraft] = React.useState<CapsDraft>({ ...DEFAULT_CAPS });
   return (
     <EnablePaidView
@@ -66,6 +75,7 @@ function Harness({ run, onStopOldKey }: { run: () => Promise<undefined>; onStopO
       describeError={() => "failed"}
       isTopLevel={() => true}
       onStopOldKey={onStopOldKey}
+      onNotWaiting={onNotWaiting}
     />
   );
 }
@@ -112,5 +122,41 @@ describe("EnablePaidView: replacing the payment key", () => {
       fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     });
     expect(screen.queryByTestId("stop-old-key")).toBeNull();
+  });
+
+  it("an approval that promoted this key offers to stop the old one", async () => {
+    const onNotWaiting = vi.fn();
+    render(
+      <Harness
+        run={async () => ({ data: { promotedCredentialIds: ["cred-1"] } })}
+        onStopOldKey={() => undefined}
+        onNotWaiting={onNotWaiting}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "It matches what my app showed." }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    });
+    expect(await screen.findByTestId("stop-old-key")).toBeTruthy();
+    expect(onNotWaiting).not.toHaveBeenCalled();
+  });
+
+  it("a key no longer waiting (re-parked or discarded): says so, never success, and offers no stop", async () => {
+    const onNotWaiting = vi.fn();
+    render(
+      <Harness
+        run={async () => ({ data: { promotedCredentialIds: [] } })}
+        onStopOldKey={() => undefined}
+        onNotWaiting={onNotWaiting}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "It matches what my app showed." }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    });
+    expect((await screen.findByTestId("not-waiting")).textContent).toBe(ENABLE_PAID_STRINGS.notWaiting);
+    expect(screen.queryByText(ENABLE_PAID_STRINGS.done)).toBeNull();
+    expect(screen.queryByTestId("stop-old-key")).toBeNull();
+    expect(onNotWaiting).toHaveBeenCalledTimes(1);
   });
 });

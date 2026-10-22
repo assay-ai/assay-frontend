@@ -53,6 +53,8 @@ describe("errors", () => {
   it("knows codes with and without their module prefix", () => {
     expect(plainError("MCP_SPEND_LIMIT_EXCEEDED")).toBe("This call would go over your spend limit.");
     expect(plainError("SPEND_LIMIT_EXCEEDED")).toBe("This call would go over your spend limit.");
+    expect(plainError("ACCOUNT_DELEGATE_BIND_CONFLICT")).toMatch(/^Another payment key was set up for this key at the same moment/);
+    expect(plainError("ACCOUNT_CREDENTIAL_NOT_FOUND")).toBe("This key is no longer on this agent. Reload the page.");
     expect(plainError("PAYMENT_VOUCHER_ADMISSION_PAUSED")).toMatch(/^Paid calls are paused/);
     expect(plainError("UNBONDING_NOT_MATURED")).toMatch(/still unlocking/);
     expect(plainError("OPERATOR_AUTHORITY_EXCEEDED")).toMatch(/above your approval limit/);

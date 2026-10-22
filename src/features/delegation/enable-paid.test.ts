@@ -11,6 +11,7 @@ import {
   ENABLE_PAID_STRINGS,
   STRICT_PAGE_RPC_ORIGINS,
   actionLabelFor,
+  approvalOutcome,
   collectPages,
   depositRunsHere,
   enablePaidPlan,
@@ -482,6 +483,22 @@ describe("enablePaidState: a key waiting for approval (rebinding)", () => {
     if (state.kind !== "ready") throw new Error(state.text);
     expect(state.replacing).toBeNull();
     expect(state.title).toBe("Turn on paid calls for Assay app on laptop");
+  });
+
+  it("approval outcome: done only when the waiting key's credential was promoted", () => {
+    const state = enablePaidState(input({ fragmentKey: NEW, credentials: { "agt-1": [pending()] } }));
+    if (state.kind !== "ready") throw new Error(state.text);
+    const grant = (ids: string[]) => [undefined, { data: { promotedCredentialIds: ids } }];
+    expect(approvalOutcome(state, grant(["cred-1"]))).toBe("done");
+    // Re-parked or discarded meanwhile: the approval promoted nothing for it.
+    expect(approvalOutcome(state, grant([]))).toBe("not-waiting");
+    expect(approvalOutcome(state, grant(["cred-2"]))).toBe("not-waiting");
+  });
+
+  it("approval outcome: a first key, already bound, needs no promotion", () => {
+    const state = enablePaidState(input());
+    if (state.kind !== "ready") throw new Error(state.text);
+    expect(approvalOutcome(state, [{ data: { promotedCredentialIds: [] } }])).toBe("done");
   });
 
   it("no key waiting: the bound key, as before", () => {
