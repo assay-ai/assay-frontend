@@ -60,6 +60,12 @@ export interface EnablePaidViewProps {
   walletBlocker: React.ReactNode | null;
   steps: WalletStep[];
   describeError: (error: unknown) => string;
+  /**
+   * After a replacement is approved: stop the replaced key on chain (the
+   * existing Stop it flow). Without it, the page only says the old key still
+   * has its permission.
+   */
+  onStopOldKey?: (delegateAccount: string) => void;
   /** Injected for tests. */
   isTopLevel?: () => boolean;
 }
@@ -91,8 +97,11 @@ export function EnablePaidView({
   walletBlocker,
   steps,
   describeError,
+  onStopOldKey,
   isTopLevel = defaultIsTopLevel,
 }: EnablePaidViewProps) {
+  // The key an approval replaced, kept once approved: the state then shows the new key as bound.
+  const [replaced, setReplaced] = React.useState<{ delegateAccount: string; fingerprint: string } | null>(null);
   // Unknown until mounted: framed until shown otherwise.
   const [framed, setFramed] = React.useState(true);
   React.useEffect(() => setFramed(!isTopLevel()), [isTopLevel]);
@@ -156,6 +165,17 @@ export function EnablePaidView({
           {state.fingerprint}
         </span>
         <span className="text-body-sm text-02">{state.keyCheck}</span>
+        {state.replacing ? (
+          <div className="flex flex-col gap-1 rounded-lg bg-warning-10 px-3 py-2" data-testid="replacing-key">
+            <span className="text-body-13 text-warning-700">{state.replacing.text}</span>
+            <span className="text-body-xs text-02">
+              Current payment key:{" "}
+              <span className="font-mono text-01" data-testid="old-fingerprint">
+                {state.replacing.fingerprint}
+              </span>
+            </span>
+          </div>
+        ) : null}
         <Checkbox
           checked={ticked}
           onChange={(event) => setTicked(event.currentTarget.checked)}
@@ -283,7 +303,31 @@ export function EnablePaidView({
         resetKey={`${draft.perCall}|${draft.perDay}|${draft.days}`}
         describeError={describeError}
         successTitle={ENABLE_PAID_STRINGS.done}
+        onSuccess={() => {
+          if (state.replacing) setReplaced({ delegateAccount: state.replacing.delegateAccount, fingerprint: state.replacing.fingerprint });
+        }}
       />
+
+      {replaced ? (
+        <div className="flex flex-col gap-2 rounded-lg border border-01 bg-02 p-3" data-testid="stop-old-key">
+          <span className="text-label-13 text-01">Stop the old payment key?</span>
+          <span className="text-body-sm text-02">
+            The old key, {replaced.fingerprint}, no longer pays for this app, but it keeps its permission on chain until you
+            stop it. Stop it so it can never pay again.
+          </span>
+          {onStopOldKey ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="self-start text-danger-600"
+              onClick={() => onStopOldKey(replaced.delegateAccount)}
+            >
+              Stop the old key
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

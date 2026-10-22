@@ -23,6 +23,7 @@ import { Field } from "@/components/ui/field";
 import { AGENT_LABEL_MAX, agentLabelError } from "@/features/buyer-money/agent-label";
 import { type AgentReadiness, credentialIsLive } from "@/features/buyer-money/agent-readiness";
 import { capsToForm } from "@/features/buyer-money/caps";
+import { keyExpiry, keyMayPay, type KeyExpiryView, scopesText } from "@/features/buyer-money/key-scopes";
 import { credentialLabel } from "@/features/buyer-money/mcp-config";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, findDelegation, supportsDelegation } from "@/features/delegation/delegation-form";
@@ -117,6 +118,12 @@ export interface CredentialRowView {
   keyState: RevokeKeyState;
   /** A revoked or expired row whose key may still be active (chain unknown): kept in view, never folded away. */
   mayBeActive: boolean;
+  /** What the key may do, in plain words ("Calls tools · pays · reads activity"). */
+  scopes: string;
+  /** When it ends ("Expires Jan 20, 2027"), or null when it has no end date. */
+  expiry: KeyExpiryView | null;
+  /** A new payment key waiting for the person's approval, or null. */
+  pending: { text: string; note: string } | null;
 }
 
 export interface CredentialRowContext {
@@ -165,7 +172,8 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
   // chain says it is not (or no longer) authorised. Unknown is never "free".
   const provenFree = chain.kind === "no-key" || chain.kind === "off" || chain.kind === "not-evm" || chain.kind === "expired";
   const client = key.issuedVia === "OAUTH" ? key.oauthClient ?? null : null;
-  const paymentClient = key.issuedVia === "API_KEY" || client?.paymentClient === true;
+  // A key without the payments scope can never pay, whatever its client (the API refuses it).
+  const paymentClient = (key.issuedVia === "API_KEY" || client?.paymentClient === true) && keyMayPay(key.scopes);
 
   let source: string;
   if (key.issuedVia === "API_KEY") {
@@ -216,7 +224,31 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
   const keyState: RevokeKeyState = heldByLive ? "none" : activeOnChain ? "active" : unknown ? "unknown" : "none";
   const mayBeActive = !live && unknown && !heldByLive;
 
-  return { live, source, paymentLine, paymentClient, chain, activeOnChain, stopIt, keyState, mayBeActive };
+  const pending = key.pendingDelegateAccount
+    ? {
+        text:
+          `New payment key ${fingerprint(key.pendingDelegateAccount)} is waiting for your approval` +
+          (key.pendingDelegateRequestedAt ? ` · asked ${formatDate(key.pendingDelegateRequestedAt, { now: ctx.nowMs })}` : ""),
+        note: key.delegateAccount
+          ? `It replaces ${fingerprint(key.delegateAccount)}, which keeps paying until you approve. To approve, open the link your app showed.`
+          : "To approve, open the link your app showed.",
+      }
+    : null;
+
+  return {
+    live,
+    source,
+    paymentLine,
+    paymentClient,
+    chain,
+    activeOnChain,
+    stopIt,
+    keyState,
+    mayBeActive,
+    scopes: scopesText(key.scopes),
+    expiry: keyExpiry(key.expiresAt, ctx.nowMs),
+    pending,
+  };
 }
 
 /**
@@ -499,10 +531,28 @@ function CredentialRowItem({
       <span className={cn("text-body-xs text-02", credential.prefix ? "font-mono" : undefined)} data-testid="credential-source">
         {view.source}
       </span>
+      <span className="text-body-xs text-02" data-testid="credential-scopes">
+        {view.scopes}
+        {view.expiry ? (
+          <>
+            {" · "}
+            <span className={view.expiry.soon ? "text-warning-700" : undefined} data-testid="credential-expiry">
+              {view.expiry.text}
+              {view.expiry.soon ? ": create a new key soon" : ""}
+            </span>
+          </>
+        ) : null}
+      </span>
       {view.paymentLine ? (
         <span className="text-body-xs text-02" data-testid="credential-payment-key">
           {view.paymentLine}
         </span>
+      ) : null}
+      {view.pending ? (
+        <div className="flex flex-col gap-0.5 rounded-md bg-warning-10 px-2.5 py-1.5" data-testid="credential-pending-key">
+          <span className="text-body-xs text-warning-700">{view.pending.text}</span>
+          <span className="text-body-xs text-02">{view.pending.note}</span>
+        </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <Button size="sm" variant="secondary" type="button" data-testid="edit-access" onClick={onEditAccess}>

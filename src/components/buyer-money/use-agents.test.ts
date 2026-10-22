@@ -46,7 +46,7 @@ describe("readAgentsWithKeys", () => {
     ]);
   });
 
-  // BUG-DEMO-02: an agent session is given its own agent's keys only.
+  // A row without its keys is never read as "No key".
   it("marks a row without its keys hidden rather than reading it as 'No key'", async () => {
     answer.items = [
       { agentId: "a-1", credentials: { items: [key("k-1", "a-1")], hasMore: false }, health: demoAgentHealth([key("k-1", "a-1")]) },
@@ -58,24 +58,14 @@ describe("readAgentsWithKeys", () => {
     expect(Object.keys(healthByAgent(page))).toEqual(["a-1"]);
   });
 
-  // BUG-DEMO-02: an agent-kind session may read the list but not the keys.
-  it("falls back to the plain list when the keys are refused, and marks them hidden", async () => {
+  // The list is a person's read: an agent key is refused it whole, and nothing else is read instead.
+  it("passes an agent key's refusal on, without a keyless second read", async () => {
     refuseInclude.error = new ApiError("AUTH_HUMAN_SESSION_REQUIRED", "needs a person", 403);
-    answer.items = [{ agentId: "a-1", label: "Funded" }];
-    (answer as Record<string, unknown>).pageInfo = { nextCursor: "c-2", hasMore: true };
-    const page = await readAgentsWithKeys();
-    delete (answer as Record<string, unknown>).pageInfo;
-    // Review: the page's cursor survives the fallback.
-    expect((page as unknown as { pageInfo: unknown }).pageInfo).toEqual({ nextCursor: "c-2", hasMore: true });
-    expect(calls).toEqual([{ limit: 50, include: "credentials,health" }, { limit: 50 }]);
-    expect(page.keysHiddenFor).toEqual(["a-1"]);
-    expect(page.items.map((agent) => agent.agentId)).toEqual(["a-1"]);
-    // Hidden keys are unknown, never "no key".
-    expect(keysByAgent(page)).toEqual({});
-    expect(healthByAgent(page)).toEqual({});
+    await expect(readAgentsWithKeys()).rejects.toMatchObject({ code: "AUTH_HUMAN_SESSION_REQUIRED" });
+    expect(calls).toEqual([{ limit: 50, include: "credentials,health" }]);
   });
 
-  it("does not fall back for a blocked account or another failure", async () => {
+  it("passes a blocked account or another failure on", async () => {
     refuseInclude.error = new ApiError("ACCOUNT_BLOCKED", "blocked", 403);
     await expect(readAgentsWithKeys()).rejects.toMatchObject({ code: "ACCOUNT_BLOCKED" });
     refuseInclude.error = new ApiError("INTERNAL_ERROR", "boom", 500);

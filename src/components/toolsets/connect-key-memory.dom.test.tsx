@@ -66,7 +66,14 @@ describe("the full key stays in memory (owner rule)", () => {
     expect(screen.getByText("Create an API key for My agent?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(document.body.textContent).toContain(TOKEN));
-    expect(account.createCredential).toHaveBeenCalledWith(AGENT, { name: "Key 1", scopes: ["tools:call"] });
+    // The quick button makes an Agent key for 90 days.
+    expect(account.createCredential).toHaveBeenCalledWith(AGENT, {
+      name: "Key 1",
+      scopes: ["tools:call", "payments", "activity:read"],
+      expiresAt: expect.any(String),
+    });
+    const sent = account.createCredential.mock.calls[0]![1] as { expiresAt: string };
+    expect(Math.round((Date.parse(sent.expiresAt) - Date.now()) / 86_400_000)).toBe(90);
 
     const leaked = (calls: unknown[][]) => calls.some((args) => JSON.stringify(args).includes(TOKEN));
     expect(leaked(setItem.mock.calls)).toBe(false);

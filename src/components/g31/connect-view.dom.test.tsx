@@ -23,7 +23,7 @@ const KEY = {
   issuedVia: "API_KEY",
   oauthClient: null,
   prefix: "assay_sk_live_ab12",
-  scopes: [],
+  scopes: ["tools:call", "payments", "activity:read"],
   lastUsedAt: null as string | null,
   expiresAt: null as string | null,
   revokedAt: null as string | null,

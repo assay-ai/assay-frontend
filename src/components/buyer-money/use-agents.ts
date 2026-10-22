@@ -55,6 +55,13 @@ export interface KeyRow extends CredentialLike {
   revokedAt: string | null;
   delegateAccount?: string | null;
   delegateBoundAt?: string | null;
+  /**
+   * A payment key the agent proved while `delegateAccount` was bound: it waits
+   * for the person's approval on enable-paid, and replaces the bound key then.
+   * Until then the bound key keeps paying.
+   */
+  pendingDelegateAccount?: string | null;
+  pendingDelegateRequestedAt?: string | null;
   createdAt: string;
 }
 

@@ -42,7 +42,7 @@ const KEY = {
   agentId: AGENT,
   name: "laptop",
   prefix: "assay_sk_live_ab12",
-  scopes: [],
+  scopes: ["tools:call", "payments", "activity:read"],
   lastUsedAt: null,
   expiresAt: null,
   revokedAt: null,

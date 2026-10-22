@@ -31,7 +31,6 @@ vi.mock("@/services/provider-registration.service", () => ({
 vi.mock("@/services/account.service", () => ({
   listAgents: vi.fn(async () => ({ items: keys.agents })),
   listCredentials: vi.fn(async () => ({ items: keys.credentials })),
-  createCredential: vi.fn(),
 }));
 vi.mock("@/components/toolsets/use-toolsets", () => ({
   useOrgHandle: () => ({ isPending: false, data: handle.value }),
@@ -90,5 +89,15 @@ describe("Account: API keys", () => {
     expect(screen.getByText("Signed in with Claude Code")).toBeTruthy();
     expect(screen.getByText("App sign-in")).toBeTruthy();
     expect(document.body.textContent).not.toContain("null");
+  });
+
+  // Provider routes are a signed-in person's only: a key made here could manage nothing.
+  it("offers no key creation, and says a key cannot manage the account", async () => {
+    keys.agents = [{ agentId: "a1", label: "Main" }];
+    mount();
+    expect(await screen.findByText("No API key yet")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /New API key|Create key/ })).toBeNull();
+    expect(document.body.textContent).toContain("A key cannot manage your tools or this account: only a signed-in person can.");
+    expect(document.body.textContent).not.toMatch(/deploy pipeline|script/i);
   });
 });

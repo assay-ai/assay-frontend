@@ -444,3 +444,50 @@ describe("fix round 2", () => {
     }
   });
 });
+
+describe("enablePaidState: a key waiting for approval (rebinding)", () => {
+  const NEW = "0x" + "2".repeat(32) + "77AA88BB";
+  const NEW_ACCOUNT = `eip155:46630:${NEW.toLowerCase()}`;
+  const pending = () =>
+    credential({ pendingDelegateAccount: NEW_ACCOUNT, pendingDelegateRequestedAt: "2026-10-19T09:00:00.000Z" });
+
+  it("approves the waiting key, and names the key it replaces", () => {
+    const state = enablePaidState(input({ fragmentKey: NEW, credentials: { "agt-1": [pending()] } }));
+    if (state.kind !== "ready") throw new Error(state.text);
+    expect(state.delegateAccount).toBe(NEW_ACCOUNT);
+    expect(state.fingerprint).toBe("77AA 88BB");
+    expect(state.title).toBe("Replace the payment key for Assay app on laptop");
+    expect(state.replacing).toMatchObject({ delegateAccount: KEY_ACCOUNT, fingerprint: "1A2B 9F3C" });
+    expect(state.replacing!.text).toContain("replaces the current one, 1A2B 9F3C");
+  });
+
+  it("the current key's link is refused while another waits: only the waiting key is approvable", () => {
+    const state = enablePaidState(input({ fragmentKey: KEY, credentials: { "agt-1": [pending()] } }));
+    expect(state).toMatchObject({ kind: "refused", reason: "key-mismatch" });
+  });
+
+  it("the waiting key's grant decides Approve or Renew, never the old key's", () => {
+    const state = enablePaidState(
+      input({ fragmentKey: NEW, credentials: { "agt-1": [pending()] }, delegates: [delegation()] }),
+    );
+    if (state.kind !== "ready") throw new Error(state.text);
+    expect(state.grant.kind).toBe("none");
+    expect(state.actionLabel).toBe(ENABLE_PAID_STRINGS.approve);
+  });
+
+  it("a waiting key with nothing bound is a first approval, with no replacement", () => {
+    const state = enablePaidState(
+      input({ fragmentKey: NEW, credentials: { "agt-1": [credential({ delegateAccount: null, pendingDelegateAccount: NEW_ACCOUNT })] } }),
+    );
+    if (state.kind !== "ready") throw new Error(state.text);
+    expect(state.replacing).toBeNull();
+    expect(state.title).toBe("Turn on paid calls for Assay app on laptop");
+  });
+
+  it("no key waiting: the bound key, as before", () => {
+    const state = enablePaidState(input());
+    if (state.kind !== "ready") throw new Error(state.text);
+    expect(state.replacing).toBeNull();
+    expect(state.delegateAccount).toBe(KEY_ACCOUNT);
+  });
+});
