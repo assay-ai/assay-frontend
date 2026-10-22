@@ -25,6 +25,7 @@ import {
   type KeyExpiryDays,
   type KeyPresetId,
 } from "@/features/buyer-money/key-scopes";
+import { shownKeyHint } from "@/features/buyer-money/mcp-config";
 import { ApiError } from "@/libs/ApiClient";
 import { plainApiError, plainError } from "@/libs/plain-language";
 import { createCredential } from "@/services/account.service";
@@ -40,7 +41,8 @@ export interface CreatedKey {
   id: string;
   agentId: string;
   name: string;
-  prefix: string;
+  /** `assay_sk_live_…2fds`: how the key lists show it from now on. */
+  hint: string;
   token: string;
   scopes?: string[];
   expiresAt?: string | null;
@@ -144,6 +146,11 @@ export function CreateKeyForm({
               <strong className="font-medium">Copy it now — you won’t see it again.</strong> If you lose it, create a new key and revoke this one.
             </span>
           </p>
+          {shownKeyHint(created.hint) ? (
+            <p className="text-body-xs text-03" data-testid="key-created-hint">
+              Your key list shows it as <span className="font-mono text-mono-12 text-01">{shownKeyHint(created.hint)}</span>.
+            </p>
+          ) : null}
           <p className="text-body-xs text-03" data-testid="key-free-calls">{newKeyPaysNote(payingKey, created.scopes)}</p>
           {keyExpiry(created.expiresAt) ? (
             <p className="text-body-xs text-03" data-testid="key-created-expiry">

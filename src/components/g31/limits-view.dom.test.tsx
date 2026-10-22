@@ -62,7 +62,7 @@ function markup(policy: Record<string, unknown> | null, { granted = true }: { gr
         id: "k1",
         agentId: "f64b7b6e",
         name: "orchestrator",
-        prefix: "assay_sk_live_31ac",
+        hint: "assay_sk_live_…31ac",
         scopes: ["tools:call", "payments", "activity:read"],
         lastUsedAt: new Date().toISOString(),
         expiresAt: null,

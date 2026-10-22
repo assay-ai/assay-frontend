@@ -8,7 +8,7 @@ import { CREATE_KEY_CONFIRM_TEXT, McpConfigTabs, createKeyConfirmTitle } from ".
 afterEach(cleanup);
 
 const mount = (onCreateKey: () => void, agentName: string | null = "research-bot") =>
-  render(<McpConfigTabs token={null} keyPrefix={null} url="https://mcp.example.com/" client="other" onCreateKey={onCreateKey} agentName={agentName} />);
+  render(<McpConfigTabs token={null} keyHint={null} url="https://mcp.example.com/" client="other" onCreateKey={onCreateKey} agentName={agentName} />);
 
 describe("Use an API key instead asks before it creates a key", () => {
   it("opens a confirm naming the agent; nothing is created on click", () => {

@@ -70,7 +70,7 @@ function grantRow(id: string, name: string, delegateAccount: string, patch: Reco
     name,
     issuedVia: "OAUTH",
     oauthClient: BUILTIN,
-    prefix: null,
+    hint: null,
     scopes: ["tools:call", "payments", "activity:read"],
     lastUsedAt: null,
     expiresAt: null,

@@ -35,7 +35,7 @@ beforeEach(() => {
     id: "k2",
     agentId: "agt-1",
     name: body.name,
-    prefix: "assay_sk_live_ab12",
+    hint: "assay_sk_live_…cret",
     token: "assay_sk_live_secret",
     scopes: body.scopes,
     expiresAt: body.expiresAt,
@@ -69,6 +69,10 @@ describe("Create key: what it can do and when it ends", () => {
     expect(daysFromNow(sent().expiresAt)).toBe(90);
     expect((await screen.findByTestId("key-created")).textContent).toContain("Copy it now — you won’t see it again.");
     expect(screen.getByText("assay_sk_live_secret")).toBeTruthy();
+    // The hint the key lists will show, in monospace.
+    const hint = screen.getByTestId("key-created-hint");
+    expect(hint.textContent).toBe("Your key list shows it as assay_sk_live_…cret.");
+    expect(screen.getByText("assay_sk_live_…cret").className).toContain("font-mono");
   });
 
   it("defaults to Agent, no reports, 90 days", async () => {

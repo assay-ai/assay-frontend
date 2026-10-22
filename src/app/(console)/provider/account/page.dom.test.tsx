@@ -75,17 +75,17 @@ describe("Account: API keys", () => {
     keys.credentials = [];
   });
 
-  it("masks an API key and names an OAuth grant (null prefix) as an app sign-in", async () => {
+  it("shows an API key by its hint and names an OAuth grant (null hint) as an app sign-in", async () => {
     handle.value = { handle: "acme", status: "ACTIVE", lockedAt: null, canChange: true };
     const base = { agentId: "a1", scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, createdAt: "2026-10-17T00:00:00Z" };
     keys.agents = [{ agentId: "a1", label: "Main" }];
     keys.credentials = [
-      { ...base, id: "k1", name: "Deploy", prefix: "assay_sk_live_8f3a" },
-      { ...base, id: "g1", name: "Claude Code · 2026-10-17", prefix: null, oauthClient: { name: "Claude Code" } },
-      { ...base, id: "g2", name: "Another app", prefix: null },
+      { ...base, id: "k1", name: "Deploy", hint: "assay_sk_live_…8f3a" },
+      { ...base, id: "g1", name: "Claude Code · 2026-10-17", hint: null, oauthClient: { name: "Claude Code" } },
+      { ...base, id: "g2", name: "Another app", hint: null },
     ];
     mount();
-    expect(await screen.findByText("••••8f3a")).toBeTruthy();
+    expect(await screen.findByText("assay_sk_live_…8f3a")).toBeTruthy();
     expect(screen.getByText("Signed in with Claude Code")).toBeTruthy();
     expect(screen.getByText("App sign-in")).toBeTruthy();
     expect(document.body.textContent).not.toContain("null");

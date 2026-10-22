@@ -118,14 +118,6 @@ interface TokenRow {
   lastUsed: string;
 }
 
-/**
- * "••••8f3a": enough to tell two keys apart, never the key's raw prefix. An
- * OAuth grant has no key: it is named as the app sign-in it is.
- */
-function maskedKey(credential: CredentialLike): string {
-  return credential.prefix ? `••••${credential.prefix.slice(-4)}` : credentialLabel(credential);
-}
-
 /** Terms versions are dated ("2026-06-15"); said exactly as Setup says them ("Apr 1, 2026 version"). */
 function versionLabel(version: string): string {
   const label = termsVersionLabel(version);
@@ -292,7 +284,8 @@ export default function ProviderAccountPage() {
   const tokenRows: TokenRow[] = (credentials.data ?? []).map((credential) => ({
     id: credential.id,
     name: credential.name,
-    token: maskedKey(credential),
+    // The key's hint (`assay_sk_live_…2fds`); an OAuth grant is named as the app sign-in it is.
+    token: credentialLabel(credential),
     // A revoked credential is kept, not deleted, so its row stays readable —
     // and the cell says which it is rather than showing a stale "last used".
     lastUsed: credential.revokedAt

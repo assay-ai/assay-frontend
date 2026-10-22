@@ -84,9 +84,9 @@ describe("API-key config", () => {
   it("puts the key in a header, with a placeholder when the key is not on screen", () => {
     expect(JSON.parse(apiKeyConfig({ url, token: "k" })).mcpServers.assay).toEqual({ type: "http", url, headers: { Authorization: "Bearer k" } });
     expect(apiKeyConfig({ url, token: null })).toContain(KEY_PLACEHOLDER);
-    // A known key is named by its prefix, never a bare placeholder.
-    const named = apiKeyConfig({ url, token: null, keyPrefix: "assay_sk_live_ab12…" });
-    expect(named).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
+    // A known key is named by its last 4 characters, never a bare placeholder.
+    const named = apiKeyConfig({ url, token: null, keyHint: "assay_sk_live_…ab12" });
+    expect(named).toContain("PASTE_YOUR_KEY_ENDING_ab12");
     expect(named).not.toContain(KEY_PLACEHOLDER);
     expect(keyPlaceholder(null)).toBe(KEY_PLACEHOLDER);
   });
