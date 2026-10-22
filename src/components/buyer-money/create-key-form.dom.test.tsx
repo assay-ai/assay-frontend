@@ -26,6 +26,8 @@ function mount() {
 const sent = () => account.createCredential.mock.calls[0]![1] as { name: string; scopes: string[]; expiresAt: string };
 const daysFromNow = (iso: string) => Math.round((Date.parse(iso) - Date.now()) / DAY);
 const create = () => fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+const advancedToggle = () => screen.getByRole("button", { name: /^Advanced/ });
+const openAdvanced = () => fireEvent.click(advancedToggle());
 
 beforeEach(() => {
   account.createCredential.mockReset();
@@ -42,8 +44,36 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Create key: what it can do and when it ends", () => {
+  it("shows only the name and Create; Advanced is closed with a one-line summary", () => {
+    mount();
+    expect(screen.getByDisplayValue("Key 2")).toBeTruthy();
+    expect(advancedToggle().getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByTestId("key-advanced-summary").textContent).toBe("Agent · expires in 90 days");
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    openAdvanced();
+    expect(advancedToggle().getAttribute("aria-expanded")).toBe("true");
+    fireEvent.click(screen.getByRole("radio", { name: "Free calls only" }));
+    fireEvent.click(screen.getByRole("radio", { name: "1 year" }));
+    expect(screen.getByTestId("key-advanced-summary").textContent).toBe("Free calls only · expires in 1 year");
+    openAdvanced();
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.getByTestId("key-advanced-summary").textContent).toBe("Free calls only · expires in 1 year");
+  });
+
+  it("creates with the defaults without opening Advanced", async () => {
+    mount();
+    create();
+    await waitFor(() => expect(account.createCredential).toHaveBeenCalledTimes(1));
+    expect(sent().scopes).toEqual(["tools:call", "payments", "activity:read"]);
+    expect(daysFromNow(sent().expiresAt)).toBe(90);
+    expect((await screen.findByTestId("key-created")).textContent).toContain("Copy it now — you won’t see it again.");
+    expect(screen.getByText("assay_sk_live_secret")).toBeTruthy();
+  });
+
   it("defaults to Agent, no reports, 90 days", async () => {
     mount();
+    openAdvanced();
     expect((screen.getByRole("radio", { name: "Agent" }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole("checkbox", { name: "Can report bad results" }) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole("radio", { name: "90 days" }) as HTMLInputElement).checked).toBe(true);
@@ -59,6 +89,7 @@ describe("Create key: what it can do and when it ends", () => {
 
   it("Free calls only, with reports, for 30 days", async () => {
     mount();
+    openAdvanced();
     fireEvent.click(screen.getByRole("radio", { name: "Free calls only" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Can report bad results" }));
     fireEvent.click(screen.getByRole("radio", { name: "30 days" }));
@@ -71,6 +102,7 @@ describe("Create key: what it can do and when it ends", () => {
 
   it("Read only for a year: no reports box, and it says it cannot call tools", async () => {
     mount();
+    openAdvanced();
     fireEvent.click(screen.getByRole("checkbox", { name: "Can report bad results" }));
     fireEvent.click(screen.getByRole("radio", { name: "Read only" }));
     expect(screen.queryByRole("checkbox", { name: "Can report bad results" })).toBeNull();

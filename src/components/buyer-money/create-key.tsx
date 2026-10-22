@@ -1,7 +1,7 @@
 "use client";
 
 import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
-import { TriangleAlert } from "lucide-react";
+import { ChevronRight, TriangleAlert } from "lucide-react";
 import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
@@ -19,6 +19,7 @@ import {
   expiryLabel,
   KEY_EXPIRY_DAYS,
   KEY_PRESETS,
+  keyChoiceSummary,
   keyExpiry,
   keyMayPay,
   type KeyExpiryDays,
@@ -117,6 +118,7 @@ export function CreateKeyForm({
   const [preset, setPreset] = React.useState<KeyPresetId>(DEFAULT_KEY_PRESET);
   const [canReport, setCanReport] = React.useState(false);
   const [days, setDays] = React.useState<KeyExpiryDays>(DEFAULT_KEY_EXPIRY_DAYS);
+  const [advanced, setAdvanced] = React.useState(false);
   const [created, setCreated] = React.useState<CreatedKey | null>(null);
   const create = useMutation({
     mutationFn: () => createCredential(agentId, createKeyBody(name.trim(), { preset, canReport, days })) as Promise<CreatedKey>,
@@ -138,7 +140,9 @@ export function CreateKeyForm({
           </div>
           <p className="flex items-start gap-1.5 text-body-xs text-warning-700">
             <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
-            Shown once. We cannot show it again; if you lose it, create a new one and revoke this one.
+            <span>
+              <strong className="font-medium">Copy it now — you won’t see it again.</strong> If you lose it, create a new key and revoke this one.
+            </span>
           </p>
           <p className="text-body-xs text-03" data-testid="key-free-calls">{newKeyPaysNote(payingKey, created.scopes)}</p>
           {keyExpiry(created.expiresAt) ? (
@@ -175,47 +179,66 @@ export function CreateKeyForm({
         onChange={(e) => setName(e.target.value)}
         hint="So you can tell your keys apart, e.g. the machine it runs on."
       />
-      <fieldset className="flex flex-col gap-2" data-testid="key-preset">
-        <legend className="mb-1 text-label-13 text-01">What it can do</legend>
-        {KEY_PRESETS.map((option) => (
-          <div key={option.id} className="flex flex-col gap-0.5">
-            <Radio
-              name={`key-preset-${agentId}`}
-              value={option.id}
-              checked={preset === option.id}
-              onChange={() => setPreset(option.id)}
-              label={option.label}
-            />
-            <span className="pl-[26px] text-body-xs text-03">{option.hint}</span>
-          </div>
-        ))}
-        {preset !== "read" ? (
-          <div className="flex flex-col gap-0.5 pt-1">
-            <Checkbox
-              checked={canReport}
-              onChange={(event) => setCanReport(event.currentTarget.checked)}
-              label="Can report bad results"
-            />
-            <span className="pl-[26px] text-body-xs text-03">Lets it flag a tool result that was wrong. Off unless you need it.</span>
+      <div className="flex flex-col gap-3" data-testid="key-advanced">
+        <button
+          type="button"
+          className="flex items-center gap-1.5 self-start text-label-13 text-01 hover:underline"
+          aria-expanded={advanced}
+          aria-controls={`key-advanced-${agentId}`}
+          onClick={() => setAdvanced((open) => !open)}
+        >
+          <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 transition-transform${advanced ? " rotate-90" : ""}`} />
+          Advanced
+          <span className="text-body-xs font-normal text-03" data-testid="key-advanced-summary">
+            {keyChoiceSummary(preset, canReport, days)}
+          </span>
+        </button>
+        {advanced ? (
+          <div id={`key-advanced-${agentId}`} className="flex flex-col gap-3 pl-5">
+            <fieldset className="flex flex-col gap-2" data-testid="key-preset">
+              <legend className="mb-1 text-label-13 text-01">What it can do</legend>
+              {KEY_PRESETS.map((option) => (
+                <div key={option.id} className="flex flex-col gap-0.5">
+                  <Radio
+                    name={`key-preset-${agentId}`}
+                    value={option.id}
+                    checked={preset === option.id}
+                    onChange={() => setPreset(option.id)}
+                    label={option.label}
+                  />
+                  <span className="pl-[26px] text-body-xs text-03">{option.hint}</span>
+                </div>
+              ))}
+              {preset !== "read" ? (
+                <div className="flex flex-col gap-0.5 pt-1">
+                  <Checkbox
+                    checked={canReport}
+                    onChange={(event) => setCanReport(event.currentTarget.checked)}
+                    label="Can report bad results"
+                  />
+                  <span className="pl-[26px] text-body-xs text-03">Lets it flag a tool result that was wrong. Off unless you need it.</span>
+                </div>
+              ) : null}
+            </fieldset>
+            <fieldset className="flex flex-col gap-2" data-testid="key-expiry">
+              <legend className="mb-1 text-label-13 text-01">Expires after</legend>
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                {KEY_EXPIRY_DAYS.map((option) => (
+                  <Radio
+                    key={option}
+                    name={`key-expiry-${agentId}`}
+                    value={String(option)}
+                    checked={days === option}
+                    onChange={() => setDays(option)}
+                    label={expiryLabel(option)}
+                  />
+                ))}
+              </div>
+              <span className="text-body-xs text-03">The key stops working then. You can revoke it sooner.</span>
+            </fieldset>
           </div>
         ) : null}
-      </fieldset>
-      <fieldset className="flex flex-col gap-2" data-testid="key-expiry">
-        <legend className="mb-1 text-label-13 text-01">Expires after</legend>
-        <div className="flex flex-wrap gap-x-5 gap-y-2">
-          {KEY_EXPIRY_DAYS.map((option) => (
-            <Radio
-              key={option}
-              name={`key-expiry-${agentId}`}
-              value={String(option)}
-              checked={days === option}
-              onChange={() => setDays(option)}
-              label={expiryLabel(option)}
-            />
-          ))}
-        </div>
-        <span className="text-body-xs text-03">The key stops working then. You can revoke it sooner.</span>
-      </fieldset>
+      </div>
       {create.isError ? (
         <p role="alert" className="text-body-xs text-danger-600" data-testid="create-key-error">
           {createKeyErrorText(create.error)}
