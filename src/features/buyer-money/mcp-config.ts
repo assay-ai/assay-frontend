@@ -48,24 +48,38 @@ export const KEY_PLACEHOLDER = "PASTE_YOUR_KEY_HERE";
 export const API_KEY_PREFIX = "assay_sk_live_";
 
 /**
- * The most of a key ever shown in clear. The server stores fewer characters;
- * this bound only makes sure a full token passed by mistake is never echoed.
+ * A key's hint, as the API returns it (`AgentCredentialDto.hint`): the fixed
+ * start, `…`, and the key's last 4 characters — `assay_sk_live_…2fds`. The
+ * server keeps nothing else of a key in clear, and nothing here shows more:
+ * anything that is not exactly this shape (a full token passed by mistake)
+ * is never echoed.
  */
-export const KEY_PREFIX_VISIBLE_LENGTH = 22;
+const KEY_HINT_RE = /^assay_sk_live_…([A-Za-z0-9_-]{4})$/;
 
-/**
- * What stands in for the key when it is not on screen: the API key's own
- * visible prefix, so a person with a key sees which key goes there
- * (`assay_sk_live_ab12…REST_OF_YOUR_KEY`); else the bare placeholder.
- */
-export function keyPlaceholder(keyPrefix?: string | null): string {
-  const prefix = keyPrefix?.trim().replace(/[.…]+$/, "").slice(0, KEY_PREFIX_VISIBLE_LENGTH);
-  return prefix && prefix.startsWith(API_KEY_PREFIX) ? `${prefix}…REST_OF_YOUR_KEY` : KEY_PLACEHOLDER;
+/** The last 4 characters a well-formed hint names; null for anything else. */
+export function keyHintLast4(keyHint?: string | null): string | null {
+  return KEY_HINT_RE.exec(keyHint?.trim() ?? "")?.[1] ?? null;
 }
 
-/** "live" for an API key's visible prefix (`assay_sk_live_…`); null when it does not say. */
-export function keyMode(keyPrefix?: string | null): "live" | null {
-  return keyPrefix?.trim().startsWith(API_KEY_PREFIX) ? "live" : null;
+/** The hint exactly as shown (`assay_sk_live_…2fds`); null when it is not one. */
+export function shownKeyHint(keyHint?: string | null): string | null {
+  const last4 = keyHintLast4(keyHint);
+  return last4 ? `${API_KEY_PREFIX}…${last4}` : null;
+}
+
+/**
+ * What stands in for the key when it is not on screen: it names the key by
+ * its last 4 characters (`PASTE_YOUR_KEY_ENDING_2fds`), so a person with a key
+ * sees which key goes there; else the bare placeholder.
+ */
+export function keyPlaceholder(keyHint?: string | null): string {
+  const last4 = keyHintLast4(keyHint);
+  return last4 ? `PASTE_YOUR_KEY_ENDING_${last4}` : KEY_PLACEHOLDER;
+}
+
+/** "live" for an API key's hint (`assay_sk_live_…`); null when it does not say. */
+export function keyMode(keyHint?: string | null): "live" | null {
+  return keyHint?.trim().startsWith(API_KEY_PREFIX) ? "live" : null;
 }
 
 /**
@@ -79,22 +93,25 @@ export interface CredentialOAuthClient {
 
 /**
  * A credential row as a key list shows it. An OAuth grant (an app sign-in)
- * has no prefix: it is named by its client, never as "null…".
+ * has no hint: it is named by its client, never as "null…".
  */
 export interface CredentialLike {
-  /** The key's clear-text start; null for an OAuth grant, which has no key to show. */
-  prefix: string | null;
+  /** `assay_sk_live_…2fds`: the key's last 4 characters; null for an OAuth grant (or a key older than hints). */
+  hint: string | null;
+  issuedVia?: string;
   oauthClient?: CredentialOAuthClient | null;
 }
 
 export function credentialLabel(credential: CredentialLike): string {
-  if (credential.prefix) return `${credential.prefix.replace(/[.…]+$/, "")}…`;
+  const hint = shownKeyHint(credential.hint);
+  if (hint) return hint;
+  if (credential.issuedVia === "API_KEY") return "API key";
   return credential.oauthClient?.name ? `Signed in with ${credential.oauthClient.name}` : "App sign-in";
 }
 
-/** The key an API-key hint names: the first with a prefix. An app sign-in has none to show. */
-export function keyForHint<T extends { prefix: string | null }>(keys: readonly T[]): (T & { prefix: string }) | null {
-  return (keys.find((key) => key.prefix) as (T & { prefix: string }) | undefined) ?? null;
+/** The key an API-key hint names: the first with a hint. An app sign-in has none to show. */
+export function keyForHint<T extends { hint: string | null }>(keys: readonly T[]): (T & { hint: string }) | null {
+  return (keys.find((key) => keyHintLast4(key.hint)) as (T & { hint: string }) | undefined) ?? null;
 }
 
 /** An exact version: no range, no tag (R-MCP-14). Same rule as the proxy. */
@@ -325,7 +342,7 @@ export function installText(output: InstallOutput): string {
 export interface ApiKeyConfigInput {
   url: string;
   token: string | null;
-  keyPrefix?: string | null;
+  keyHint?: string | null;
   serverName?: string;
 }
 
@@ -334,7 +351,7 @@ export interface ApiKeyConfigInput {
  * is the only place a key goes in a config (R-UI-8).
  */
 export function apiKeyConfig(input: ApiKeyConfigInput): string {
-  const token = input.token ?? keyPlaceholder(input.keyPrefix);
+  const token = input.token ?? keyPlaceholder(input.keyHint);
   const name = input.serverName?.trim() || "assay";
   return JSON.stringify({ mcpServers: { [name]: { type: "http", url: input.url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2);
 }

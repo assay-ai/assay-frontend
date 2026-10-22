@@ -84,6 +84,11 @@ export interface RelayedDelegate {
   blockNumber: string;
   gasUsed: string;
   delegates: EscrowDelegate[];
+  /**
+   * Authorise only: the credentials whose payment key waiting for approval this
+   * approval made their bound key. Empty when none (or the promotion failed).
+   */
+  promotedCredentialIds?: string[];
 }
 
 /** `POST /escrow/delegates/intent`. Atomic decimal strings; `validUntil` is unix seconds. */

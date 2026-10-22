@@ -77,7 +77,7 @@ describe("readableBody", () => {
     for (const body of now) expect(readableBody(body)).toBe(body);
   });
   it("never treats a quoted key or agent name as a code, so the deadline stays", () => {
-    const body = 'Key "CI_DEPLOY" (assay_sk_live_ab12…) of "PROD_BOT" expires Sep 1, 00:00 UTC. Renew it before then.';
+    const body = 'Key "CI_DEPLOY" (assay_sk_live_…ab12) of "PROD_BOT" expires Sep 1, 00:00 UTC. Renew it before then.';
     expect(readableBody(body)).toBe(body);
   });
   it("is null only when nothing is left", () => {

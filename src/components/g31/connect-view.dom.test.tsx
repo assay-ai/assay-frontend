@@ -22,8 +22,8 @@ const KEY = {
   name: "Key 1",
   issuedVia: "API_KEY",
   oauthClient: null,
-  prefix: "assay_sk_live_ab12",
-  scopes: [],
+  hint: "assay_sk_live_…ab12",
+  scopes: ["tools:call", "payments", "activity:read"],
   lastUsedAt: null as string | null,
   expiresAt: null as string | null,
   revokedAt: null as string | null,
@@ -63,7 +63,7 @@ describe("Connect's 'Is it working?', from the agents' key health", { timeout: 3
   });
 
   it("is about the first agent only: another agent's used key does not say connected", () => {
-    const html = render([KEY], [{ ...KEY, id: "k9", agentId: OTHER, name: "Other key", prefix: "assay_sk_live_zz99", lastUsedAt: "2026-10-18T00:00:00Z" }]);
+    const html = render([KEY], [{ ...KEY, id: "k9", agentId: OTHER, name: "Other key", hint: "assay_sk_live_…zz99", lastUsedAt: "2026-10-18T00:00:00Z" }]);
     expect(html).toContain('data-testid="connect-waiting"');
     expect(html).not.toContain("Other key");
     expect(html).not.toContain("assay_sk_live_zz99");
