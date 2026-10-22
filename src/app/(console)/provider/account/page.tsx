@@ -1,9 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { KeyRound, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import Link from "next/link";
-import * as React from "react";
 
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
@@ -16,25 +15,20 @@ import {
   PanelTitle,
   PanelTitles,
 } from "@/components/ui/panel";
-import { PageState } from "@/components/patterns/page-state";
 import { Table, type TableColumn } from "@/components/ui/table";
-import { dateOnly, relativeTime } from "@/components/g31/format";
+import { dateOnly } from "@/components/g31/format";
 import { PROVIDER_EXPLAINER } from "@/components/layout/provider-nav-config";
 import { useOrgHandle } from "@/components/toolsets/use-toolsets";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainApiError } from "@/libs/plain-language";
-import { credentialLabel, type CredentialLike } from "@/features/buyer-money/mcp-config";
 import { termsVersionLabel } from "@/features/m41/terms";
-import { useAgentList } from "@/features/agents/agent-list";
-import { listCredentials } from "@/services/account.service";
 import { providerQueries } from "@/features/provider-home/queries";
 
 /**
- * Account, seats and credentials.
+ * Account: contacts, public name and payout wallet, terms.
  *
- * Page Header / a two-panel row (Seats + Machine tokens, the second fixed at
- * 520px) / a full-width Terms panel. The shell, its 16px gap and its [22, 26]
+ * Page Header / Contacts / Public name and payout wallet / Terms, each full width. The shell, its 16px gap and its [22, 26]
  * padding come from the `(console)` layout.
  *
  * ## Seats do not exist, and the panel says what does
@@ -54,18 +48,11 @@ import { providerQueries } from "@/features/provider-home/queries";
  * the two would attribute activity to whichever human happened to sort first.
  * (It is also empty for this org.)
  *
- * ## Machine tokens
+ * ## No API keys here
  *
- * `GET /agents` → `GET /agents/{agentId}/credentials`, flattened across every
- * agent. The provider org has one agent and, in the seed, no credentials — so
- * the empty state is the state this screen ships in.
- *
- * **No key is made here.** Every provider route (`/providers/*`, the tool
- * sets, the catalogue) is a signed-in person's only: the API refuses an agent
- * key on them whatever its scopes. A key made here could not manage anything,
- * and by default it could call and pay for tools. So the panel lists the
- * organization's keys, says they cannot manage the account, and offers no
- * create. Provider keys come back only with a provider scope.
+ * A provider needs no agent key: every provider route (`/providers/*`, the
+ * tool sets, the catalogue) is a signed-in person's only, and the API refuses
+ * an agent key on them whatever its scopes. Keys live on Agents & keys.
  *
  * ## Terms is the one panel that is fully sourced
  *
@@ -94,28 +81,10 @@ import { providerQueries } from "@/features/provider-home/queries";
  */
 
 
-interface Credential extends CredentialLike {
-  id: string;
-  agentId: string;
-  name: string;
-  scopes: string[];
-  lastUsedAt: string | null;
-  expiresAt: string | null;
-  revokedAt: string | null;
-  createdAt: string;
-}
-
 interface SeatRow {
   id: string;
   member: string;
   role: string;
-}
-
-interface TokenRow {
-  id: string;
-  name: string;
-  token: string;
-  lastUsed: string;
 }
 
 /** Terms versions are dated ("2026-06-15"); said exactly as Setup says them ("Apr 1, 2026 version"). */
@@ -162,28 +131,6 @@ const SEAT_COLUMNS: TableColumn<SeatRow>[] = [
   { key: "role", header: "For", width: 150, align: "end", cell: (r) => r.role },
 ];
 
-const TOKEN_COLUMNS: TableColumn<TokenRow>[] = [
-  {
-    key: "token",
-    header: "Key",
-    noTruncate: true,
-    cell: (row) => (
-      <span className="flex flex-col">
-        <span className="whitespace-nowrap font-semibold">{row.name}</span>
-        <span className="font-mono text-mono-xs text-03">{row.token}</span>
-      </span>
-    ),
-  },
-  {
-    key: "lastUsed",
-    header: "Last used",
-    width: 150,
-    align: "end",
-    noTruncate: true,
-    cell: (r) => <span className="whitespace-nowrap">{r.lastUsed}</span>,
-  },
-];
-
 const TERM_COLUMNS: TableColumn<TermRow>[] = [
   {
     key: "document",
@@ -207,59 +154,7 @@ const TERM_COLUMNS: TableColumn<TermRow>[] = [
 ];
 
 export default function ProviderAccountPage() {
-  /**
-   * Threaded into the request URL, not only the React Query key.
-   *
-   * Every GET on this API answers `Cache-Control: private, max-age=10,
-   * stale-while-revalidate=3600`, so after a write the BROWSER can serve the
-   * pre-write body for up to an hour and the request never reaches the server.
-   * `invalidateQueries` does not help — it does not change the URL. `from` is
-   * the buster because it is on the endpoint's parameter whitelist (an unknown
-   * parameter is a 400) and a `from` near the epoch excludes nothing.
-   *
-   * `cacheEpoch` is why the offset is not simply `0`. A counter that restarts
-   * at zero on every mount asks for the SAME url the last session already
-   * cached — measured on this screen: two credentials had been revoked, the API
-   * returned both to `fetch`, and a freshly loaded page still rendered one row
-   * reading "never used". A per-mount offset (a random point inside 1970-01-01,
-   * so still earlier than any row) makes each session's first read a real one.
-   */
-  const [cacheEpoch] = React.useState(() => Date.now() % 86_400_000);
-
   const registration = useQuery(providerQueries.registration());
-
-  const agents = useAgentList();
-
-  const agentIds = React.useMemo(
-    () => (agents.data?.items ?? []).map((agent) => agent.agentId),
-    [agents.data],
-  );
-
-  const credentials = useQuery({
-    queryKey: ["provider", "credentials", agentIds, cacheEpoch],
-    enabled: agentIds.length > 0,
-    /*
-      `queryFn` closes over `cacheEpoch`, which is in the key above, so the closure and the key agree. This used to carry an
-      `eslint-disable-next-line @tanstack/query/exhaustive-deps`, which was
-      dead: `@tanstack/eslint-plugin-query` has never been a dependency of this
-      repo, so the rule never ran and the directive suppressed nothing. It was
-      removed when the frontend gained its first ESLint config, because ESLint
-      reports a disable comment naming an unknown rule as an error of its own.
-      If that plugin is ever added, this call is where its finding will land.
-    */
-    queryFn: async () => {
-      const pages = await Promise.all(
-        agentIds.map(
-          (id) =>
-            listCredentials(id, {
-              limit: 50,
-              from: new Date(cacheEpoch).toISOString(),
-            } as never) as Promise<{ items: Credential[] }>,
-        ),
-      );
-      return pages.flatMap((page) => page.items);
-    },
-  });
 
   const record = registration.data?.registration;
   const published = registration.data?.terms;
@@ -280,20 +175,6 @@ export default function ProviderAccountPage() {
         },
       ]
     : [];
-
-  const tokenRows: TokenRow[] = (credentials.data ?? []).map((credential) => ({
-    id: credential.id,
-    name: credential.name,
-    // The key's hint (`assay_sk_live_…2fds`); an OAuth grant is named as the app sign-in it is.
-    token: credentialLabel(credential),
-    // A revoked credential is kept, not deleted, so its row stays readable —
-    // and the cell says which it is rather than showing a stale "last used".
-    lastUsed: credential.revokedAt
-      ? `revoked ${dateOnly(credential.revokedAt)}`
-      : credential.lastUsedAt
-        ? relativeTime(credential.lastUsedAt)
-        : "never used",
-  }));
 
   const termRow = (id: string, document: string, accepted: string, inForce: string): TermRow => ({
     id,
@@ -320,7 +201,7 @@ export default function ProviderAccountPage() {
       <header className="flex w-full items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Account</h1>
-          <p className="text-body-13 text-03">Your contacts, your API keys and the terms you accepted.</p>
+          <p className="text-body-13 text-03">Your contacts, your payout wallet and the terms you accepted.</p>
         </div>
       </header>
 
@@ -340,69 +221,37 @@ export default function ProviderAccountPage() {
         />
       ) : null}
 
-      {/* Row — gap 16, Seats flexes, Machine tokens fixed at 520. */}
-      <div className="flex w-full flex-col items-stretch gap-4 tablet:flex-row tablet:items-start">
-        {/* Seats. */}
-        <Panel className="min-w-0 flex-1">
-          <PanelHeader>
-            <PanelTitles>
-              <PanelTitle>Contacts</PanelTitle>
-              <PanelDescription>who we reach about incidents and penalties</PanelDescription>
-            </PanelTitles>
-            {record ? (
-              <Button variant="ghost" size="sm" asChild>
-                <Link href="/provider/setup?step=you">
-                  <Pencil aria-hidden="true" />
-                  Edit
-                </Link>
-              </Button>
-            ) : null}
-          </PanelHeader>
-          {/* Body — padding [6, 10, 10, 10]. */}
-          <PanelBody className="px-2.5 pb-2.5 pt-1.5">
-            {seatRows.length > 0 ? (
-              <Table columns={SEAT_COLUMNS} rows={seatRows} caption="Seats" />
-            ) : (
-              /* OUR copy — the frame draws three rows and no empty state. */
-              <EmptyState
-                className="m-2.5"
-                icon={null}
-                title="No contact is on file"
-                description="Registration types an owner and a technical contact. Until it completes, there is nobody for an enforcement notice to reach."
-              />
-            )}
-          </PanelBody>
-        </Panel>
-
-        {/* Machine tokens — fixed 520 on the frame. */}
-        <Panel className="w-full shrink-0 tablet:w-[520px]">
-          <PanelHeader>
-            <PanelTitles>
-              <PanelTitle>API keys</PanelTitle>
-              <PanelDescription className="whitespace-normal">
-                your agents&apos; keys. A key cannot manage your tools or this account: only a signed-in person can.
-              </PanelDescription>
-            </PanelTitles>
-          </PanelHeader>
-          {/* Body — padding [6, 10, 10, 10]. */}
-          <PanelBody className="px-2.5 pb-2.5 pt-1.5">
-            {credentials.isPending && agentIds.length > 0 ? (
-              <PageState kind="loading" rows={2} bare label="Loading API keys" />
-            ) : tokenRows.length > 0 ? (
-              <Table columns={TOKEN_COLUMNS} rows={tokenRows} caption="API keys" />
-            ) : (
-              /* OUR copy — the frame draws two rows and no empty state. This is
-                 the state the seeded provider org is actually in. */
-              <EmptyState
-                className="m-2.5"
-                icon={<KeyRound width={22} height={22} />}
-                title="No API key yet"
-                description="Only a signed-in person can change this account."
-              />
-            )}
-          </PanelBody>
-        </Panel>
-      </div>
+      {/* Seats. */}
+      <Panel>
+        <PanelHeader>
+          <PanelTitles>
+            <PanelTitle>Contacts</PanelTitle>
+            <PanelDescription>who we reach about incidents and penalties</PanelDescription>
+          </PanelTitles>
+          {record ? (
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/provider/setup?step=you">
+                <Pencil aria-hidden="true" />
+                Edit
+              </Link>
+            </Button>
+          ) : null}
+        </PanelHeader>
+        {/* Body — padding [6, 10, 10, 10]. */}
+        <PanelBody className="px-2.5 pb-2.5 pt-1.5">
+          {seatRows.length > 0 ? (
+            <Table columns={SEAT_COLUMNS} rows={seatRows} caption="Seats" />
+          ) : (
+            /* OUR copy — the frame draws three rows and no empty state. */
+            <EmptyState
+              className="m-2.5"
+              icon={null}
+              title="No contact is on file"
+              description="Registration types an owner and a technical contact. Until it completes, there is nobody for an enforcement notice to reach."
+            />
+          )}
+        </PanelBody>
+      </Panel>
 
       {/* Who buyers see, and where the money goes. */}
       {record ? (
