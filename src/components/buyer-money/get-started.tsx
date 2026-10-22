@@ -293,7 +293,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
             {createdToken ? <p className="text-body-xs text-03">{newKeyPaysNote(payingKeyName(readiness))}</p> : null}
             <McpConfigTabs
               token={createdToken}
-              keyPrefix={keyForHint(liveKeys)?.prefix ?? null}
+              keyHint={keyForHint(liveKeys)?.hint ?? null}
               onCopy={onCopyConfig}
               onCreateKey={() => createInPlace.mutate()}
               agentName={agent?.label ?? null}

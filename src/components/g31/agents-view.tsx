@@ -24,7 +24,7 @@ import { AGENT_LABEL_MAX, agentLabelError } from "@/features/buyer-money/agent-l
 import { type AgentReadiness, credentialIsLive } from "@/features/buyer-money/agent-readiness";
 import { capsToForm } from "@/features/buyer-money/caps";
 import { keyExpiry, keyMayPay, type KeyExpiryView, scopesText } from "@/features/buyer-money/key-scopes";
-import { credentialLabel } from "@/features/buyer-money/mcp-config";
+import { shownKeyHint } from "@/features/buyer-money/mcp-config";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, findDelegation, supportsDelegation } from "@/features/delegation/delegation-form";
 import { dollars, fingerprint } from "@/features/delegation/enable-paid";
@@ -101,7 +101,7 @@ export type PaymentKeyOnChain =
 export interface CredentialRowView {
   /** Not revoked and not expired. */
   live: boolean;
-  /** "Signed in from Assay app (assay-mcp)", "Signed in from {app} ({domain}) · free tools only", "API key {prefix}…". */
+  /** "Signed in from Assay app (assay-mcp)", "Signed in from {app} ({domain}) · free tools only", "API key assay_sk_live_…2fds". */
   source: string;
   /** The payment-key line, or null when the source line already says "free tools only". */
   paymentLine: string | null;
@@ -178,7 +178,8 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
 
   let source: string;
   if (key.issuedVia === "API_KEY") {
-    source = `API key ${credentialLabel(key)}`;
+    const hint = shownKeyHint(key.hint);
+    source = hint ? `API key ${hint}` : "API key";
   } else if (client?.paymentClient) {
     source = "Signed in from Assay app (assay-mcp)";
   } else {
@@ -532,7 +533,7 @@ function CredentialRowItem({
           {credential.lastUsedAt ? `Last used ${relativeTime(credential.lastUsedAt)}` : "Never used"}
         </span>
       </div>
-      <span className={cn("text-body-xs text-02", credential.prefix ? "font-mono" : undefined)} data-testid="credential-source">
+      <span className={cn("text-body-xs text-02", shownKeyHint(credential.hint) ? "font-mono" : undefined)} data-testid="credential-source">
         {view.source}
       </span>
       <span className="text-body-xs text-02" data-testid="credential-scopes">

@@ -41,7 +41,7 @@ const KEY = {
   id: "k1",
   agentId: AGENT,
   name: "laptop",
-  prefix: "assay_sk_live_ab12",
+  hint: "assay_sk_live_…ab12",
   scopes: ["tools:call", "payments", "activity:read"],
   lastUsedAt: null,
   expiresAt: null,
@@ -49,7 +49,7 @@ const KEY = {
   createdAt: "2026-10-18T00:00:00Z",
 };
 
-const GRANT = { ...KEY, id: "g1", name: "Claude Code · 2026-10-18", prefix: null, oauthClient: { name: "Claude Code" } };
+const GRANT = { ...KEY, id: "g1", name: "Claude Code · 2026-10-18", hint: null, oauthClient: { name: "Claude Code" } };
 
 describe("the key hint skips an app sign-in (OAuth grant, null prefix)", () => {
   it("names the API key even when a grant comes first", () => {
@@ -59,11 +59,11 @@ describe("the key hint skips an app sign-in (OAuth grant, null prefix)", () => {
     // The default tab is the proxy install: it signs in, so no key line and no key in it (M1-04 follow-up).
     // The key goes under "My own code".
     expect(out).not.toContain("Uses the live key");
-    expect(out).not.toContain("REST_OF_YOUR_KEY");
+    expect(out).not.toContain("PASTE_YOUR_KEY_ENDING");
     expect(out).toContain("@goassay-ai/mcp@1.2.3");
     expect(out).not.toContain("null");
-    const own = text(render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />));
-    expect(own).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
+    const own = text(render(<McpConfigTabs token={null} keyHint="assay_sk_live_…ab12" url="https://mcp.example.com/" client="other" />));
+    expect(own).toContain("PASTE_YOUR_KEY_ENDING_ab12");
   });
 
   it("with only a grant, the sign-in tab says nothing about a missing key, never 'null…' (BUG-M1-04)", () => {
@@ -129,7 +129,7 @@ describe("a refused install leaves nothing to copy (review N-1)", () => {
 
 describe("the config tabs", () => {
   it("disable Copy while the snippet holds a placeholder, and enable it with the full key", () => {
-    const template = render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />);
+    const template = render(<McpConfigTabs token={null} keyHint="assay_sk_live_…ab12" url="https://mcp.example.com/" client="other" />);
     expect(template).toContain(TEMPLATE_COPY_REASON);
     expect(template).toMatch(/<button[^>]*disabled=""[^>]*title=/);
     const ready = render(<McpConfigTabs token="assay_sk_live_full" url="https://mcp.example.com/" client="other" />);
@@ -137,9 +137,9 @@ describe("the config tabs", () => {
   });
 
   it("offer Use an API key instead under My own code only (R-UI-8)", () => {
-    const own = text(render(<McpConfigTabs token={null} keyPrefix={null} url="https://mcp.example.com/" client="other" onCreateKey={() => undefined} />));
+    const own = text(render(<McpConfigTabs token={null} keyHint={null} url="https://mcp.example.com/" client="other" onCreateKey={() => undefined} />));
     expect(own).toContain("Use an API key instead");
-    const proxy = text(render(<McpConfigTabs token={null} keyPrefix={null} url="https://mcp.example.com/" onCreateKey={() => undefined} />));
+    const proxy = text(render(<McpConfigTabs token={null} keyHint={null} url="https://mcp.example.com/" onCreateKey={() => undefined} />));
     expect(proxy).not.toContain("Use an API key instead");
   });
 

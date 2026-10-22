@@ -76,7 +76,7 @@ describe("the agent card while its keys load", () => {
     client.setQueryData(["me", "status"], { blockStatus: null, unreadCount: null, debts: { account: ACCOUNT, debts: [] } });
     client.setQueryData(["spend-policy"], null);
     client.setQueryData(["chains"], { chains: [] });
-    const key = { id: "k1", agentId: AGENT, name: "Key 1", issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12", scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
+    const key = { id: "k1", agentId: AGENT, name: "Key 1", issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…ab12", scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
     client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [key] }));
     // A refresh (a poll) that failed: the agents stay on screen, their keys read as unknown.
     await client
@@ -150,15 +150,23 @@ describe("the agent card while its keys load", () => {
   });
 
   it("states paid calls as by invitation when the agent has a key but no payment key (D14)", () => {
-    const key = { id: "k1", agentId: AGENT, name: "Key 1", issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12", scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
+    const key = { id: "k1", agentId: AGENT, name: "Key 1", issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…ab12", scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
     const out = text(render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [key] }))));
     expect(out).toContain("Paid calls are by invitation during testnet");
     expect(out).not.toContain("Needs authorisation");
   });
 
-  it("labels an OAuth grant (null prefix) by its app, never 'null…'", () => {
+  it("shows each API key by its hint, in monospace, never an old prefix", () => {
+    const key = { id: "k1", agentId: AGENT, name: "Key 1", issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…2fds", scopes: ["tools:call"], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
+    const html = render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [key] })));
+    const source = html.match(/<span[^>]*data-testid="credential-source"[^>]*>[^<]*<\/span>/)?.[0] ?? "";
+    expect(source).toContain("font-mono");
+    expect(source).toContain("API key assay_sk_live_…2fds");
+  });
+
+  it("labels an OAuth grant (null hint) by its app, never 'null…'", () => {
     const base = { agentId: AGENT, scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
-    const named = { ...base, id: "g1", name: "Claude Code · 2026-10-17", issuedVia: "OAUTH", prefix: null, oauthClient: THIRD_PARTY };
+    const named = { ...base, id: "g1", name: "Claude Code · 2026-10-17", issuedVia: "OAUTH", hint: null, oauthClient: THIRD_PARTY };
     const out = text(render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [named] }))));
     expect(out).toContain("Signed in from Claude Code (claude.ai) · free tools only");
     expect(out).not.toContain("null");
@@ -166,8 +174,8 @@ describe("the agent card while its keys load", () => {
 
   it("offers Use an API key instead while the agent only signs in through an app, New key once it has one (R-UI-8)", () => {
     const base = { agentId: AGENT, scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
-    const grant = { ...base, id: "g1", name: "Claude Code · 2026-10-17", issuedVia: "OAUTH", prefix: null, oauthClient: THIRD_PARTY };
-    const key = { ...base, id: "k1", name: "Key 1", issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12" };
+    const grant = { ...base, id: "g1", name: "Claude Code · 2026-10-17", issuedVia: "OAUTH", hint: null, oauthClient: THIRD_PARTY };
+    const key = { ...base, id: "k1", name: "Key 1", issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…ab12" };
     const button = (keys: unknown[]) =>
       text(render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: keys }))).match(/<button[^>]*data-testid="new-credential"[\s\S]*?<\/button>/)?.[0] ?? "").trim();
     expect(button([])).toBe("Use an API key instead");
@@ -201,7 +209,7 @@ function grantRow(id: string, name: string, delegateAccount: string | null, patc
     name,
     issuedVia: "OAUTH",
     oauthClient: BUILTIN,
-    prefix: null,
+    hint: null,
     scopes: ["tools:call", "payments", "activity:read"],
     lastUsedAt: null,
     expiresAt: null,
@@ -396,7 +404,7 @@ describe("Agents & keys rows (spec §9.2, F3 step 5)", () => {
 
 describe("Agents & keys rows: scopes, expiry and a key waiting for approval", () => {
   it("shows what each key may do and when it ends", () => {
-    const free = grantRow("k-free", "CI", null, { issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12", scopes: ["tools:call"], expiresAt: "2099-01-17T12:00:00.000Z" });
+    const free = grantRow("k-free", "CI", null, { issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…ab12", scopes: ["tools:call"], expiresAt: "2099-01-17T12:00:00.000Z" });
     const html = render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [free] })));
     const out = text(html);
     expect(html).toContain('data-testid="credential-scopes"');
