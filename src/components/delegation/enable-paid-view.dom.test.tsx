@@ -94,6 +94,19 @@ describe("EnablePaidView", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it("the fingerprint check stands out until ticked, and the reason under Approve leads back to it", () => {
+    render(<Harness run={vi.fn(async () => undefined)} />);
+    const box = screen.getByTestId("fingerprint-confirm");
+    expect(box.className).toContain("motion-safe:animate-attention");
+    fireEvent.click(screen.getByRole("button", { name: TICK_FIRST_TEXT }));
+    expect(document.activeElement).toBe(tick());
+
+    fireEvent.click(tick());
+    expect(box.className).not.toContain("animate-attention");
+    expect(box.className).toContain("border-success-500");
+    expect(screen.queryByRole("button", { name: TICK_FIRST_TEXT })).toBeNull();
+  });
+
   it("framed → disabled, even ticked", () => {
     const run = vi.fn(async () => undefined);
     render(<Harness run={run} topLevel={false} />);

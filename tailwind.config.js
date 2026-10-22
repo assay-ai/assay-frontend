@@ -20,6 +20,17 @@ module.exports = {
   ],
   theme: {
     extend: {
+      // A ring that pulses out from a box the user must act on (the fingerprint check).
+      keyframes: {
+        "attention-ring": {
+          "0%": { boxShadow: "0 0 0 0 var(--primary-400)" },
+          "70%": { boxShadow: "0 0 0 8px transparent" },
+          "100%": { boxShadow: "0 0 0 0 transparent" },
+        },
+      },
+      animation: {
+        attention: "attention-ring 1.8s ease-out infinite",
+      },
       // `bg-01` … `bg-inverse`
       backgroundColor: {
         "01": "var(--bg-01)",
