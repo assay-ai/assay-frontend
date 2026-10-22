@@ -114,6 +114,14 @@ export function EnablePaidView({
   const [framed, setFramed] = React.useState(true);
   React.useEffect(() => setFramed(!isTopLevel()), [isTopLevel]);
   const [ticked, setTicked] = React.useState(false);
+  // Approve sits far below the fingerprint check, so the reason under it leads back to the box.
+  const confirmRef = React.useRef<HTMLDivElement>(null);
+  const tickRef = React.useRef<HTMLInputElement>(null);
+  const showConfirm = () => {
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    confirmRef.current?.scrollIntoView?.({ behavior: reduce ? "auto" : "smooth", block: "center" });
+    tickRef.current?.focus({ preventScroll: true });
+  };
 
   // Counted from the expiry actually signed when the page has one.
   const bound = boundLine(draft.perDay, boundDays !== null ? String(boundDays) : draft.days);
@@ -131,7 +139,11 @@ export function EnablePaidView({
           : !validUntil
             ? "The expiry could not be set."
             : !ticked
-              ? TICK_FIRST_TEXT
+              ? (
+                  <button type="button" onClick={showConfirm} className="text-left underline underline-offset-2">
+                    {TICK_FIRST_TEXT}
+                  </button>
+                )
               : walletBlocker;
   const twoSignatures = signatures > 1;
   const ceilingNote = twoSignatures ? ceilingChange(currentCeiling, { perCall: draft.perCall, perDay: draft.perDay }) : null;
@@ -184,12 +196,29 @@ export function EnablePaidView({
             </span>
           </div>
         ) : null}
-        <Checkbox
-          checked={ticked}
-          onChange={(event) => setTicked(event.currentTarget.checked)}
-          disabled={framed}
-          label="It matches what my app showed."
-        />
+        <div
+          ref={confirmRef}
+          data-testid="fingerprint-confirm"
+          className={cn(
+            "flex flex-col gap-1.5 rounded-lg border-2 px-3 py-2.5 transition-colors",
+            ticked
+              ? "border-success-500 bg-success-10"
+              : framed
+                ? "border-01"
+                : "border-primary-500 bg-primary-10 motion-safe:animate-attention",
+          )}
+        >
+          {!ticked && !framed ? (
+            <span className="text-label-13 text-01">Compare the fingerprint with the one your app showed, then tick the box.</span>
+          ) : null}
+          <Checkbox
+            ref={tickRef}
+            checked={ticked}
+            onChange={(event) => setTicked(event.currentTarget.checked)}
+            disabled={framed}
+            label="It matches what my app showed."
+          />
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">
