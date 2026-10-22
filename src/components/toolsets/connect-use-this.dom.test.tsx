@@ -18,7 +18,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined, r
 
 const AGENT = "11111111-1111-1111-1111-111111111111";
 const HOST = "https://mcp.example.com";
-const KEY = { id: "k1", agentId: AGENT, name: "laptop", prefix: "assay_sk_live_ab12", scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, createdAt: "2026-10-18T00:00:00Z" };
+const KEY = { id: "k1", agentId: AGENT, name: "laptop", prefix: "assay_sk_live_ab12", scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, createdAt: "2026-10-18T00:00:00Z" };
 
 function render(initialUrl: string, servers: unknown[] = []): string {
   vi.stubEnv("NEXT_PUBLIC_MCP_URL", `${HOST}/`);

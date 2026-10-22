@@ -33,7 +33,7 @@ const KEY = {
   agentId: AGENT,
   name: "Key 1",
   prefix: "assay_sk_live_ab12",
-  scopes: [],
+  scopes: ["tools:call", "payments", "activity:read"],
   lastUsedAt: "2026-10-18T00:00:00Z",
   expiresAt: null,
   revokedAt: null,

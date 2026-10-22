@@ -1,16 +1,13 @@
 "use client";
 
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { KeyRound, Pencil, Plus, TriangleAlert } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { KeyRound, Pencil } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
-import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
-import { CodeBlock } from "@/components/ui/code-block";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Field } from "@/components/ui/field";
 import {
   Panel,
   PanelBody,
@@ -19,13 +16,6 @@ import {
   PanelTitle,
   PanelTitles,
 } from "@/components/ui/panel";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { PageState } from "@/components/patterns/page-state";
 import { Table, type TableColumn } from "@/components/ui/table";
 import { dateOnly, relativeTime } from "@/components/g31/format";
@@ -33,11 +23,11 @@ import { PROVIDER_EXPLAINER } from "@/components/layout/provider-nav-config";
 import { useOrgHandle } from "@/components/toolsets/use-toolsets";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
-import { plainApiError, plainError } from "@/libs/plain-language";
+import { plainApiError } from "@/libs/plain-language";
 import { credentialLabel, type CredentialLike } from "@/features/buyer-money/mcp-config";
 import { termsVersionLabel } from "@/features/m41/terms";
 import { useAgentList } from "@/features/agents/agent-list";
-import { createCredential, listCredentials } from "@/services/account.service";
+import { listCredentials } from "@/services/account.service";
 import { providerQueries } from "@/features/provider-home/queries";
 
 /**
@@ -70,24 +60,12 @@ import { providerQueries } from "@/features/provider-home/queries";
  * agent. The provider org has one agent and, in the seed, no credentials — so
  * the empty state is the state this screen ships in.
  *
- * `POST` returns the secret **exactly once**; the reveal is therefore a sheet
- * opened by the response, not a route, because a route would imply the key
- * could be navigated back to. That mirrors the one-time key reveal screen, which is the only
- * place in the design a one-time secret is drawn.
- *
- * **No scope vocabulary is published anywhere** — `CreateAgentCredentialBodyDto`
- * types `scopes` as an unconstrained `string[]`, and a credential created with
- * none comes back with `scopes: []` (measured). The frame writes "binding
- * read/write" and "read only (CI)"; offering those as choices would invent a
- * permission model. The sheet asks for a name and nothing else, and the Scope
- * column dashes an empty list.
- *
- * **There is no revoke control**, because the frame draws none — its only
- * per-panel affordance is an ellipsis button the designer marked
- * `enabled: false`. Minting a token you cannot retire from the same screen is
- * a real gap; it is not patched here, because the
- * buyer's agent-key revocation screen already owns that interaction and inventing a second one would
- * put two different revoke flows in one product.
+ * **No key is made here.** Every provider route (`/providers/*`, the tool
+ * sets, the catalogue) is a signed-in person's only: the API refuses an agent
+ * key on them whatever its scopes. A key made here could not manage anything,
+ * and by default it could call and pay for tools. So the panel lists the
+ * organization's keys, says they cannot manage the account, and offers no
+ * create. Provider keys come back only with a provider scope.
  *
  * ## Terms is the one panel that is fully sourced
  *
@@ -124,16 +102,6 @@ interface Credential extends CredentialLike {
   lastUsedAt: string | null;
   expiresAt: string | null;
   revokedAt: string | null;
-  createdAt: string;
-}
-
-interface CreatedCredential {
-  id: string;
-  name: string;
-  prefix: string;
-  /** Shown exactly once. Never re-fetchable. */
-  token: string;
-  scopes: string[];
   createdAt: string;
 }
 
@@ -247,12 +215,8 @@ const TERM_COLUMNS: TableColumn<TermRow>[] = [
 ];
 
 export default function ProviderAccountPage() {
-  const [creating, setCreating] = React.useState(false);
-  const [name, setName] = React.useState("");
-  const [created, setCreated] = React.useState<CreatedCredential | null>(null);
   /**
-   * Bumped after every write and threaded into the request URL, not only the
-   * React Query key.
+   * Threaded into the request URL, not only the React Query key.
    *
    * Every GET on this API answers `Cache-Control: private, max-age=10,
    * stale-while-revalidate=3600`, so after a write the BROWSER can serve the
@@ -269,7 +233,6 @@ export default function ProviderAccountPage() {
    * so still earlier than any row) makes each session's first read a real one.
    */
   const [cacheEpoch] = React.useState(() => Date.now() % 86_400_000);
-  const [writeCount, setWriteCount] = React.useState(0);
 
   const registration = useQuery(providerQueries.registration());
 
@@ -281,11 +244,10 @@ export default function ProviderAccountPage() {
   );
 
   const credentials = useQuery({
-    queryKey: ["provider", "credentials", agentIds, cacheEpoch, writeCount],
+    queryKey: ["provider", "credentials", agentIds, cacheEpoch],
     enabled: agentIds.length > 0,
     /*
-      `queryFn` closes over `cacheEpoch` and `writeCount`, which are both in
-      the key above, so the closure and the key agree. This used to carry an
+      `queryFn` closes over `cacheEpoch`, which is in the key above, so the closure and the key agree. This used to carry an
       `eslint-disable-next-line @tanstack/query/exhaustive-deps`, which was
       dead: `@tanstack/eslint-plugin-query` has never been a dependency of this
       repo, so the rule never ran and the directive suppressed nothing. It was
@@ -299,7 +261,7 @@ export default function ProviderAccountPage() {
           (id) =>
             listCredentials(id, {
               limit: 50,
-              from: new Date(cacheEpoch + writeCount).toISOString(),
+              from: new Date(cacheEpoch).toISOString(),
             } as never) as Promise<{ items: Credential[] }>,
         ),
       );
@@ -356,17 +318,6 @@ export default function ProviderAccountPage() {
         ]
       : [];
 
-  const createMutation = useMutation({
-    mutationFn: (label: string) =>
-      createCredential(agentIds[0], { name: label }) as Promise<CreatedCredential>,
-    onSuccess: (credential) => {
-      setCreated(credential);
-      setCreating(false);
-      setName("");
-      setWriteCount((n) => n + 1);
-    },
-  });
-
   const registrationError =
     registration.error instanceof ApiError ? registration.error : null;
 
@@ -376,26 +327,7 @@ export default function ProviderAccountPage() {
       <header className="flex w-full items-center justify-between gap-4">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Account</h1>
-          <p className="text-body-13 text-03">Your contacts, API keys for scripts and the terms you accepted.</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <Button
-            icon={<Plus />}
-            type="button"
-            // A token belongs to an agent. With no agent there is nothing to
-            // attach one to, so the control says it cannot act instead of
-            // failing on the click.
-            disabled={agentIds.length === 0}
-            onClick={() => {
-              createMutation.reset();
-              setCreating(true);
-            }}
-          >
-            New API key
-          </Button>
-          {agentIds.length === 0 ? (
-            <span className="text-body-xs text-03">A key belongs to an agent; there is none yet.</span>
-          ) : null}
+          <p className="text-body-13 text-03">Your contacts, your API keys and the terms you accepted.</p>
         </div>
       </header>
 
@@ -453,8 +385,10 @@ export default function ProviderAccountPage() {
         <Panel className="w-full shrink-0 tablet:w-[520px]">
           <PanelHeader>
             <PanelTitles>
-              <PanelTitle>API keys for scripts</PanelTitle>
-              <PanelDescription className="whitespace-normal">let a deploy pipeline or script manage your tools without a person signing in</PanelDescription>
+              <PanelTitle>API keys</PanelTitle>
+              <PanelDescription className="whitespace-normal">
+                your agents&apos; keys. A key cannot manage your tools or this account: only a signed-in person can.
+              </PanelDescription>
             </PanelTitles>
           </PanelHeader>
           {/* Body — padding [6, 10, 10, 10]. */}
@@ -462,7 +396,7 @@ export default function ProviderAccountPage() {
             {credentials.isPending && agentIds.length > 0 ? (
               <PageState kind="loading" rows={2} bare label="Loading API keys" />
             ) : tokenRows.length > 0 ? (
-              <Table columns={TOKEN_COLUMNS} rows={tokenRows} caption="API keys for scripts" />
+              <Table columns={TOKEN_COLUMNS} rows={tokenRows} caption="API keys" />
             ) : (
               /* OUR copy — the frame draws two rows and no empty state. This is
                  the state the seeded provider org is actually in. */
@@ -470,7 +404,7 @@ export default function ProviderAccountPage() {
                 className="m-2.5"
                 icon={<KeyRound width={22} height={22} />}
                 title="No API key yet"
-                description="Nothing but a signed-in person can change this account. Create a key when a deploy pipeline or script needs to."
+                description="Only a signed-in person can change this account."
               />
             )}
           </PanelBody>
@@ -592,73 +526,6 @@ export default function ProviderAccountPage() {
         </PanelBody>
       </Panel>
 
-      {/* Create — not drawn on the design; the button on it has to lead somewhere. */}
-      <Sheet open={creating} onOpenChange={setCreating}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>New API key</SheetTitle>
-            <SheetDescription>
-              The key is shown exactly once. Give it a name you will recognise later.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex w-full flex-col gap-4 px-[18px] pb-6 pt-4">
-            <Field
-              label="Name"
-              id="api-key-name"
-              placeholder="CI deploy"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              maxLength={128}
-              hint="For a deploy pipeline or a script that manages your tools."
-            />
-            {/* Inside the sheet: a banner on the page would sit behind the overlay. */}
-            {createMutation.error instanceof ApiError ? (
-              <Banner
-                tone="danger"
-                title="The API key could not be created"
-                description={<ApiErrorSentence error={createMutation.error} fallback={plainError(undefined)} />}
-              />
-            ) : null}
-            <Button
-              type="button"
-              loading={createMutation.isPending}
-              disabled={!name.trim()}
-              onClick={() => createMutation.mutate(name.trim())}
-            >
-              Create key
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      {/* The one-time reveal, after the one-time key reveal screen. */}
-      <Sheet open={created !== null} onOpenChange={(open) => !open && setCreated(null)}>
-        <SheetContent className="tablet:max-w-[760px]">
-          <SheetHeader>
-            <SheetTitle>Your new API key</SheetTitle>
-            <SheetDescription>
-              {created ? `${created.name} · ${maskedKey(created)}` : null}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex w-full flex-col gap-5 px-[18px] pb-8 pt-5">
-            {created ? <CodeBlock title={created.name} code={created.token} /> : null}
-            <div className="flex w-full items-start gap-2.5 rounded-lg border border-warning-20 bg-warning-10 p-3.5">
-              <TriangleAlert
-                aria-hidden="true"
-                className="mt-0.5 size-[15px] shrink-0 text-warning-600"
-              />
-              <p className="text-body-13 text-warning-700">
-                This key is shown once. We cannot show it again; create a new one if you lose it.
-              </p>
-            </div>
-            <div className="flex w-full justify-end">
-              <Button type="button" onClick={() => setCreated(null)}>
-                I have stored it
-              </Button>
-            </div>
-          </div>
-        </SheetContent>
-      </Sheet>
     </>
   );
 }

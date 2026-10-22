@@ -6,10 +6,24 @@ import * as React from "react";
 
 import { CopyChip } from "@/components/patterns/copy-chip";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
+import { Radio } from "@/components/ui/radio";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { nextKeyName } from "@/features/buyer-money/agent-label";
 import type { AgentReadiness } from "@/features/buyer-money/agent-readiness";
+import {
+  createKeyBody,
+  DEFAULT_KEY_EXPIRY_DAYS,
+  DEFAULT_KEY_PRESET,
+  expiryLabel,
+  KEY_EXPIRY_DAYS,
+  KEY_PRESETS,
+  keyExpiry,
+  keyMayPay,
+  type KeyExpiryDays,
+  type KeyPresetId,
+} from "@/features/buyer-money/key-scopes";
 import { ApiError } from "@/libs/ApiClient";
 import { plainApiError, plainError } from "@/libs/plain-language";
 import { createCredential } from "@/services/account.service";
@@ -27,6 +41,8 @@ export interface CreatedKey {
   name: string;
   prefix: string;
   token: string;
+  scopes?: string[];
+  expiresAt?: string | null;
 }
 
 /**
@@ -41,7 +57,9 @@ export function payingKeyName(readiness: Pick<AgentReadiness, "boundCredential" 
   return readiness?.boundCredential && readiness.grant?.status === "ACTIVE" ? readiness.boundCredential.name : null;
 }
 
-export function newKeyPaysNote(payingKey?: string | null): string {
+export function newKeyPaysNote(payingKey?: string | null, scopes?: readonly string[] | null): string {
+  if (scopes && !scopes.includes("tools:call")) return "This key cannot call tools: it reads its own activity only.";
+  if (scopes && !keyMayPay(scopes)) return "This key makes free calls only: it can never pay.";
   return payingKey
     ? `This key makes free calls only. Your agent pays through its key “${payingKey}”. If you switch the agent to this key, it can make paid calls only once a payment key is bound to this key as well.`
     : "This key makes free calls only: no payment key is bound to it.";
@@ -69,7 +87,8 @@ export function invalidateAfterKeyWrite(queryClient: QueryClient): void {
 export function useCreateKey(agentId: string | null, keyCount: number, onCreated: (key: CreatedKey) => void) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => createCredential(agentId!, { name: nextKeyName(keyCount), scopes: ["tools:call"] }) as Promise<CreatedKey>,
+    // The quick button makes an Agent key (call, pay, read activity) for 90 days.
+    mutationFn: () => createCredential(agentId!, createKeyBody(nextKeyName(keyCount))) as Promise<CreatedKey>,
     onSuccess: (key) => {
       onCreated(key);
       invalidateAfterKeyWrite(queryClient);
@@ -95,9 +114,12 @@ export function CreateKeyForm({
 }) {
   const queryClient = useQueryClient();
   const [name, setName] = React.useState(defaultName);
+  const [preset, setPreset] = React.useState<KeyPresetId>(DEFAULT_KEY_PRESET);
+  const [canReport, setCanReport] = React.useState(false);
+  const [days, setDays] = React.useState<KeyExpiryDays>(DEFAULT_KEY_EXPIRY_DAYS);
   const [created, setCreated] = React.useState<CreatedKey | null>(null);
   const create = useMutation({
-    mutationFn: () => createCredential(agentId, { name: name.trim(), scopes: ["tools:call"] }) as Promise<CreatedKey>,
+    mutationFn: () => createCredential(agentId, createKeyBody(name.trim(), { preset, canReport, days })) as Promise<CreatedKey>,
     onSuccess: (key) => {
       setCreated(key);
       onCreated?.(key);
@@ -118,7 +140,12 @@ export function CreateKeyForm({
             <TriangleAlert aria-hidden="true" className="mt-px size-3.5 shrink-0" />
             Shown once. We cannot show it again; if you lose it, create a new one and revoke this one.
           </p>
-          <p className="text-body-xs text-03" data-testid="key-free-calls">{newKeyPaysNote(payingKey)}</p>
+          <p className="text-body-xs text-03" data-testid="key-free-calls">{newKeyPaysNote(payingKey, created.scopes)}</p>
+          {keyExpiry(created.expiresAt) ? (
+            <p className="text-body-xs text-03" data-testid="key-created-expiry">
+              {keyExpiry(created.expiresAt)!.text}. Create a new key before then.
+            </p>
+          ) : null}
         </div>
         <div className="flex w-full min-w-0 flex-col gap-1.5">
           <span className="text-label-13 text-01">Connect your MCP client</span>
@@ -147,8 +174,53 @@ export function CreateKeyForm({
         value={name}
         onChange={(e) => setName(e.target.value)}
         hint="So you can tell your keys apart, e.g. the machine it runs on."
-        error={create.isError ? createKeyErrorText(create.error) : undefined}
       />
+      <fieldset className="flex flex-col gap-2" data-testid="key-preset">
+        <legend className="mb-1 text-label-13 text-01">What it can do</legend>
+        {KEY_PRESETS.map((option) => (
+          <div key={option.id} className="flex flex-col gap-0.5">
+            <Radio
+              name={`key-preset-${agentId}`}
+              value={option.id}
+              checked={preset === option.id}
+              onChange={() => setPreset(option.id)}
+              label={option.label}
+            />
+            <span className="pl-[26px] text-body-xs text-03">{option.hint}</span>
+          </div>
+        ))}
+        {preset !== "read" ? (
+          <div className="flex flex-col gap-0.5 pt-1">
+            <Checkbox
+              checked={canReport}
+              onChange={(event) => setCanReport(event.currentTarget.checked)}
+              label="Can report bad results"
+            />
+            <span className="pl-[26px] text-body-xs text-03">Lets it flag a tool result that was wrong. Off unless you need it.</span>
+          </div>
+        ) : null}
+      </fieldset>
+      <fieldset className="flex flex-col gap-2" data-testid="key-expiry">
+        <legend className="mb-1 text-label-13 text-01">Expires after</legend>
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
+          {KEY_EXPIRY_DAYS.map((option) => (
+            <Radio
+              key={option}
+              name={`key-expiry-${agentId}`}
+              value={String(option)}
+              checked={days === option}
+              onChange={() => setDays(option)}
+              label={expiryLabel(option)}
+            />
+          ))}
+        </div>
+        <span className="text-body-xs text-03">The key stops working then. You can revoke it sooner.</span>
+      </fieldset>
+      {create.isError ? (
+        <p role="alert" className="text-body-xs text-danger-600" data-testid="create-key-error">
+          {createKeyErrorText(create.error)}
+        </p>
+      ) : null}
       <Button type="submit" className="self-start" loading={create.isPending} disabled={!name.trim()}>
         Create key
       </Button>
