@@ -557,9 +557,9 @@ describe("fix round 2, R1: Unicode spoofs of a verified name", () => {
     ["Claude Code \u{10102} Verified", "Claude Code"], // Aegean check mark
     ["Claude Code \u{1FBB1}", "Claude Code"], // symbols for legacy computing check mark
     ["Claude Code ⍻", "Claude Code"], // not check mark
-    ["Veri​fied Claude Code", "Claude Code"], // zero-width space inside the word
-    ["Claude Code ‮Verified", "Claude Code"], // RTL override before the word
-    ["Claude Code ‮deifirev", "Claude Code deifirev"], // the override is gone, so it reads as written
+    ["Veri\u200bfied Claude Code", "Claude Code"], // zero-width space inside the word
+    ["Claude Code \u202eVerified", "Claude Code"], // RTL override before the word
+    ["Claude Code \u202edeifirev", "Claude Code deifirev"], // the override is gone, so it reads as written
     ["ClaudeVerified", "Claude"],
     ["Claude Code V̲erified", "Claude Code"], // a combining mark inside the word
     ["Claude Code νεrιfiεd", "Unnamed app"], // Greek ν ε ι, flagged as above
