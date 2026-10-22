@@ -10,12 +10,16 @@
  *   strict policy of `csp-policy.js` (the one source: every directive but the
  *   two it completes must equal `strictPolicy()`), with `script-src` holding
  *   `'self'` and exactly that page's inline-script hashes, `frame-ancestors
- *   'none'`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`.
+ *   'none'`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`;
+ * - `/*` carries the site-wide Report-Only policy (`sitePolicy()` with the API
+ *   and MCP origins of the build's environment), and the strict pages detach it.
  *
  * Browser check (R-WEB-4): the built site is served with `_headers` applied
  * and each strict page is loaded in an iframe of another origin and of its own;
  * Chrome must refuse every one. The same load reports scripts added at run
- * time without integrity, and fails on a CSP or integrity violation. It needs
+ * time without integrity, and fails on a CSP or integrity violation. A few
+ * site pages are loaded too, and any violation of the Report-Only site-wide
+ * policy there fails (Privy refusing the test origin is not one). It needs
  * Chrome (`CHROME_BIN`, or a standard install): without it the step is skipped
  * with a message, unless `CI` is set, where a missing Chrome fails. Needs
  * Node.js 22+ (the global `WebSocket`).
@@ -29,20 +33,30 @@ const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
 
-const { STRICT_PATHS, STRICT_SCRIPT_ORIGINS, strictPolicy, fallbackPolicy } = require("./csp-policy");
+const { SITE_HEADER, SITE_PATH, STRICT_PATHS, STRICT_SCRIPT_ORIGINS, originsOf, sitePolicy, strictPolicy, fallbackPolicy } = require("./csp-policy");
 const { integrityOf, attr } = require("./add-sri");
 const { pagesFor, urlPathOf, inlineScriptHashes } = require("./connect-csp");
+
+/** Site pages the browser check loads under the site-wide Report-Only policy. */
+const SITE_PAGES = ["/", "/agents", "/provider", "/explore"];
 
 const SCRIPT_TAG = /<script\b[^>]*>/gi;
 const PRELOAD_SCRIPT_TAG = /<link\b(?=[^>]*\brel=["']?preload\b)(?=[^>]*\bas=["']?script\b)[^>]*>/gi;
 
-/** `{ pattern: { header: [values] } }` for the blocks of a `_headers` text, in order of appearance. */
+/**
+ * `[{ pattern, headers: { header: [values] }, detach: [header] }]` for the
+ * blocks of a `_headers` text, in order of appearance. `detach` lists the
+ * `! Header` lines: Cloudflare Pages drops that header from the response even
+ * when another matching block sets it.
+ */
 function parseHeaders(text) {
   const blocks = [];
   for (const line of text.split("\n")) {
-    if (/^\S/.test(line) && !line.startsWith("#")) blocks.push({ pattern: line.trim(), headers: {} });
+    if (/^\S/.test(line) && !line.startsWith("#")) blocks.push({ pattern: line.trim(), headers: {}, detach: [] });
     const header = /^\s+([A-Za-z-]+):\s*(.*)$/.exec(line);
     if (header && blocks.length) (blocks.at(-1).headers[header[1].toLowerCase()] ??= []).push(header[2].trim());
+    const detach = /^\s+!\s*([A-Za-z-]+)\s*$/.exec(line);
+    if (detach && blocks.length) blocks.at(-1).detach.push(detach[1].toLowerCase());
   }
   return blocks;
 }
@@ -137,8 +151,18 @@ function checkOut(outDir) {
     if (!found.length) problems.push(`${pattern}: no exported page`);
     for (const file of found) pages.push({ pattern, file, urlPath: urlPathOf(root, file) });
   }
+  // The site-wide Report-Only policy: on /* only, with this environment's API and MCP origins.
+  const site = blocks.filter((block) => block.headers[SITE_HEADER.toLowerCase()]);
+  const want = sitePolicy({ connectOrigins: originsOf(process.env.NEXT_PUBLIC_API_BASE_URL, process.env.NEXT_PUBLIC_MCP_URL) });
+  if (site.length !== 1 || site[0].pattern !== SITE_PATH) problems.push(`${SITE_HEADER}: must be set by ${SITE_PATH} only, found ${site.map((b) => b.pattern).join(", ") || "none"}`);
+  else if (site[0].headers[SITE_HEADER.toLowerCase()].length !== 1 || site[0].headers[SITE_HEADER.toLowerCase()][0] !== want) {
+    problems.push(`${SITE_PATH}: ${SITE_HEADER} is not sitePolicy() with this build's API and MCP origins`);
+  }
   for (const { pattern, file, urlPath } of pages) {
     const html = fs.readFileSync(file, "utf8");
+    // The strict pages keep only their enforced policy.
+    const detached = blocks.some((block) => matches(block.pattern, urlPath) && block.detach.includes(SITE_HEADER.toLowerCase()));
+    if (!detached) problems.push(`${urlPath}: does not detach ${SITE_HEADER} (! ${SITE_HEADER})`);
     problems.push(...checkScripts(root, urlPath, html));
     // The splat's own block, then the block named for this page when there is one.
     const own = blocks.filter((block) => block.pattern === pattern || block.pattern === urlPath);
@@ -184,10 +208,13 @@ function serve(outDir, extra = {}) {
     const file = candidates.find((c) => c.startsWith(outDir) && fs.existsSync(c) && fs.statSync(c).isFile());
     const headers = {};
     const clean = urlPath.replace(/\.html$/, "").replace(/\/index$/, "") || "/";
+    const detached = new Set();
     for (const block of blocks) {
       if (!matches(block.pattern, clean) && !matches(block.pattern, urlPath)) continue;
       for (const [name, values] of Object.entries(block.headers)) headers[name] = [headers[name], ...values].filter(Boolean).join(", ");
+      for (const name of block.detach) detached.add(name);
     }
+    for (const name of detached) delete headers[name];
     if (!file) {
       res.writeHead(404, headers);
       res.end("not found");
@@ -294,8 +321,10 @@ async function browserCheck(outDir, chrome) {
     await refused("other origin", outsiderUrl);
     await refused("same origin", `${origin}/same-origin-frames`);
 
-    // Each strict page as a page: no CSP or integrity violation, and the scripts it adds itself.
-    for (const target of strict) {
+    // Each strict page, then a few site pages (under the Report-Only site-wide policy), as a page:
+    // no CSP or integrity violation, and the scripts it adds itself.
+    const sitePages = SITE_PAGES.filter((p) => fs.existsSync(path.join(root, p === "/" ? "index.html" : `${p.slice(1)}.html`)));
+    for (const target of [...strict, ...sitePages]) {
       client.events.length = 0;
       await client.send("Page.navigate", { url: `${origin}${target}` });
       await sleep(4000);
@@ -360,7 +389,7 @@ async function main() {
   for (const note of result.notes) console.log(`check-built-headers: note: ${note}`);
   for (const problem of result.problems) console.error(`check-built-headers: ${problem}`);
   if (result.problems.length) process.exit(1);
-  console.log("check-built-headers: Chrome refused every strict page in an iframe, and loading them raised no CSP or integrity error");
+  console.log("check-built-headers: Chrome refused every strict page in an iframe, and loading them and the site pages raised no CSP (enforced or Report-Only) or integrity error");
 }
 
 if (require.main === module) {
