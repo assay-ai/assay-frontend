@@ -24,7 +24,13 @@ import {
   ROLE_OPTIONS,
   deriveSubject,
   directoryErrorMessage,
+  limitAmount,
+  limitChipValue,
   limitInputFromChoice,
+  NO_LIMIT,
+  NO_LIMIT_CHIP,
+  parseLimitChoice,
+  type LimitChoice,
   mayEditRow,
   mayManageOperators,
   validateAddOperator,
@@ -47,7 +53,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { checkEvmAddress, toChecksumAddress } from "@/libs/chains/evm/operator-wallet";
 import { addOperator, changeOperator, listOperators, removeOperator } from "@/services/operator.service";
 import { cn } from "@/utils";
-import { formatMoney, parseAmountInput } from "@/utils/money";
+import { formatMoney } from "@/utils/money";
 import { operatorQueries } from "@/features/operator/queries";
 
 /**
@@ -461,18 +467,12 @@ function RoleField({ roles, onChange, error }: { roles: OperatorRole[]; onChange
 }
 
 /** Limit in dollars → `{ choice, atomic, error }`. */
-function useLimit(initial: string) {
-  const [choice, setChoice] = React.useState(initial);
+function useLimit(initial: LimitChoice) {
+  const [choice, setChoice] = React.useState<LimitChoice>(initial);
   return { choice, setChoice };
 }
 
-function parseLimit(choice: string, decimals: number): { atomic: string | null; error: string | null } {
-  if (choice === "unlimited") return { atomic: null, error: null };
-  if (choice === "") return { atomic: null, error: "Choose a limit." };
-  if (choice === "0") return { atomic: "0", error: null };
-  const parsed = parseAmountInput(choice, { decimals });
-  return { atomic: parsed.atomic, error: parsed.error };
-}
+const parseLimit = parseLimitChoice;
 
 function LimitField({
   roles,
@@ -481,8 +481,8 @@ function LimitField({
   error,
 }: {
   roles: readonly OperatorRole[];
-  choice: string;
-  onChange: (value: string) => void;
+  choice: LimitChoice;
+  onChange: (value: LimitChoice) => void;
   error?: string | null;
 }) {
   // A limit only matters to someone who can act on money: an admin's "$0" says nothing.
@@ -494,9 +494,15 @@ function LimitField({
       <span className="text-label-13 text-01">The most they can act on, per action</span>
       <PresetChips
         label="Authority limit"
-        presets={["0", "100", { value: "1000", label: "$1,000" }, { value: "unlimited", label: "No limit" }]}
-        value={choice}
-        onChange={onChange}
+        presets={[
+          "0",
+          "100",
+          { value: "1000", label: "$1,000" },
+          // "No limit" is set by the chip alone: its onPick runs after the onChange below.
+          { value: NO_LIMIT_CHIP, label: "No limit", onPick: () => onChange(NO_LIMIT) },
+        ]}
+        value={limitChipValue(choice)}
+        onChange={(value) => onChange(limitAmount(value))}
         error={error ?? undefined}
         hint={limitHint(roles)}
       />
@@ -505,17 +511,17 @@ function LimitField({
 }
 
 /** The limit sent: "0" for roles that cannot act on money, whatever the hidden picker holds. */
-function effectiveChoice(roles: readonly OperatorRole[], choice: string): string {
-  return roles.length > 0 && !actsOnMoney(roles) ? "0" : choice;
+function effectiveChoice(roles: readonly OperatorRole[], choice: LimitChoice): LimitChoice {
+  return roles.length > 0 && !actsOnMoney(roles) ? limitAmount("0") : choice;
 }
 
 function sameRoles(a: readonly OperatorRole[], b: readonly OperatorRole[]): boolean {
   return a.length === b.length && a.every((role) => b.includes(role));
 }
 
-function initialLimit(row: Pick<OperatorDirectoryEntry, "authorityLimit">): string {
-  if (row.authorityLimit === null) return "unlimited";
-  return formatMoney(row.authorityLimit, { symbol: "", grouped: false }).replace(/\.00$/, "");
+function initialLimit(row: Pick<OperatorDirectoryEntry, "authorityLimit">): LimitChoice {
+  if (row.authorityLimit === null) return NO_LIMIT;
+  return limitAmount(formatMoney(row.authorityLimit, { symbol: "", grouped: false }).replace(/\.00$/, ""));
 }
 
 function Footer({
@@ -603,7 +609,7 @@ function AddSheet({
   const [wallet, setWallet] = React.useState("");
   const [roles, setRoles] = React.useState<OperatorRole[]>([]);
   // No limit is preselected (D25): the admin picks one, knowing what $0 means.
-  const limit = useLimit("");
+  const limit = useLimit(limitAmount(""));
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
   const { errors, setErrors, clear } = useFieldErrors();
@@ -629,7 +635,7 @@ function AddSheet({
       setHandle(null);
       setWallet("");
       setRoles([]);
-      limit.setChoice("");
+      limit.setChoice(limitAmount(""));
       setReason("");
       setNote("");
       setErrors({});
@@ -804,7 +810,7 @@ function ChangeSheet({
 }) {
   const me = useOperatorSession();
   const [roles, setRoles] = React.useState<OperatorRole[]>([]);
-  const limit = useLimit("0");
+  const limit = useLimit(limitAmount("0"));
   const [reason, setReason] = React.useState("");
   const [note, setNote] = React.useState("");
   const { errors, setErrors, clear } = useFieldErrors();
@@ -841,7 +847,7 @@ function ChangeSheet({
   // Nothing to apply until the role or the limit differs from what they have now.
   const sameLimit =
     parsedLimit.error === null &&
-    (row.authorityLimit === null ? parsedLimit.atomic === null && choice === "unlimited" : parsedLimit.atomic !== null && BigInt(parsedLimit.atomic) === BigInt(row.authorityLimit.amount));
+    (row.authorityLimit === null ? parsedLimit.atomic === null && choice.kind === "none" : parsedLimit.atomic !== null && BigInt(parsedLimit.atomic) === BigInt(row.authorityLimit.amount));
   const changed = !sameRoles(roles, row.roles) || !sameLimit;
   const raisesLimit =
     parsedLimit.error === null &&
@@ -880,7 +886,7 @@ function ChangeSheet({
   };
 
   const newLimit =
-    choice === "unlimited" ? "no limit" : parsedLimit.atomic !== null ? limitMoney({ amount: parsedLimit.atomic, asset, decimals }) : "—";
+    choice.kind === "none" ? "no limit" : parsedLimit.atomic !== null ? limitMoney({ amount: parsedLimit.atomic, asset, decimals }) : "—";
 
   return (
     <Sheet open onOpenChange={(next) => (!next && !change.isPending ? onClose() : undefined)}>

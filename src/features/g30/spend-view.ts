@@ -43,7 +43,11 @@ export interface RankedRow {
   notChargedPct: number;
   /** Buyer debt (open or written off): served, not collected yet. */
   owedPct: number;
-  /** A group with calls and nothing listed: free calls only. */
+  /**
+   * Nothing listed and at least one call: free calls only. Free-tier calls
+   * have no payment record, so the server counts them in `freeCalls`, not in
+   * `calls` (a free-only group has `calls: 0`); `calls` above is then the free count.
+   */
   free: boolean;
   charged: string;
   notCharged: string | null;
@@ -73,14 +77,17 @@ export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string)
       // vs before" on a group that is entirely new is the row's own total again.
       const hadBefore = g.comparison ? !toDecimal(g.comparison.chargedTotal).isZero() : false;
       const deltaAmount = g.comparison && hadBefore ? new Decimal(g.comparison.deltaChargedTotal.amount || "0") : null;
+      // A rare zero-price intent is in both `calls` and `freeCalls`, so the larger is the row's count.
+      const freeCount = Math.max(g.calls, g.freeCalls ?? 0);
+      const free = listed.isZero() && freeCount > 0;
       return {
         key: g.key,
         label: labelOf(g.key),
-        calls: g.calls,
+        calls: free ? freeCount : g.calls,
         chargedPct: pct(charged),
         notChargedPct: pct(notCharged),
         owedPct: pct(owed),
-        free: listed.isZero() && g.calls > 0,
+        free,
         charged: formatMoney(g.chargedTotal),
         notCharged: notCharged.gt(0) ? formatMoney(notChargedOf(g)) : null,
         owed: owed.gt(0) && g.owedTotal ? formatMoney(g.owedTotal) : null,
@@ -92,27 +99,42 @@ export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string)
     });
 }
 
+/**
+ * The groups with paid calls. A newer server sends a group for a key that only
+ * had free-tier calls (`calls: 0`, every amount zero); a statement itemises
+ * paid calls, so such a row ("0 calls, listed $0.00, paid $0.00") is left out.
+ */
+export function paidGroups<T extends SummaryGroup>(groups: readonly T[]): T[] {
+  return groups.filter((g) => g.calls > 0);
+}
+
 function escape(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-/** One CSV row per group: names AND ids, the asset, and plain amounts. */
+/**
+ * One CSV row per group: names AND ids, the asset, and plain amounts. A
+ * free-only group counts its free calls, as the row on screen does (never
+ * "0 calls"), and the last column says how many calls were free.
+ */
 export function spendCsv(
   groups: readonly SummaryGroup[],
   options: { dimensionHeader: string; labelOf: (key: string) => string; assetLabel: string },
 ): string {
-  const header = [options.dimensionHeader, `${options.dimensionHeader} id`, "Asset", "Calls", "Listed", "Charged", "Not charged", "Not charged calls", "Owed", "Owed calls"];
+  const header = [options.dimensionHeader, `${options.dimensionHeader} id`, "Asset", "Calls", "Listed", "Charged", "Not charged", "Not charged calls", "Owed", "Owed calls", "Free calls"];
   const rows = groups.map((g) => [
     options.labelOf(g.key),
     g.key,
     options.assetLabel,
-    String(g.calls),
+    // A rare zero-price intent is in both `calls` and `freeCalls` (see `rankRows`).
+    String(toDecimal(g.listedTotal).isZero() ? Math.max(g.calls, g.freeCalls ?? 0) : g.calls),
     formatMoney(g.listedTotal, { grouped: false, exact: true, symbol: "", decimals: g.listedTotal.decimals }),
     formatMoney(g.chargedTotal, { grouped: false, exact: true, symbol: "", decimals: g.chargedTotal.decimals }),
     formatMoney(notChargedOf(g), { grouped: false, exact: true, symbol: "", decimals: notChargedOf(g).decimals }),
     String(g.notChargedCalls ?? g.refundedCalls),
     g.owedTotal ? formatMoney(g.owedTotal, { grouped: false, exact: true, symbol: "", decimals: g.owedTotal.decimals }) : "0",
     String(g.owedCalls ?? 0),
+    String(g.freeCalls ?? 0),
   ]);
   return [header, ...rows].map((r) => r.map(escape).join(",")).join("\n");
 }

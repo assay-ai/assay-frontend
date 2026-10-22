@@ -341,29 +341,30 @@ export function stakeSummary({
     : `This tool alone needs ${fmt(needed)} (${multiplier} × ${formatMoney(price, { decimals: 6 })}).`;
 
   const overall = total && major(total).gt(major(needed)) ? total : needed;
-  const lead =
-    overall === needed
-      ? "That is all the stake you need"
-      : `Your stake has to cover your largest paid tool${largestToolName ? `, ${largestToolName}` : ""}: ${fmt(overall)}`;
-  let tail: string;
+  const largestLead = () => `Your stake has to cover your largest paid tool${largestToolName ? `, ${largestToolName}` : ""}: ${fmt(overall)}`;
+  const covered = Boolean(have) && major(have!).gte(major(overall));
+  const shortBy = have && !covered ? fromMajor(major(overall).minus(major(have)), overall) : null;
+  let line: string;
   let tone: StakeSummary["tone"];
   if (!have) {
-    tail = "we could not read your stake yet";
     tone = "unknown";
-  } else if (major(have).lte(0)) {
-    tail = "you have none yet";
-    tone = "short";
-  } else if (major(have).gte(major(overall))) {
-    tail = `you have ${fmt(have)} ✓`;
+    line = `${overall === needed ? "That is all the stake you need" : largestLead()}; we could not read your stake yet.`;
+  } else if (covered) {
     tone = "ok";
+    line = `${overall === needed ? "That is all the stake you need" : largestLead()}; you have ${fmt(have)} ✓.`;
   } else {
-    tail = `you have ${fmt(have)}, ${fmt(fromMajor(major(overall).minus(major(have)), overall))} short`;
     tone = "short";
+    // Short: never "that is all you need". The line above already gives the amount, so say the gap.
+    const had = major(have).lte(0) ? "you have none yet" : `you have ${fmt(have)}`;
+    line =
+      overall === needed
+        ? `Your stake is ${fmt(shortBy!)} short; ${had}.`
+        : `${largestLead()}; ${had}, ${fmt(shortBy!)} short.`;
   }
 
   const exposure = `Why ${multiplier} × your price: your stake has to cover about ${multiplier} calls' worth of refunds to buyers if your API stops working, before anything else can happen. It stays yours unless you break your promise.`;
   // The same 1.5× cushion the Stake page calls "Recommended".
   const recommended = fromMajor(major(overall).mul(RECOMMENDED_FACTOR), overall);
   const recommendedLine = `We recommend ${fmt(recommended)} (1.5 × ${fmt(overall)}), so one penalty does not take you below the minimum and pause your paid tools.`;
-  return { perTool, total: `${lead}; ${tail}.`, tone, exposure, recommended: recommendedLine };
+  return { perTool, total: line, tone, exposure, recommended: recommendedLine };
 }

@@ -15,7 +15,7 @@ import { providerToolState } from "@/features/provider-tools/model";
 import { providerToolKeys } from "@/features/provider-tools/queries";
 import { ProviderToolChips } from "@/features/provider-tools/ui";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { createToolBinding } from "@/services/provider-tool-bindings.service";
 import {
@@ -98,7 +98,7 @@ function InvitationCard({ invitation }: { invitation: PromotionInvitation }) {
       refresh();
       router.push(routes.bindingWizard(binding.id, "connect"));
     },
-    onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "The listing could not be started. Try again."),
+    onError: (error) => toast.error(error instanceof ApiError ? plainApiError(error) : "The listing could not be started. Try again."),
   });
   const point = useMutation({
     mutationFn: () => setProviderToolReplacement(invitation.sourceToolId, invitation.standardToolId),
@@ -106,12 +106,12 @@ function InvitationCard({ invitation }: { invitation: PromotionInvitation }) {
       toast.success(`${invitation.sourceToolName} now points agents to ${invitation.standardToolName}`);
       refresh();
     },
-    onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "That did not work. Try again."),
+    onError: (error) => toast.error(error instanceof ApiError ? plainApiError(error) : "That did not work. Try again."),
   });
   const dismiss = useMutation({
     mutationFn: () => dismissPromotionInvitation(invitation.standardToolId, invitation.sourceToolId),
     onSuccess: refresh,
-    onError: (error) => toast.error(error instanceof ApiError ? plainError(error.code) : "It could not be dismissed. Try again."),
+    onError: (error) => toast.error(error instanceof ApiError ? plainApiError(error) : "It could not be dismissed. Try again."),
   });
   const drafting = invitation.standardToolStatus === "DRAFT";
   return (

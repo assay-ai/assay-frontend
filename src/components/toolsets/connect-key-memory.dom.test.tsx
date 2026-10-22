@@ -45,7 +45,7 @@ afterEach(() => {
 
 describe("the full key stays in memory (owner rule)", () => {
   it("fills the snippet, and never reaches storage, the URL or the history", async () => {
-    account.createCredential.mockResolvedValue({ id: "k1", agentId: AGENT, name: "Key 1", prefix: "assay_sk_live_a1b2", token: TOKEN });
+    account.createCredential.mockResolvedValue({ id: "k1", agentId: AGENT, name: "Key 1", hint: "assay_sk_live_…alue", token: TOKEN });
     // The key is made under "My own code": the proxy install carries none.
     window.localStorage.setItem(`assay.connect.client.${AGENT}`, "other");
     const setItem = vi.spyOn(Storage.prototype, "setItem");
@@ -66,7 +66,14 @@ describe("the full key stays in memory (owner rule)", () => {
     expect(screen.getByText("Create an API key for My agent?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(document.body.textContent).toContain(TOKEN));
-    expect(account.createCredential).toHaveBeenCalledWith(AGENT, { name: "Key 1", scopes: ["tools:call"] });
+    // The quick button makes an Agent key for 90 days.
+    expect(account.createCredential).toHaveBeenCalledWith(AGENT, {
+      name: "Key 1",
+      scopes: ["tools:call", "payments", "activity:read"],
+      expiresAt: expect.any(String),
+    });
+    const sent = account.createCredential.mock.calls[0]![1] as { expiresAt: string };
+    expect(Math.round((Date.parse(sent.expiresAt) - Date.now()) / 86_400_000)).toBe(90);
 
     const leaked = (calls: unknown[][]) => calls.some((args) => JSON.stringify(args).includes(TOKEN));
     expect(leaked(setItem.mock.calls)).toBe(false);
@@ -99,7 +106,7 @@ describe("the no-key line (BUG-M1-04)", () => {
   });
 
   it("hides the key line for a sign-in client once a key exists (M1-04 follow-up)", async () => {
-    account.createCredential.mockResolvedValue({ id: "k1", agentId: AGENT, name: "Key 1", prefix: "assay_sk_live_a1b2", token: TOKEN });
+    account.createCredential.mockResolvedValue({ id: "k1", agentId: AGENT, name: "Key 1", hint: "assay_sk_live_…alue", token: TOKEN });
     window.localStorage.setItem(`assay.connect.client.${AGENT}`, "other");
     render(
       <QueryClientProvider client={client()}>
@@ -122,7 +129,7 @@ describe("Copy the URL only (review m4)", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     const onCopy = vi.fn();
-    render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" onCopy={onCopy} />);
+    render(<McpConfigTabs token={null} keyHint="assay_sk_live_…ab12" url="https://mcp.example.com/" client="other" onCopy={onCopy} />);
 
     fireEvent.click(screen.getByTestId("copy-url-only"));
 

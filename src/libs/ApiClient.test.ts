@@ -7,6 +7,9 @@ import ApiClient, {
   onUnauthorized,
   onWalletNotLinked,
   parseRetryAfter,
+  rateLimitSecondsLeft,
+  retryAfterFromMessage,
+  tooManyRequestsSentenceAt,
   registerSessionTokenProvider,
   sessionRequestsSentAs,
   sessionTokenSubject,
@@ -346,6 +349,30 @@ describe("429 Too Many Requests", () => {
     expect(parseRetryAfter(undefined, now)).toBeNull();
   });
 
+  it("reads the wait from the limiter's own sentence when the header is unreadable", () => {
+    expect(retryAfterFromMessage("Too many requests. Try again in 44 s.")).toBe(44);
+    expect(retryAfterFromMessage("Wait a moment and try again.")).toBeNull();
+    expect(retryAfterFromMessage(undefined)).toBeNull();
+  });
+
+  it("names the wait from the body sentence when the header is missing, without starting a cooldown", async () => {
+    const body = { success: false, error: { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again in 44 s.", statusCode: 429 } };
+    const { adapter, state } = limiter({ body });
+    const api = client(adapter);
+    const refusal = await api.get("/agents").catch((error: unknown) => error);
+    expect((refusal as ApiError).message).toBe("Too many requests. Try again in 44 s.");
+    // No header, so no local cooldown: the next read still reaches the server.
+    await api.get("/agents").catch(() => undefined);
+    expect(state.requests).toEqual(["GET /agents", "GET /agents"]);
+  });
+
+  it("prefers the header wait over the body sentence", async () => {
+    const body = { success: false, error: { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again in 44 s.", statusCode: 429 } };
+    const { adapter } = limiter({ body, retryAfter: "15" });
+    const refusal = await client(adapter).post("/x", {}).catch((error: unknown) => error);
+    expect((refusal as ApiError).message).toBe("Too many requests. Try again in 15 s.");
+  });
+
   it("fails at once with the wait in the sentence, and is never retried", async () => {
     const { adapter, state } = limiter({ retryAfter: "30" });
     const provider = vi.fn(async () => "t");
@@ -383,6 +410,32 @@ describe("429 Too Many Requests", () => {
     vi.setSystemTime(Date.parse("2026-10-20T00:00:21Z"));
     await expect(api.get("/receipts/summary", { from: "c" })).resolves.toEqual({ ok: true });
     expect(state.requests).toHaveLength(4);
+  });
+
+  it("the error carries the end of the wait, the same instant the cooldown ends (lot 1 B9)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.parse("2026-10-21T00:00:00Z"));
+    const { adapter } = limiter({ retryAfter: "15" });
+    registerSessionTokenProvider(async () => "t");
+    const api = client(adapter);
+
+    const first = (await api.get("/agents").catch((error: unknown) => error)) as ApiError;
+    expect(first.retryAt).toBe(Date.parse("2026-10-21T00:00:15Z"));
+    vi.setSystemTime(Date.parse("2026-10-21T00:00:04.500Z"));
+    expect(tooManyRequestsSentenceAt(first)).toBe("Too many requests. Try again in 11 s.");
+    const local = (await api.get("/agents").catch((error: unknown) => error)) as ApiError;
+    expect(local.retryAt).toBe(first.retryAt);
+    expect(rateLimitSecondsLeft(local)).toBe(11);
+    vi.setSystemTime(Date.parse("2026-10-21T00:00:15Z"));
+    expect(rateLimitSecondsLeft(first)).toBe(0);
+    expect(tooManyRequestsSentenceAt(first)).toBe("Too many requests earlier. You can try again now.");
+  });
+
+  it("a 429 with no wait has no end to count down to", () => {
+    const error = new ApiError("TOO_MANY_REQUESTS", "x", 429);
+    expect(error.retryAt).toBeUndefined();
+    expect(rateLimitSecondsLeft(error)).toBeNull();
+    expect(tooManyRequestsSentenceAt(error)).toBe("Too many requests. Wait a moment and try again.");
   });
 
   it("one caller's wait does not hold up another token", async () => {

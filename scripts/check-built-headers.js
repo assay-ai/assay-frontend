@@ -22,6 +22,7 @@
  *
  * Run: node scripts/check-built-headers.js [outDir]   (after `pnpm build`)
  */
+const crypto = require("crypto");
 const fs = require("fs");
 const http = require("http");
 const os = require("os");
@@ -262,7 +263,7 @@ async function browserCheck(outDir, chrome) {
   const outsiderUrl = `http://127.0.0.1:${outsiderServer.address().port}/`;
 
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), "built-headers-"));
-  const port = 9300 + Math.floor(Math.random() * 500);
+  const port = 9300 + crypto.randomInt(500);
   const child = spawn(chrome, [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, "--headless=new", "--no-sandbox", "--disable-gpu", "--no-first-run", "about:blank"], { stdio: "ignore" });
   try {
     const up = await waitFor(() => fetch(`http://127.0.0.1:${port}/json/version`).then((r) => r.ok, () => false), 20000);

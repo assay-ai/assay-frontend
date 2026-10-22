@@ -20,6 +20,8 @@ import { OperatorSessionContext } from "@/features/operator/session-context";
 import { msUntilExpiry, signOutOperator } from "@/features/operator/sign-in";
 import { ConsoleShortcuts } from "@/features/operator/shortcuts";
 import { OperatorSignInScreen } from "@/features/operator/sign-in-screen";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
+import { operatorTitleFor } from "@/features/operator/nav";
 import { ApiError } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { DEMO_OPERATOR_TOKEN_PREFIX, type DemoOperatorPreset } from "@/libs/demo/fixtures-operator";
@@ -66,6 +68,8 @@ export default function OperatorLayout({ children }: { children: React.ReactNode
   const { themeType } = useTheme();
   const queryClient = useQueryClient();
   const pathname = usePathname();
+  // The tab names the page ("Activity — Assay operator"), not the generic site title.
+  useDocumentTitle(`${operatorTitleFor(pathname)} — Assay operator`);
 
   /** `null` = signed out. `undefined` = storage not read yet (first render / SSR). */
   const [session, setSession] = React.useState<OperatorSessionRecord | null | undefined>(undefined);

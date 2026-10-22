@@ -30,6 +30,10 @@ const REQUIRED_FILES = [
   "src/features/escrow/run-escrow-intent.ts",
   "src/features/funding/evm-deposit.ts",
   "src/features/buyer-money/deposit-flow.ts",
+  "src/features/buyer-debt/settle-debt.ts",
+  "src/features/provider-stake/run-stake-intent.ts",
+  "src/features/provider-stake/stake-steps.ts",
+  "src/features/chain-calls/send-contract-call.ts",
 ];
 
 const SIGNING_METHODS = ["signTypedData", "signTransaction", "signAndSend"];

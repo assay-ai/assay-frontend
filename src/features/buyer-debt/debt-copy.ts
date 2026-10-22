@@ -263,9 +263,12 @@ export function splitDebts(data: { account: string; debts: readonly BuyerDebt[] 
 export function callPaymentNote(call: {
   forfeited?: boolean;
   debt?: CallDebt | null;
+  /** An upheld report cancelled the charge (also `debt` VOIDED): not a late verdict (BUG-X-01). */
+  refundedByReport?: boolean;
 }): string | null {
   if (call.debt === "OUTSTANDING") return "Payment not collected · settle to resume paid calls";
   if (call.debt === "WRITTEN_OFF") return "Written off · still owed to resume paid calls";
+  if (call.refundedByReport) return "Refunded after your report · not charged";
   if (call.debt === "VOIDED") return "Debt cancelled by a late verdict · not charged";
   if (call.forfeited) return "Not charged · provider forfeited";
   return null;

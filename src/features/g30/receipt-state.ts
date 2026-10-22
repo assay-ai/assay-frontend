@@ -2,6 +2,7 @@ import type { StageCheck, StageCheckStatus } from "@/components/ui/stage-list";
 import { formatDateTime } from "@/libs/utc-time";
 import { formatMoney, toDecimal } from "@/utils/money";
 import { presentVerdict } from "@/utils/verdict";
+import { receiptRefundedByReport } from "./receipt-collection";
 import { refundPromiseLive } from "./refund-promise";
 
 import type { Receipt, ReceiptStage, WireStageName, WireStageStatus } from "./wire";
@@ -463,19 +464,48 @@ const OUTCOME_STEP: Record<Exclude<ReceiptState, "CHECKING" | "CHARGED">, { labe
 };
 
 /**
+ * An EXPIRED call that never held money: `withheld` is the guarantee's figure,
+ * the listed price for a call that reserved money and was not charged, so a
+ * zero there means nothing was ever held (its payment was not set up in time)
+ * and the call never reached the provider (BUG-BUY-SPEND-01).
+ */
+export function expiredNeverHeld(receipt: Pick<Receipt, "status" | "withheld" | "chargedPrice">): boolean {
+  return (
+    receipt.status === "EXPIRED" &&
+    Boolean(receipt.withheld) &&
+    toDecimal(receipt.withheld).isZero() &&
+    toDecimal(receipt.chargedPrice).isZero()
+  );
+}
+
+const NEVER_HELD_STEP: { label: string; tone: ReceiptFlowNode["tone"] } = { label: "Did not run", tone: "neutral" };
+
+/** A served call whose upheld report refunded it (`voided:DISPUTE_UPHELD`). */
+const REPORT_REFUND_STEP: { label: string; tone: ReceiptFlowNode["tone"] } = { label: "Report accepted, refunded", tone: "neutral" };
+
+/**
  * Where this call's money went, as the receipt's strip draws it:
  * Held $0.10 → Check failed → Released $0.10, or Held → Check passed → Charged.
  */
 export function receiptFlow(receipt: Receipt, state: ReceiptState): ReceiptFlowNode[] {
   const held: ReceiptFlowNode = { label: "Held", amount: price(receipt), tone: "primary" };
   if (state === "CHECKING") return [held, { label: "Checking now", tone: "neutral" }];
+  // Never held: nothing to release, so the strip does not say "Held" or "Released".
+  if (state === "EXPIRED" && expiredNeverHeld(receipt)) {
+    return [
+      { label: "Listed", amount: price(receipt), tone: "neutral" },
+      NEVER_HELD_STEP,
+      { label: "Nothing held", amount: charged(receipt), tone: "teal" },
+    ];
+  }
   // Buyer debt: served and passed, but not collected — still owed, never "released".
   if (state === "DEBT_OUTSTANDING" || state === "DEBT_WRITTEN_OFF") {
     return [held, OUTCOME_STEP[state], { label: "Still owed by you", amount: price(receipt), tone: "warning" }];
   }
   // Voided or forfeited: not charged, the whole hold went back (withheld is zero here).
   if (state === "DEBT_VOIDED" || state === "FORFEITED") {
-    return [held, OUTCOME_STEP[state], { label: "Released to you", amount: price(receipt), tone: "teal" }];
+    const step = state === "DEBT_VOIDED" && receiptRefundedByReport(receipt) ? REPORT_REFUND_STEP : OUTCOME_STEP[state];
+    return [held, step, { label: "Released to you", amount: price(receipt), tone: "teal" }];
   }
   const chargedSomething = receipt.chargedPrice.amount !== "0";
   const step =
@@ -580,9 +610,11 @@ export function receiptTimeline(
   state: ReceiptState,
   { now = Date.now(), collectionClosing, report = "none" }: ReceiptTimelineOptions = {},
 ): ReceiptTimelineRow[] {
+  const neverHeld = state === "EXPIRED" && expiredNeverHeld(receipt);
   const rows: ReceiptTimelineRow[] = [
     { at: receipt.createdAt, label: "Call made", tone: "neutral" },
-    { at: receipt.createdAt, label: "Money held", meta: price(receipt), tone: "primary" },
+    // A call that never held money has no "Money held" row.
+    ...(neverHeld ? [] : [{ at: receipt.createdAt, label: "Money held", meta: price(receipt), tone: "primary" as const }]),
   ];
   if (receipt.evaluatedAt) rows.push({ at: receipt.evaluatedAt, label: "Result checked", tone: "neutral" });
 
@@ -596,7 +628,11 @@ export function receiptTimeline(
         ? { at: closedAt, label: "Charged", meta: charged(receipt), tone: "success" }
         : {
             at: closedAt,
-            label: state === "EXPIRED" ? "Did not finish in time, hold released" : "Hold released",
+            label: neverHeld
+              ? "Did not run, nothing was held"
+              : state === "EXPIRED"
+                ? "Did not finish in time, hold released"
+                : "Hold released",
             meta: "not charged",
             tone: "teal",
           },
@@ -793,6 +829,18 @@ export function notChargedStory(receipt: Receipt): NotChargedStory {
         notRunNote: "not run: no result",
       };
     case "EXPIRED":
+      if (expiredNeverHeld(receipt)) {
+        return {
+          reason,
+          headline: "Not charged. This call did not run.",
+          explain:
+            "Its payment could not be set up in time, so the call was not sent to the provider. Nothing was held, so your balance did not change.",
+          flowStep: NEVER_HELD_STEP,
+          resultType: "No result",
+          checksSummary: "No checks ran: the call did not run",
+          notRunNote: "not run: the call did not run",
+        };
+      }
       return receipt.classification === "DATA_RESULT"
         ? {
             reason,

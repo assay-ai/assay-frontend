@@ -4,6 +4,7 @@ import { listOperatorToolRequests, listOperatorTools } from "@/services/operator
 import {
   getArbiterTerms,
   getOperatorCase,
+  getOperatorDashboardData,
   getPlatformHealth,
   listAccountBlocks,
   listApprovals,
@@ -30,6 +31,12 @@ export const operatorQueries = {
       retry: 0,
     }),
   health: () => queryOptions({ queryKey: ["operator", "health"], queryFn: getPlatformHealth, retry: 0 }),
+  reconciliation: () =>
+    queryOptions({
+      queryKey: ["operator", "health", "reconciliation"],
+      queryFn: async () => (await getOperatorDashboardData()).reconciliation ?? [],
+      retry: 0,
+    }),
   arbiterDisputes: () =>
     queryOptions({ queryKey: ["operator", "arbiter", "disputes"], queryFn: listArbiterDisputes, retry: 0 }),
   toolRequests: () =>

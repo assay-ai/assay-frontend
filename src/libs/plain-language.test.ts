@@ -4,6 +4,7 @@ import {
   humanize,
   knowsError,
   plain,
+  plainApiError,
   plainAuditAction,
   plainDecision,
   plainError,
@@ -52,6 +53,8 @@ describe("errors", () => {
   it("knows codes with and without their module prefix", () => {
     expect(plainError("MCP_SPEND_LIMIT_EXCEEDED")).toBe("This call would go over your spend limit.");
     expect(plainError("SPEND_LIMIT_EXCEEDED")).toBe("This call would go over your spend limit.");
+    expect(plainError("ACCOUNT_DELEGATE_BIND_CONFLICT")).toMatch(/^Another payment key was set up for this key at the same moment/);
+    expect(plainError("ACCOUNT_CREDENTIAL_NOT_FOUND")).toBe("This key is no longer on this agent. Reload the page.");
     expect(plainError("PAYMENT_VOUCHER_ADMISSION_PAUSED")).toMatch(/^Paid calls are paused/);
     expect(plainError("UNBONDING_NOT_MATURED")).toMatch(/still unlocking/);
     expect(plainError("OPERATOR_AUTHORITY_EXCEEDED")).toMatch(/above your approval limit/);
@@ -140,5 +143,60 @@ describe("plain (any key)", () => {
     ["NOT_A_KNOWN_KEY", "Not a known key"],
   ])("%s → %s", (key, expected) => {
     expect(plain(key)).toBe(expected);
+  });
+});
+
+// The group-3 backend codes get a sentence of their own, not the generic one.
+describe("plainError for the group-3 codes", () => {
+  it.each([
+    ["PAYLOAD_TOO_LARGE", "This is too large to send. Make it shorter and try again."],
+    ["ACCOUNT_AGENT_NOT_FOUND", "This agent was not found in your account. It may have been deleted."],
+    ["PROVIDER_STAKE_INSUFFICIENT_BONDED", "That is more than your staked amount. Enter at most what is staked."],
+    ["PROVIDER_STAKE_NOTHING_WITHDRAWABLE", "Nothing is ready to withdraw yet: unstaked money can be withdrawn once its waiting period ends."],
+    ["PROVIDER_TOO_MANY_MAPPING_HEADERS", "This mapping has too many headers. Remove some and try again."],
+    ["TOOLSET_ORGANIZATION_NOT_FOUND", "No organization has this id. Check it and try again."],
+    ["PAYMENT_ESCROW_NOT_OPEN", "Open your escrow first."],
+  ])("%s", (code, sentence) => {
+    expect(plainError(code, 409)).toBe(sentence);
+  });
+});
+
+describe("plainApiError", () => {
+  // BUG-X-02: a blocked organization reads "Your account is blocked", another party's block does not.
+  it("says the account is blocked in the backend's wording for the caller's own organization", () => {
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "Your account is blocked by Assay; contact support" })).toBe(
+      "Your account is blocked by Assay. Contact support.",
+    );
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "This account is blocked (payee); contact support" })).toBe(
+      "This account is blocked. Contact support.",
+    );
+    expect(plainApiError({ code: "AUTH_ORGANIZATION_SUSPENDED", status: 403 })).toBe("Your account is blocked by Assay. Contact support.");
+  });
+
+  // Review M5: the blocked role decides when the body carries it; the sentence is the fallback.
+  it("prefers the refusal's role to its wording", () => {
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "anything", context: { role: "ORGANIZATION" } })).toBe(
+      "Your account is blocked by Assay. Contact support.",
+    );
+    expect(plainApiError({ code: "ACCOUNT_BLOCKED", status: 403, message: "Your account is blocked by Assay", context: { role: "PAYEE" } })).toBe(
+      "This account is blocked. Contact support.",
+    );
+  });
+
+  it("names the wait of a 429", () => {
+    expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 26 })).toBe("Too many requests. Try again in 26 s.");
+  });
+  it("names the seconds still left of a 429's wait at the given instant", () => {
+    const retryAt = Date.parse("2026-10-21T00:00:30Z");
+    expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429, retryAfterSeconds: 30, retryAt }, Date.parse("2026-10-21T00:00:12Z"))).toBe(
+      "Too many requests. Try again in 18 s.",
+    );
+  });
+  it("falls back to the fixed sentence without a wait", () => {
+    expect(plainApiError({ code: "TOO_MANY_REQUESTS", status: 429 })).toBe(plainError("TOO_MANY_REQUESTS"));
+  });
+  it("is plainError for other codes", () => {
+    expect(plainApiError({ code: "SPEND_LIMIT_EXCEEDED", status: 402 })).toBe(plainError("SPEND_LIMIT_EXCEEDED"));
+    expect(plainApiError({ code: "WEIRD", status: 503 })).toBe(plainError("WEIRD", 503));
   });
 });

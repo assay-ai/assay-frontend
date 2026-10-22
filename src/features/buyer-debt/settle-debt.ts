@@ -7,6 +7,7 @@ import type {
   SettleDebtResult,
 } from "@/interfaces/buyer-debt";
 import type { Eip155TypedDataRequest } from "@/interfaces/chain-transaction";
+import { formatMoney } from "@/utils/money";
 import { assertTypedData } from "@/libs/chains/evm/signing-guard";
 import { voucherResourceHash } from "@/libs/chains/evm/voucher-hash";
 
@@ -128,7 +129,11 @@ export async function settleDebt(
 ): Promise<SettleDebtResult> {
   const intent = await deps.createIntent(debt.intentId);
   const request = debtSigningRequest(intent, debt, signer, deps.now?.() ?? Date.now());
-  const signature = await signer.signTypedData(request);
+  const signature = await signer.signTypedData(request, {
+    showWalletUIs: true,
+    title: `Pay debt: ${formatMoney(debt.amount, { decimals: 4 })}`,
+    description: `Sign a payment of ${formatMoney(debt.amount, { decimals: 4 })} from your escrow for a call you already received.`,
+  });
   // The voucher goes back exactly as it was issued, with the signature.
   return deps.submit(debt.intentId, { voucher: intent.voucher, signature });
 }

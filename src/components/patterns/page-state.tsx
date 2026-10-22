@@ -70,6 +70,8 @@ interface BaseProps {
   className?: string;
   /** Drop the card frame, for a state shown inside a Panel that already has one. */
   bare?: boolean;
+  /** Render the title as the page's h1 (a not-found state that is the whole page). */
+  titleAsH1?: boolean;
 }
 
 export type PageStateProps = BaseProps &
@@ -127,6 +129,11 @@ function ActionButton({ action, variant = "primary" }: { action: PageStateAction
   );
 }
 
+function StateTitle({ as, children }: { as?: boolean; children: React.ReactNode }) {
+  const Tag = as ? "h1" : "p";
+  return <Tag className="text-label-md text-01">{children}</Tag>;
+}
+
 const FRAME = "flex w-full flex-col gap-2.5 rounded-xl border border-01 bg-02 p-6 tablet:p-8";
 
 export function PageState(props: PageStateProps) {
@@ -146,7 +153,7 @@ export function PageState(props: PageStateProps) {
     return (
       <div className={frame}>
         <div className="text-03">{props.icon ?? <Inbox aria-hidden="true" width={22} height={22} />}</div>
-        <p className="text-label-md text-01">{props.title}</p>
+        <StateTitle as={props.titleAsH1}>{props.title}</StateTitle>
         {props.description ? <p className="max-w-[520px] text-body-13 text-02">{props.description}</p> : null}
         {props.action ? (
           <div className="pt-1.5">
@@ -162,7 +169,7 @@ export function PageState(props: PageStateProps) {
     return (
       <div role="alert" className={frame}>
         <AlertTriangle aria-hidden="true" className="size-[22px] text-danger-500" />
-        <p className="text-label-md text-01">{props.title ?? "Something went wrong"}</p>
+        <StateTitle as={props.titleAsH1}>{props.title ?? "Something went wrong"}</StateTitle>
         <p className="max-w-[520px] text-body-13 text-02">
           {props.description ?? "We could not load this. Check your connection and try again."}
         </p>
@@ -190,7 +197,7 @@ export function PageState(props: PageStateProps) {
   return (
     <div className={frame}>
       <Lock aria-hidden="true" className="size-[22px] text-warning-500" />
-      <p className="text-label-md text-01">{props.title}</p>
+      <StateTitle as={props.titleAsH1}>{props.title}</StateTitle>
       {props.description ? <p className="max-w-[520px] text-body-13 text-02">{props.description}</p> : null}
       {props.action ? (
         <div className="pt-1.5">

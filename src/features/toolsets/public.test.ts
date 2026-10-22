@@ -64,6 +64,75 @@ describe("public cards: prices joined from the catalogue", () => {
     expect(facts.routesToPublisher).toBe(true);
   });
 
+  describe("backup provider facts (BUG-PUB-01)", () => {
+    const entry = (toolId: string, providerCount: number, extra: Record<string, unknown> = {}) => ({
+      toolId,
+      toolName: toolId,
+      providerMode: "BEST" as const,
+      providerCount,
+      minTier: null,
+      onEmpty: "FAIL" as const,
+      removed: false,
+      notReviewed: false,
+      ...extra,
+    });
+
+    it("tools nobody serves are unserved, never backed up", () => {
+      const f = trustFacts({ toolIds: ["a", "b"], entries: [entry("a", 0), entry("b", 0)] }, []);
+      expect(f.unserved).toEqual(["a", "b"]);
+      expect(f.noBackup).toEqual([]);
+      expect(f.allBackedUp).toBe(false);
+    });
+
+    it("a card without entries: missing from a loaded catalogue means unserved; pending means unknown", () => {
+      expect(trustFacts({ toolIds: ["a"] }, [tool("t1")]).unserved).toEqual(["a"]);
+      const pending = trustFacts({ toolIds: ["a"] }, null);
+      expect(pending.unserved).toEqual([]);
+      expect(pending.noBackup).toEqual([]);
+      expect(pending.allBackedUp).toBe(false);
+    });
+
+    it("one provider is no backup", () => {
+      const f = trustFacts({ toolIds: ["t1"], entries: [entry("t1", 1)] }, [tool("t1", { providerCount: 1 })]);
+      expect(f.noBackup).toEqual(["t1"]);
+      expect(f.allBackedUp).toBe(false);
+    });
+
+    it("a catalogue tool with providerCount 0 is unserved", () => {
+      expect(trustFacts({ toolIds: ["t1"] }, [tool("t1", { providerCount: 0 })]).unserved).toEqual(["t1"]);
+    });
+
+    it("a mix of 0 and 2 warns and does not claim a backup", () => {
+      const f = trustFacts({ toolIds: ["t1", "t2"], entries: [entry("t1", 2), entry("t2", 0)] }, [tool("t1", { providerCount: 2 })]);
+      expect(f.unserved).toEqual(["t2"]);
+      expect(f.allBackedUp).toBe(false);
+    });
+
+    it("a removed entry is left out of both lists and blocks the claim", () => {
+      const f = trustFacts({ toolIds: ["t1", "t2"], entries: [entry("t1", 2), entry("t2", 0, { removed: true })] }, [tool("t1", { providerCount: 2 })]);
+      expect(f.unserved).toEqual([]);
+      expect(f.noBackup).toEqual([]);
+      expect(f.allBackedUp).toBe(false);
+    });
+
+    it("ONLY narrows three providers to one", () => {
+      const f = trustFacts({ toolIds: ["t1"], entries: [entry("t1", 1, { providerMode: "ONLY" })] }, [tool("t1", { providerCount: 3 })]);
+      expect(f.noBackup).toEqual(["t1"]);
+    });
+
+    it("two or more providers for every tool is a backup", () => {
+      const f = trustFacts({ toolIds: ["t1"], entries: [entry("t1", 2)] }, [tool("t1", { providerCount: 2 })]);
+      expect(f.noBackup).toEqual([]);
+      expect(f.unserved).toEqual([]);
+      expect(f.allBackedUp).toBe(true);
+    });
+
+    it("a maker's own tool in the catalogue with one provider still warns", () => {
+      const f = trustFacts({ toolIds: ["t1"], entries: [entry("t1", 1, { notReviewed: true })] }, [tool("t1", { providerCount: 1 })]);
+      expect(f.noBackup).toEqual(["t1"]);
+    });
+  });
+
   it("names the badge and the users", () => {
     expect(badgeLabel("OFFICIAL")).toBe("Official");
     expect(badgeLabel("PROVIDER")).toBe("Provider");

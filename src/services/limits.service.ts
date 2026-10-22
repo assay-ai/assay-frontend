@@ -67,6 +67,17 @@ export interface SpendPolicy {
   createdAt: string;
   /** Omitted, not `null`, when it could not be computed. */
   usage?: SpendPolicyUsage;
+  /**
+   * `GET` only, newer servers: the agent whose limits these are (the asked
+   * `agentId` when it was read, else the session's own agent), also when the
+   * policy is the organization default (`scope`).
+   */
+  subjectAgentId?: string;
+  /**
+   * `GET` only, newer servers: an `agentId` was asked for and not read; the
+   * limits are then the session's own, never the asked agent's.
+   */
+  requestedAgentIgnored?: boolean;
 }
 
 /** `SpendPolicyHistoryEntryDto`. `supersededAt` is null on exactly one row. */
@@ -148,4 +159,17 @@ export function listSpendPolicyHistory(
  */
 export function updateSpendPolicy(body: UpdateSpendPolicyBody): Promise<SpendPolicy> {
   return api.patch<SpendPolicy>("/spend-policy", body);
+}
+
+/**
+ * `DELETE /spend-policy/agents/:agentId` (lot 1 B6, BUG-BUY-CONNECT-05 part 2):
+ * drops the agent's own policy, so the account default applies to it again.
+ * Person session only; audited. Answers the policy now in force for the agent.
+ *
+ * - 403 `AUTH_HUMAN_SESSION_REQUIRED`: an agent credential.
+ * - 404 `ACCOUNT_AGENT_NOT_FOUND` / `SPEND_POLICY_NOT_FOUND` (no default).
+ * - 409 `SPEND_POLICY_DROP_REFUSED`, `context.reason` `ACCESS_DIFFERS` or `PAUSED`.
+ */
+export function dropAgentSpendPolicy(agentId: string): Promise<SpendPolicy> {
+  return api.delete<SpendPolicy>(`/spend-policy/agents/${encodeURIComponent(agentId)}`);
 }

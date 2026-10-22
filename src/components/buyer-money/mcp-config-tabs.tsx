@@ -25,6 +25,7 @@ import {
   installText,
   isLocalClient,
   keyPlaceholder,
+  shownKeyHint,
   NO_COMMAND_TEXT,
   SECOND_URL_NOTE,
   pasteHint,
@@ -47,7 +48,7 @@ export const TEMPLATE_COPY_REASON = "This config has a placeholder, not your key
 /**
  * The config to paste, one tab per client. With `token` the block is ready to
  * paste; without it (the key is only shown once, at creation) it carries a
- * placeholder and says where the key goes. `keyPrefix` names the key that
+ * placeholder and says where the key goes. `keyHint` names the key that
  * goes there, so a person who has one never meets a bare placeholder.
  *
  * Copy is off while the block holds a placeholder: a copied template fails
@@ -65,7 +66,7 @@ export const TEMPLATE_COPY_REASON = "This config has a placeholder, not your key
  */
 export function McpConfigTabs({
   token,
-  keyPrefix,
+  keyHint,
   url: urlProp,
   serverName,
   client: clientProp,
@@ -80,7 +81,8 @@ export function McpConfigTabs({
   agentName,
 }: {
   token: string | null;
-  keyPrefix?: string | null;
+  /** `assay_sk_live_…2fds`, the hint of the key that goes in the config. */
+  keyHint?: string | null;
   url?: string;
   serverName?: string;
   client?: McpClient;
@@ -106,7 +108,7 @@ export function McpConfigTabs({
 }) {
   // A live key is made only after the confirm says so; Cancel makes nothing.
   const [confirmCreate, setConfirmCreate] = React.useState(false);
-  const placeholder = keyPlaceholder(keyPrefix);
+  const placeholder = keyPlaceholder(keyHint);
   const [own, setOwn] = React.useState<McpClient>(clientProp ?? "claude-code");
   const client = clientProp ?? own;
   const url = urlProp ?? mcpEndpointUrl();
@@ -162,8 +164,8 @@ export function McpConfigTabs({
               {pasteHint("other")}
               {token
                 ? null
-                : keyPrefix
-                  ? ` Replace ${placeholder} with your full key (it starts ${keyPrefix.replace(/[.…]+$/, "")}).`
+                : shownKeyHint(keyHint)
+                  ? ` Replace ${placeholder} with your full key (${shownKeyHint(keyHint)}).`
                   : ` Replace ${placeholder} with your key.`}
             </p>
             <dl className="flex min-w-0 flex-col gap-1.5 rounded-lg border border-01 bg-02 px-3 py-2.5 text-body-xs">
@@ -180,7 +182,7 @@ export function McpConfigTabs({
             </dl>
             <CodeBlock
               title="mcp.json"
-              code={nameRefused ? NO_COMMAND_TEXT : apiKeyConfig({ url, token, keyPrefix, serverName })}
+              code={nameRefused ? NO_COMMAND_TEXT : apiKeyConfig({ url, token, keyHint, serverName })}
               onCopyCode={() => onCopy?.("other")}
               copyDisabledReason={nameRefused ? NO_COMMAND_TEXT : token ? null : TEMPLATE_COPY_REASON}
               wrap

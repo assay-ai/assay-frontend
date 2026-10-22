@@ -48,7 +48,7 @@ function detail(providerId: string, price: string, chains: string[], servesYou: 
   return { providerId, tools: [{ toolId: "weather", name: "get_weather", pricingMode: "PAID", price: USD(price), chains, servesYou }] };
 }
 
-function renderEditor(onApply = vi.fn(), e2e: { chains: string[] | null; servesYou: boolean | null } = { chains: ["eip155:46630"], servesYou: true }) {
+function renderEditor(onApply = vi.fn(), e2e: { chains: string[] | null; servesYou: boolean | null } = { chains: ["eip155:46630"], servesYou: true }, toolName = "get_weather") {
   catalogue.getCatalogueProvider.mockImplementation(async (id: string) =>
     id === "meteo"
       ? detail("meteo", "250000", ["solana:devnet"], false)
@@ -58,7 +58,7 @@ function renderEditor(onApply = vi.fn(), e2e: { chains: string[] | null; servesY
   render(
     <QueryClientProvider client={client}>
       <RuleEditor
-        row={{ ...defaultEntry("weather"), toolName: "get_weather" }}
+        row={{ ...defaultEntry("weather"), toolName }}
         decimals={6}
         asset="eip155:46630/erc20:0xusdg"
         providers={[E2E, METEO]}
@@ -78,6 +78,13 @@ afterEach(() => {
 });
 
 describe("the provider picker", () => {
+  it("offers no Only these / All except for one maker's own tool, which the server refuses", () => {
+    renderEditor(vi.fn(), { chains: ["eip155:46630"], servesYou: true }, "acme__rates");
+    expect(screen.queryByRole("radio", { name: "Only these" })).toBeNull();
+    expect(screen.queryByRole("radio", { name: "All except" })).toBeNull();
+    expect(screen.getByTestId("provider-tool-note")).toBeTruthy();
+  });
+
   it("shows each provider's price, chain, failure rate and whether it serves you", async () => {
     renderEditor();
     fireEvent.click(screen.getByRole("radio", { name: "Only these" }));
