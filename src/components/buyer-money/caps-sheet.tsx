@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
 import { formatLimit } from "@/components/g31/format";
+import { shownUsed } from "@/components/patterns/cap-meter";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { capsSuccessText, capsToForm, ceilingBelowSpentNote, parseCaps, seedCaps } from "@/features/buyer-money/caps";
@@ -56,12 +57,15 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
   const current = capsToForm(money.escrow);
   const [value, setValue] = React.useState<CapsValue>({ perCall: "", perDay: "" });
   const [seeded, setSeeded] = React.useState(false);
+  // The success line, fixed when the ceiling is signed (see the SET_LIMITS step).
+  const [doneText, setDoneText] = React.useState<string | null>(null);
   // Seed only once the escrow is read, so the form starts from the real caps.
   if (open && !seeded && !money.escrowQuery.isPending) {
     setSeeded(true);
     setValue(seedCaps(current, need));
   }
   if (!open && seeded) setSeeded(false);
+  if (!open && doneText !== null) setDoneText(null);
 
   const parsed = parseCaps(value.perCall, value.perDay, money.decimals);
   const body: EscrowLimitsBody | null =
@@ -104,6 +108,14 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
         body.maxPerWindow,
         windowRefillAt(money.escrow?.windowStartedAt, money.escrow?.windowSeconds ?? 0),
         (atomic) => formatLimit({ amount: atomic, asset: money.escrow?.maxPerWindow?.asset ?? "", decimals: money.decimals }),
+        // The meters on Funding and Limits print spent amounts through `shownUsed`: the same figure here.
+        (atomic) =>
+          formatLimit(
+            shownUsed(
+              { amount: atomic, asset: money.escrow?.maxPerWindow?.asset ?? "", decimals: money.decimals },
+              money.escrow?.maxPerWindow ?? null,
+            ),
+          ),
       )
     : null;
   // Solana serves free calls only (paid rails off): the ceiling caps no call there today.
@@ -125,8 +137,12 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
       id: "caps",
       label: "Sign the new account ceiling",
       cost: "free",
-      run: async ({ report }) => {
-        const signer = requireSigner(money.signerState, money.ownerShort);
+      promptTitle: "Set your account ceiling",
+      promptDescription: body
+        ? `At most ${formatLimit({ amount: body.maxVoucherAmount, asset: "", decimals: money.decimals })} a call and ${formatLimit({ amount: body.maxPerWindow, asset: "", decimals: money.decimals })} in 24 hours, for all your agents together. Free, no gas.`
+        : undefined,
+      run: async ({ report, prompt }) => {
+        const signer = requireSigner(money.signerState, money.ownerShort, prompt);
         report({ stage: "preparing" });
         const signed: EscrowLimitsBody = atRisk ? { ...body!, acknowledgeUnsettled: true } : body!;
         const intent = await createEscrowLimitsIntent(signed);
@@ -144,6 +160,8 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
               }
             : ESCROW_SUBMITTERS,
         );
+        // Said before the escrow is re-read: afterwards the new ceiling is the current one and nothing looks lowered.
+        setDoneText(capsSuccessText(currentCaps, signed, tightenDelay));
         // Seeds or re-reads the escrow itself; another invalidation would refetch it again.
         await applyLimitsSubmitted(queryClient, null, signed, result.kind === "relayed" ? result.relayed.escrow : null);
         const hash = result.kind === "relayed" ? result.relayed.transactionHash : result.signature;
@@ -179,7 +197,7 @@ export function CapsSheet({ open, onOpenChange, next, need }: CapsSheetProps) {
       successDescription={
         next
           ? "It applies from the next payment. Next: let your agent pay under it."
-          : capsSuccessText(currentCaps, body, tightenDelay)
+          : (doneText ?? capsSuccessText(currentCaps, body, tightenDelay))
       }
       doneAction={next ?? { label: "Done", onClick: () => onOpenChange(false) }}
     >

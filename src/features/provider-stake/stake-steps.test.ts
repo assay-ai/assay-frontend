@@ -65,6 +65,18 @@ describe("stake steps send only the chosen stake call", () => {
     expect(s.signAndSend).toHaveBeenCalledTimes(1);
   });
 
+  it("forces Privy's confirmation screen, titled with the amount, for unstake and withdraw", async () => {
+    services.unstake.mockResolvedValue(intent("UNSTAKE", "requestUnstake(uint64)", "5000000", ROBINHOOD_TESTNET_STAKE.stakeContract));
+    const s = signer();
+    await run(unstakeStep({ amountAtomic: "5000000", amountLabel: "$5", signer: s as unknown as Signer, chain: null }));
+    expect(s.signAndSend).toHaveBeenCalledWith(expect.anything(), { showWalletUIs: true, title: "Start withdrawing $5" });
+
+    services.withdraw.mockResolvedValue(intent("WITHDRAW", "withdrawStake(uint64)", "5000000", ROBINHOOD_TESTNET_STAKE.stakeContract));
+    const w = signer();
+    await run(withdrawStep({ amountAtomic: "5000000", amountLabel: "$5", signer: w as unknown as Signer, chain: null }));
+    expect(w.signAndSend).toHaveBeenCalledWith(expect.anything(), { showWalletUIs: true, title: "Withdraw $5 to your wallet" });
+  });
+
   it("refuses another amount, another function or another contract before the wallet is asked", async () => {
     const s = signer();
     const step = (amount: string) => withdrawStep({ amountAtomic: amount, amountLabel: "$5", signer: s as unknown as Signer, chain: null });

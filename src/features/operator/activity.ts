@@ -77,8 +77,8 @@ const VERBS: Readonly<Record<string, string>> = {
   "A-15": "delisted",
   "A-16": "took down",
   "A-17": "took down the public name",
-  "A-18": "confirmed the cutoff of",
-  "A-19": "reverted the cutoff of",
+  "A-18": "confirmed the takedown of",
+  "A-19": "reverted the takedown of",
   "A-20": "relisted",
   "A-21": "renamed the public name",
   "A-22": "reassigned the public name",
@@ -214,7 +214,7 @@ function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId">
     case "handle":
       return `@${entry.targetId}`;
     case "moderation_cutoff":
-      return "a takedown";
+      return cutoffTargetName(entry.after);
     case "toolset_report":
       return "a report";
     case "call_dispute":
@@ -224,6 +224,19 @@ function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId">
     default:
       return entry.targetType.replace(/_/g, " ");
   }
+}
+
+/**
+ * What a takedown (`moderation_cutoff`) took down, for its confirm (A-18) and
+ * revert (A-19) lines: newer backends log `after.name` and
+ * `after.cutoffTargetType` (BUG-OPS-MARKET-04); an older entry names neither.
+ */
+function cutoffTargetName(after: OverrideLogEntry["after"] | undefined): string {
+  const name = typeof after?.name === "string" && after.name.trim() ? after.name : null;
+  const type = typeof after?.cutoffTargetType === "string" ? after.cutoffTargetType.toUpperCase() : null;
+  if (type === "HANDLE") return name ? `@${name.replace(/^@/, "")}` : "a public name";
+  if (name) return name;
+  return type === "TOOLSET" ? "a tool set" : "a tool";
 }
 
 /**

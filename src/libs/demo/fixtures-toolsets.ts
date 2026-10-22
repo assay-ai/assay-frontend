@@ -920,8 +920,7 @@ function refusedCalls(): RefusedCall[] {
 /* ------------------------------------------------------- the writes */
 
 function newId(): string {
-  const hex = () => Math.floor(Math.random() * 0x10000).toString(16).padStart(4, "0");
-  return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-a${hex().slice(1)}-${hex()}${hex()}${hex()}`;
+  return crypto.randomUUID();
 }
 
 function entriesFrom(input: unknown): ToolsetEntry[] {
@@ -990,7 +989,14 @@ function refuse(code: string, message: string, status: number, path: string, con
 
 function newToken(): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-  return Array.from({ length: 22 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+  // 252 is the largest multiple of 36 below 256, so dropping bytes from 252 up keeps every letter equally likely.
+  const out: string[] = [];
+  while (out.length < 22) {
+    for (const byte of crypto.getRandomValues(new Uint8Array(32))) {
+      if (byte < 252 && out.length < 22) out.push(alphabet[byte % alphabet.length]);
+    }
+  }
+  return out.join("");
 }
 
 function summaryOf(v: ToolsetVersion) {

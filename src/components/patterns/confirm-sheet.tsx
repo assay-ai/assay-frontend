@@ -72,7 +72,7 @@ export interface ConfirmSheetProps {
   cancelLabel?: string;
   tone?: "danger" | "primary";
   onConfirm: () => void | Promise<unknown>;
-  /** One sentence for a failure (e.g. `plainError(e.code)`). The raw message goes under Details. */
+  /** One sentence for a failure (e.g. `plainApiError(e)`). The raw message goes under Details. */
   describeError?: (error: unknown) => string;
   children?: React.ReactNode;
 }

@@ -73,6 +73,8 @@ vi.mock("@/features/oauth/strict-pages", async (original) => {
   };
 });
 
+import { RID_STORAGE_KEY } from "@/features/oauth/request-id";
+
 import { PrivySessionBridge } from "./PrivySessionBridge";
 
 function mount() {
@@ -195,10 +197,28 @@ describe("PrivySessionBridge, signed-in reload", () => {
 describe("PrivySessionBridge on a 401, on a strict page", () => {
   it("loads the login page as a new document, never through the router", () => {
     nav.pathname = "/connect/authorize";
-    mount();
-    fire401();
-    expect(strict.loadPage).toHaveBeenCalledWith("/login?next=%2Fconnect%2Fauthorize&reason=expired");
-    expect(nav.replace).not.toHaveBeenCalled();
+    window.sessionStorage.setItem(RID_STORAGE_KEY, "a".repeat(43));
+    try {
+      mount();
+      fire401();
+      expect(strict.loadPage).toHaveBeenCalledWith("/login?next=%2Fconnect%2Fauthorize&reason=expired");
+      expect(nav.replace).not.toHaveBeenCalled();
+    } finally {
+      window.sessionStorage.removeItem(RID_STORAGE_KEY);
+    }
+  });
+
+  // BUG-BUY-CONNECT-02: no request to sign in for, so the page says the request is missing.
+  it("stays on the consent page when this tab holds no request, and on the error page", () => {
+    for (const pathname of ["/connect/authorize", "/connect/authorize-error"]) {
+      vi.clearAllMocks();
+      nav.pathname = pathname;
+      const view = mount();
+      fire401();
+      expect(strict.loadPage).not.toHaveBeenCalled();
+      expect(nav.replace).not.toHaveBeenCalled();
+      view.unmount();
+    }
   });
 
   it("elsewhere, still the router", () => {

@@ -3,7 +3,7 @@ import { defaultServerNameFor } from "@/features/connect/mcp-url";
 import { formFor, parseForm, type ContractForm } from "@/features/operator/contract-editor";
 import type { OperatorTool } from "@/interfaces/contracts";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import type {
   CreateProviderToolBody,
@@ -470,6 +470,6 @@ export function providerToolErrorView(error: unknown): ProviderToolErrorView {
     case "TOOL_PROVIDER_TOOL_NOT_FOUND":
       return { text: "This tool no longer exists.", ...none };
     default:
-      return { text: plainError(error.code), ...none };
+      return { text: plainApiError(error), ...none };
   }
 }

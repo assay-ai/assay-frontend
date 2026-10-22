@@ -12,6 +12,7 @@ import { NotChargedProof } from "@/components/explorer/not-charged-proof";
 import { FailsOftenChip, Fact, ObservedFailuresLabel, OfferPrice, UnavailableTag, VerifiedMark } from "@/components/explorer/explorer-bits";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
 import { ExploreAgentPicker, ToolAccessControl, useExploreAgent } from "@/components/explorer/tool-access-control";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
@@ -376,7 +377,7 @@ function ToolsList() {
         <PageState
           kind="error"
           title="Tools could not be loaded"
-          description={plainError(error instanceof ApiError ? error.code : "ERR_NETWORK")}
+          description={error instanceof ApiError ? <ApiErrorSentence error={error} /> : plainError("ERR_NETWORK")}
           code={error instanceof ApiError ? error.code : null}
           onRetry={() => window.location.reload()}
         />

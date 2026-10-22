@@ -6,6 +6,8 @@ import { useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { DisplayAssetSelect, displayAssetLabel, useDisplayAssetPick } from "@/components/display-asset-select";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
+import { plainError } from "@/libs/plain-language";
 import { EntityName } from "@/components/patterns/entity-name";
 import { PageState } from "@/components/patterns/page-state";
 import { Term } from "@/components/patterns/term";
@@ -17,13 +19,12 @@ import { recentMonths } from "@/features/buyer/period";
 import { statementCheckSentence, statementMoneyLines } from "@/features/buyer-money/funding-lines";
 import { MATCHES_SENTENCE, ReconcileNote, reconcileState } from "@/features/buyer/reconcile-note";
 import { readWithheld } from "@/features/buyer/wire";
-import { spendCsv } from "@/features/g30/spend-view";
+import { paidGroups, spendCsv } from "@/features/g30/spend-view";
 import type { ReceiptsSummary, SummaryFigures } from "@/features/g30/wire";
 import type { Money } from "@/interfaces";
 import { useChains } from "@/hooks/useChains";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
 import { getWithheld } from "@/services/balances.service";
 import { chainDisplayName } from "@/services/chains.service";
 import { getStatementBalance, type StatementBalance } from "@/services/funding.service";
@@ -180,12 +181,13 @@ function StatementsContent() {
   const totals = summary.data?.totals;
   // Why calls were not charged, from `GET /withheld`: the three lines add up to Not charged.
   const lines = withheld ? notChargedLines(withheld) : null;
-  const groups = summary.data?.groups ?? [];
+  // Only groups with paid calls: a free-tier-only group (calls 0) is no statement line.
+  const groups = paidGroups(summary.data?.groups ?? []);
 
   const download = React.useCallback(() => {
     if (!summary.data) return;
     const assetLabel = summary.data.asset ? displayAssetLabel(summary.data.asset, chains) : "";
-    const body = spendCsv(summary.data.groups, {
+    const body = spendCsv(paidGroups(summary.data.groups), {
       dimensionHeader: "Tool",
       labelOf: (key) => names.name("tool", key),
       assetLabel,
@@ -247,7 +249,7 @@ function StatementsContent() {
         <PageState
           kind="error"
           title={`The ${period.label} statement could not be loaded`}
-          description={plainError(summary.error.code)}
+          description={<ApiErrorSentence error={summary.error} fallback={plainError(undefined)} />}
           onRetry={() => void summary.refetch()}
           code={summary.error.code}
           details={summary.error.message}

@@ -174,14 +174,21 @@ export function limitSentence(line: LimitLine): string {
  * The agent whose Assay-checked limits this session can read and write.
  * `GET`/`PATCH /spend-policy` act on the signed-in session's own agent (the
  * one the person's login is tied to), so that is the only agent the monthly
- * and Advanced limits can be shown or changed for. Found from the policy
- * itself, else the agent whose account owns the escrow, else the only agent.
+ * and Advanced limits can be shown or changed for. Newer servers name that
+ * agent (`subjectAgentId`), also when the policy is the organization default;
+ * it wins, and when it is not one of the agents on screen no agent is named
+ * (another agent's limits are never shown as this one's, BUG-BUY-CONNECT-05).
+ * Without it: the policy's own agent, else the agent whose account owns the
+ * escrow, else the only agent.
  */
 export function budgetAgentId(
   agents: readonly { agentId: string; agentAccount?: string | null }[],
-  policy: { agentId: string | null } | null | undefined,
+  policy: { agentId: string | null; subjectAgentId?: string | null } | null | undefined,
   escrowAccount: string | null | undefined,
 ): string | null {
+  if (policy?.subjectAgentId) {
+    return agents.some((a) => a.agentId === policy.subjectAgentId) ? policy.subjectAgentId : null;
+  }
   if (policy?.agentId && agents.some((a) => a.agentId === policy.agentId)) return policy.agentId;
   if (escrowAccount) {
     const owner = agents.find((a) => a.agentAccount && a.agentAccount.toLowerCase() === escrowAccount.toLowerCase());
@@ -203,4 +210,34 @@ export function ceilingCountsMoreThanAgents(
   if (!ceilingSpent) return false;
   const total = agentSpent.reduce((sum, m) => sum + BigInt(m?.amount || "0"), 0n);
   return BigInt(ceilingSpent.amount || "0") > total;
+}
+
+/**
+ * Whether "Use account default" is offered for an agent (lot 1 B6): only for
+ * the agent whose policy this page read, and only when that policy is its own
+ * (`scope: "AGENT"`). The account default itself is never dropped.
+ */
+export function canUseAccountDefault(
+  policy: { scope: "ORGANIZATION" | "AGENT"; agentId: string | null } | null | undefined,
+  agentId: string,
+  applies: boolean,
+): boolean {
+  return applies && policy?.scope === "AGENT" && (policy.agentId === null || policy.agentId === agentId);
+}
+
+/** One sentence for a refused "Use account default". */
+export function accountDefaultError(error: { code?: string; status?: number; context?: Readonly<Record<string, unknown>> } | null | undefined): string {
+  const code = error?.code;
+  if (code === "SPEND_POLICY_DROP_REFUSED") {
+    if (error?.context?.reason === "ACCESS_DIFFERS") {
+      return "This agent has its own tool access in the same settings, so they cannot be dropped together. Change its limits instead.";
+    }
+    if (error?.context?.reason === "PAUSED") return "This agent is paused and the account default is not. Resume it first.";
+    return "Its own limits could not be dropped. Nothing changed.";
+  }
+  if (code === "SPEND_POLICY_NOT_FOUND") return "Your account has no default limits to fall back to. Nothing changed.";
+  if (code === "AUTH_HUMAN_SESSION_REQUIRED") return "Only you, signed in yourself, can do this; an agent's key cannot. Nothing changed.";
+  if (code === "ACCOUNT_AGENT_NOT_FOUND") return "That agent is not in your account. Nothing changed.";
+  if (error?.status === 404) return "This server cannot do this yet. Nothing changed.";
+  return "That did not go through. Nothing changed; try again.";
 }

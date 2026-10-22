@@ -11,6 +11,7 @@ import { Field } from "@/components/ui/field";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import {
+  coverTimeText,
   DAILY_CAP_PERCENT,
   economics,
   FEE_RATE,
@@ -186,7 +187,7 @@ function Calculator({
                 <Figure
                   label={<Term k="stake">Stake to post</Term>}
                   value={result.stake}
-                  sub={result.daysToCoverStake ? `≈ ${result.daysToCoverStake} days of earnings` : "returned when you leave"}
+                  sub={result.daysToCoverStake ? coverTimeText(result.daysToCoverStake) : "returned when you leave"}
                 />
                 <Figure
                   label="Most penalties can take in 24 hours"

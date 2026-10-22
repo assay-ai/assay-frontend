@@ -72,7 +72,7 @@ function ToolPage() {
   // The name an agent calls it by, for "Use this tool" (`/connect?tools=`).
   const mcpName = tool ? mcpToolName(tool) : null;
   // A static export cannot set per-tool metadata; name the tool in the tab.
-  useDocumentTitle(tool ? `${tool.name}: price and record — Assay` : null);
+  useDocumentTitle(tool ? `${tool.name}: price and record — Assay` : tools.isSuccess ? "Tool not found — Assay" : tools.isError ? "Tool could not be loaded — Assay" : null);
   // The backend's own figure: free calls a day over every free-capable listing.
   const freeAllowance = tool?.freeCallsPerDay ?? null;
 
@@ -83,6 +83,7 @@ function ToolPage() {
     return (
       <PageState
         kind="error"
+        titleAsH1
         title="This tool could not be loaded"
         description={publicErrorText(tools.error, "this tool")}
         onRetry={() => void tools.refetch()}
@@ -94,6 +95,7 @@ function ToolPage() {
     return (
       <PageState
         kind="empty"
+        titleAsH1
         title="We could not find that tool"
         description="It may have been renamed or is no longer listed."
         action={{ label: "See all tools", href: "/catalogue" }}

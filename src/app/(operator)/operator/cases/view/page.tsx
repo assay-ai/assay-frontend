@@ -28,6 +28,7 @@ import {
 } from "@/features/operator/case-flow";
 import { approvalNeeds, approvalTargetId, approveBlockedBecause, isOwnRequest, penaltyPhrase } from "@/features/operator/approvals";
 import { useArbiterTerms } from "@/features/operator/arbiter-terms";
+import { operatorEventSummary } from "@/features/operator/case-history";
 import { dollars } from "@/features/operator/contract-settings";
 import { eligibleApprovers, isLiveApproval } from "@/features/operator/inbox";
 import { OperatorMeasurement } from "@/features/operator/operator-measurement";
@@ -234,6 +235,13 @@ export default function OperatorCasePage() {
   }
 
   const proposal = brief.case.proposal;
+  // History rows in money and tool names, never minor units or a binding id.
+  const historyContext = {
+    asset: proposal.penaltyAmount.asset,
+    decimals: proposal.penaltyAmount.decimals,
+    toolName: proposal.toolName ?? proposal.bindingLabel ?? "the tool",
+    bindingId: proposal.bindingId,
+  };
   const facts = caseFacts(brief, now);
   const authority = caseAuthority(brief, identity, facts);
   const baseNext = caseNextStep(facts, authority, when);
@@ -504,7 +512,7 @@ export default function OperatorCasePage() {
                   .map((event) => (
                     <li key={event.id} className="flex w-full flex-col gap-0.5 border-b border-01 px-4 py-3 last:border-b-0 tablet:flex-row tablet:gap-4">
                       <UtcTime value={event.occurredAt} className="w-[150px] shrink-0 text-body-xs text-03" />
-                      <span className="min-w-0 flex-1 text-body-13 text-01">{event.summary}</span>
+                      <span className="min-w-0 flex-1 text-body-13 text-01">{operatorEventSummary(event.summary, historyContext)}</span>
                       <span className="shrink-0 text-body-xs text-03">
                         {event.actorType === "system" ? "Assay" : event.actorType === "provider" ? "Provider" : directory.nameOf(event.actorId)}
                       </span>

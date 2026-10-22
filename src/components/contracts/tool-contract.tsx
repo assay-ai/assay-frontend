@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as React from "react";
 
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { PageState } from "@/components/patterns/page-state";
 import { majorChoices } from "@/features/contracts/entry-contract";
 import {
@@ -82,7 +83,7 @@ export function ToolContractView({
         kind="error"
         bare
         title="Couldn't load the versions"
-        description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+        description={query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
         onRetry={() => void query.refetch()}
       />,
     );

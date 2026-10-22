@@ -244,8 +244,8 @@ describe("the snippet for each client", () => {
     expect(apiKeyConfig({ url, token: null })).toContain(KEY_PLACEHOLDER);
   });
 
-  it("names an API key live by its prefix", () => {
-    expect(keyMode("assay_sk_live_ab12")).toBe("live");
+  it("names an API key live by its hint", () => {
+    expect(keyMode("assay_sk_live_…ab12")).toBe("live");
     expect(keyMode(null)).toBeNull();
   });
 });

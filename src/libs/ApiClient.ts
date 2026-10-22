@@ -22,6 +22,13 @@ export class ApiError extends Error {
   readonly context?: Readonly<Record<string, unknown>>;
   /** A 429's `Retry-After`, in whole seconds, when it sent one. */
   readonly retryAfterSeconds?: number;
+  /**
+   * When the wait of a 429 ends (epoch ms): the instant the answer arrived
+   * plus `retryAfterSeconds`, or the end of the client's own cooldown. A
+   * sentence that counts down reads it (`rateLimitSecondsLeft`), so the
+   * seconds shown always end where the header said.
+   */
+  readonly retryAt?: number;
 
   constructor(
     code: string,
@@ -30,6 +37,7 @@ export class ApiError extends Error {
     path?: string,
     context?: Readonly<Record<string, unknown>>,
     retryAfterSeconds?: number,
+    retryAt?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -38,6 +46,7 @@ export class ApiError extends Error {
     this.path = path;
     this.context = context;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.retryAt = retryAt ?? (retryAfterSeconds ? Date.now() + retryAfterSeconds * 1000 : undefined);
   }
 }
 
@@ -68,11 +77,46 @@ export function parseRetryAfter(value: unknown, nowMs: number = Date.now()): num
   return Math.min(MAX_RETRY_AFTER_SECONDS, Math.max(1, seconds));
 }
 
+/**
+ * The wait a rate limiter's own sentence names ("Try again in 44 s."), for a 429
+ * whose `Retry-After` header could not be read (a proxy that drops it, a
+ * browser that does not expose it). `null` when the sentence names none.
+ */
+export function retryAfterFromMessage(message: unknown): number | null {
+  if (typeof message !== "string") return null;
+  const match = /\bin (\d+)\s*(?:s|seconds?)\b/i.exec(message);
+  return match ? parseRetryAfter(match[1]) : null;
+}
+
 /** What a person reads for a rate limit. */
 export function tooManyRequestsSentence(retryAfterSeconds: number | null | undefined): string {
   return retryAfterSeconds
     ? `Too many requests. Try again in ${retryAfterSeconds} s.`
     : "Too many requests. Wait a moment and try again.";
+}
+
+/**
+ * Whole seconds left of a 429's wait at `nowMs`, at least 0; `null` when the
+ * error names no wait.
+ */
+export function rateLimitSecondsLeft(
+  error: { retryAt?: number | null; retryAfterSeconds?: number | null },
+  nowMs: number = Date.now(),
+): number | null {
+  if (typeof error.retryAt === "number" && Number.isFinite(error.retryAt)) {
+    return Math.max(0, Math.ceil((error.retryAt - nowMs) / 1000));
+  }
+  return error.retryAfterSeconds ? error.retryAfterSeconds : null;
+}
+
+/** The rate-limit sentence at `nowMs`: the seconds still left, or "now" once the wait is over. */
+export function tooManyRequestsSentenceAt(
+  error: { retryAt?: number | null; retryAfterSeconds?: number | null },
+  nowMs: number = Date.now(),
+): string {
+  const left = rateLimitSecondsLeft(error, nowMs);
+  if (left === 0) return "Too many requests earlier. You can try again now.";
+  return tooManyRequestsSentence(left);
 }
 
 /**
@@ -83,7 +127,12 @@ export function tooManyRequestsSentence(retryAfterSeconds: number | null | undef
  * sentence, which the screens already word; either way `retryAfterSeconds`
  * carries the header.
  */
-export function withRateLimit(error: ApiError, retryAfterSeconds: number | null, bodyHadCode: boolean): ApiError {
+export function withRateLimit(
+  error: ApiError,
+  retryAfterSeconds: number | null,
+  bodyHadCode: boolean,
+  nowMs: number = Date.now(),
+): ApiError {
   const generic = !bodyHadCode || error.code === TOO_MANY_REQUESTS;
   return new ApiError(
     generic ? TOO_MANY_REQUESTS : error.code,
@@ -92,6 +141,7 @@ export function withRateLimit(error: ApiError, retryAfterSeconds: number | null,
     error.path,
     error.context,
     retryAfterSeconds ?? undefined,
+    retryAfterSeconds ? nowMs + retryAfterSeconds * 1000 : undefined,
   );
 }
 
@@ -566,10 +616,15 @@ class ApiClient {
         if ((error.response?.status ?? apiError.status) === 429) {
           const headers = error.response?.headers as { get?: (name: string) => unknown; [name: string]: unknown } | undefined;
           const retryAfter = parseRetryAfter(typeof headers?.get === "function" ? headers.get("retry-after") : headers?.["retry-after"]);
+          // The sentence may name the wait from the limiter's own message when the header is unreadable;
+          // the request cooldown below keys on the header alone.
+          const shownWait = retryAfter ?? (apiError.code === TOO_MANY_REQUESTS ? retryAfterFromMessage(apiError.message) : null);
           const bodyHadCode = Boolean((error.response?.data as Partial<ApiErrorBody> | undefined)?.error?.code);
-          const limited = withRateLimit(apiError, retryAfter, bodyHadCode);
+          // One instant for both: the countdown on screen ends exactly when the cooldown does.
+          const now = Date.now();
+          const limited = withRateLimit(apiError, shownWait, bodyHadCode, now);
           if (retryAfter !== null && config && (config.method ?? "get").toUpperCase() === "GET") {
-            this.cooldowns.set(this.cooldownKey(config), Date.now() + retryAfter * 1000);
+            this.cooldowns.set(this.cooldownKey(config), now + retryAfter * 1000);
           }
           return Promise.reject(limited);
         }
@@ -636,7 +691,7 @@ class ApiClient {
       this.cooldowns.delete(key);
       return config;
     }
-    throw new ApiError(TOO_MANY_REQUESTS, tooManyRequestsSentence(left), 429, config.url, undefined, left);
+    throw new ApiError(TOO_MANY_REQUESTS, tooManyRequestsSentence(left), 429, config.url, undefined, left, until);
   }
 
   private async request<T>(config: AxiosRequestConfig): Promise<T> {

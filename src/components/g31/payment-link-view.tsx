@@ -8,6 +8,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { StatusChip, type StatusChipKey } from "@/components/patterns/status-chip";
 import { Button } from "@/components/ui/button";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
+import { neverRan } from "@/features/buyer/call-outcome";
 import type { CallDebt } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { plainStatus } from "@/libs/plain-language";
@@ -31,12 +32,15 @@ export function outcomeOf(
   status: string,
   debt?: CallDebt | null,
   forfeited?: boolean,
+  /** EXPIRED with nothing ever held (`neverRan`): it did not run, so "Not charged" would overstate it. */
+  neverHeld?: boolean,
 ): { chip: StatusChipKey; headline: string } {
   // Buyer debt: served, but the payment could not be collected; paid calls stay paused until it is settled.
   if (debt === "OUTSTANDING" || debt === "WRITTEN_OFF") return { chip: "owed", headline: "Served, payment still owed" };
   // A voided debt or a forfeited payment stays SETTLED, but nothing was charged.
   if (debt === "VOIDED" || forfeited) return { chip: "not-charged", headline: "Not charged" };
   if (SETTLED.has(status)) return { chip: "charged", headline: "Already settled" };
+  if (status === "EXPIRED" && neverHeld) return { chip: "not-run", headline: "Did not run" };
   if (NOT_CHARGED.has(status)) return { chip: "not-charged", headline: "Not charged" };
   return { chip: "checking", headline: "Still in progress" };
 }
@@ -88,7 +92,7 @@ export function PaymentLinkView({ callId }: { callId: string }) {
   }
 
   const data = call.data;
-  const outcome = outcomeOf(data.status, data.debt, data.forfeited);
+  const outcome = outcomeOf(data.status, data.debt, data.forfeited, neverRan(data));
   const charged = SETTLED.has(data.status) && outcome.chip === "charged";
   return shell(
     <section aria-label="Payment" className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-5 shadow-soft">
@@ -97,14 +101,16 @@ export function PaymentLinkView({ callId }: { callId: string }) {
         <StatusChip status={outcome.chip} />
       </div>
       <p className="font-mono text-[28px] font-semibold leading-tight text-01">
-        {formatMoney(charged || outcome.chip === "not-charged" ? data.charged : data.price, { decimals: 2 })}
+        {formatMoney(charged || outcome.chip === "not-charged" || outcome.chip === "not-run" ? data.charged : data.price, { decimals: 2 })}
       </p>
       <p className="text-body-13 text-02">
         {nameOf(data.toolId)} · {outcome.chip === "owed"
           ? "not collected yet"
           : outcome.chip === "not-charged" && SETTLED.has(data.status)
             ? "not charged"
-            : plainStatus(data.status)}
+            : outcome.chip === "not-run"
+              ? "nothing was held or charged"
+              : plainStatus(data.status)}
       </p>
       {callPaymentNote(data) ? <p className={outcome.chip === "owed" ? "text-body-13 text-warning-700" : "text-body-13 text-02"}>{callPaymentNote(data)}</p> : null}
       <div className="flex flex-wrap gap-2 pt-1">

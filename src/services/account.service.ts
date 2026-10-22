@@ -37,6 +37,15 @@ export function revokeCredential(agentId: string, id: string): Promise<unknown> 
   return api.delete(`/agents/${agentId}/credentials/${id}`);
 }
 
+/**
+ * `DELETE /agents/:agentId/credentials/:id/pending-delegate` — discard the
+ * payment key waiting for approval; the bound key keeps paying. Person only;
+ * a no-op when nothing waits.
+ */
+export function discardPendingDelegate(agentId: string, id: string): Promise<unknown> {
+  return api.delete(`/agents/${agentId}/credentials/${id}/pending-delegate`);
+}
+
 /** GET /audit-log. */
 export function listAuditLog(query: ListQuery = {}): Promise<CursorPage<unknown>> {
   return api.get<CursorPage<unknown>>("/audit-log", query as Record<string, unknown>);

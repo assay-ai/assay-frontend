@@ -8,6 +8,7 @@ import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { Term } from "@/components/patterns/term";
 import { MoneyPair } from "@/components/ui/money-pair";
 import { GLOSSARY } from "@/libs/glossary";
+import { pageMetadata } from "@/libs/page-metadata";
 import {
   Panel,
   PanelBody,
@@ -55,10 +56,11 @@ import { HeroCtas } from "./demo-cta";
  * left for the other at 834.
  */
 
+const DESC =
+  "A marketplace where AI agents pay per call for MCP tools, only when the result passes the check. Free calls need no deposit.";
+
 export const metadata: Metadata = {
-  title: "How it works",
-  description:
-    "A marketplace where AI agents pay per call for MCP tools, only when the result passes the check. Free calls need no deposit.",
+  ...pageMetadata({ title: "How it works", description: DESC, url: "/how-it-works" }),
 };
 
 interface FlowStep {

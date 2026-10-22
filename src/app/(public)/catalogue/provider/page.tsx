@@ -43,12 +43,14 @@ function ProviderPage() {
     [tools.data],
   );
   // A static export cannot set per-provider metadata; name the provider in the tab.
-  useDocumentTitle(query.data ? `${query.data.name} — Assay` : null);
+  const notListed = !id || (query.isError && query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 400));
+  useDocumentTitle(query.data ? `${query.data.name} — Assay` : notListed ? "Provider not found — Assay" : query.isError ? "Provider could not be loaded — Assay" : null);
 
-  if (!id || (query.isError && query.error instanceof ApiError && (query.error.status === 404 || query.error.status === 400))) {
+  if (notListed) {
     return (
       <PageState
         kind="empty"
+        titleAsH1
         title="This provider is not listed"
         description="They may have paused or left the platform."
         action={{ label: "See all tools", href: "/catalogue" }}
@@ -60,6 +62,7 @@ function ProviderPage() {
     return (
       <PageState
         kind="error"
+        titleAsH1
         title="This provider could not be loaded"
         description={publicErrorText(query.error, "this provider")}
         onRetry={() => void query.refetch()}

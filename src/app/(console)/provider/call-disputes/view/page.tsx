@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isRecordMissing } from "@/libs/record-missing";
 import { ArrowLeft, Send } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -13,7 +14,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { disputeErrorText, providerStatus, replyDueAt, REPLY_MAX } from "@/features/call-disputes/model";
 import { callDisputeKeys, DisputeChip, DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes/ui";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
-import { ApiError } from "@/libs/ApiClient";
 import { routes } from "@/libs/routes";
 import { getProviderCallDispute, respondToCallDispute } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
@@ -52,7 +52,7 @@ function ProviderReportContent() {
   );
   if (report.isPending) return frame(<PageState kind="loading" rows={5} label="Loading the report" />);
   if (report.isError || !report.data) {
-    const missing = report.error instanceof ApiError && report.error.status === 404;
+    const missing = isRecordMissing(report.error);
     return frame(
       <PageState
         kind={missing ? "empty" : "error"}

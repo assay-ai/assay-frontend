@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { isRecordMissing } from "@/libs/record-missing";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -74,7 +75,7 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
     );
   }
   if (toolId && (toolQuery.isError || !tool)) {
-    const missing = toolQuery.error instanceof ApiError && toolQuery.error.status === 404;
+    const missing = isRecordMissing(toolQuery.error);
     return (
       <>
         {back}

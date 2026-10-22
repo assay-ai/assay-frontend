@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { PageHeader } from "@/components/g31/chrome";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { EntityName } from "@/components/patterns/entity-name";
 import { callPaymentNote } from "@/features/buyer-debt/debt-copy";
 import { REFUNDABLE_ROW } from "@/features/buyer-money/funding-lines";
@@ -25,15 +26,14 @@ import {
   callOutcome,
   matchesFilter,
   parseCallsFilter,
-  refundableOnly,
-  statusesFor,
   type CallsFilter,
 } from "@/features/buyer/call-outcome";
 import { useEntityNames } from "@/hooks/useEntityNames";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
-import { listToolCalls } from "@/services/tool-calls.service";
+import { listCalls, type CallsSource } from "@/features/buyer/calls-list";
+import { isFreeToolCall, type FreeToolCall } from "@/services/tool-calls.service";
 import { cn } from "@/utils";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 
@@ -85,15 +85,10 @@ function CallsList() {
   const query = useInfiniteQuery({
     queryKey: ["tool-calls", "list", filter, toolId],
     queryFn: ({ pageParam }) =>
-      listToolCalls({
-        limit: PAGE,
-        status: statusesFor(filter),
-        refundable: refundableOnly(filter),
-        toolId: toolId ?? undefined,
-        cursor: pageParam ?? undefined,
-      }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => (last.pageInfo?.hasMore ? (last.pageInfo.nextCursor ?? null) : null),
+      listCalls(filter, { limit: PAGE, toolId: toolId ?? undefined, cursor: pageParam?.cursor ?? undefined }, pageParam?.source),
+    initialPageParam: null as { cursor: string; source: CallsSource } | null,
+    getNextPageParam: (last) =>
+      last.pageInfo?.hasMore && last.pageInfo.nextCursor ? { cursor: last.pageInfo.nextCursor, source: last.source } : null,
     retry: 0,
     enabled: !refused,
   });
@@ -102,7 +97,7 @@ function CallsList() {
     () =>
       (query.data?.pages ?? [])
         .flatMap((page) => page.items ?? [])
-        .filter((call) => matchesFilter(call, filter) && (!toolId || call.toolId === toolId)),
+        .filter((call) => (isFreeToolCall(call) || matchesFilter(call, filter)) && (!toolId || call.toolId === toolId)),
     [query.data, filter, toolId],
   );
 
@@ -176,7 +171,7 @@ function CallsList() {
       ) : query.isError ? (
         <PageState
           kind="error"
-          description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+          description={query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
           onRetry={() => void query.refetch()}
           code={query.error instanceof ApiError ? query.error.code : null}
           details={query.error.message}
@@ -231,6 +226,7 @@ function CallsList() {
         <>
           <ul className="flex w-full flex-col overflow-hidden rounded-xl border border-01 bg-01 shadow-soft">
             {calls.map((call) => {
+              if (isFreeToolCall(call)) return <FreeCallRow key={`free:${call.callId}`} call={call} providerName={names.lookup("provider", call.providerId)} />;
               const outcome = callOutcome(call);
               const uncharged = notCharged(call.price, call.charged);
               // Buyer debt or a forfeited payment: say why, beside the verdict.
@@ -283,7 +279,7 @@ function CallsList() {
                                   ? `${formatMoney(call.price, { decimals: 4 })} owed`
                                   : formatMoney(call.charged, { decimals: 4 })}
                       </span>
-                      {outcome !== "checking" && outcome !== "owed" && toDecimal(uncharged).gt(0) ? (
+                      {outcome !== "checking" && outcome !== "owed" && outcome !== "not-run" && toDecimal(uncharged).gt(0) ? (
                         <span className="font-mono text-mono-xs text-teal-600">
                           {formatMoney(uncharged, { decimals: 4 })} not charged
                         </span>
@@ -310,6 +306,35 @@ function CallsList() {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * A served free call: no intent, so no receipt to open; the tool, when, the
+ * provider and "Free" (lot 1 B5).
+ */
+function FreeCallRow({ call, providerName }: { call: FreeToolCall; providerName: string | null | undefined }) {
+  return (
+    <li className="border-b border-01 last:border-b-0" data-testid="free-call-row">
+      <div className="flex w-full items-center gap-3 px-4 py-3.5 tablet:px-5">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate font-mono text-mono-13 font-semibold text-01">
+            {call.toolId ? <EntityName kind="tool" id={call.toolId} copyable={false} /> : (call.toolName ?? "A tool no longer listed")}
+          </span>
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-body-xs text-03">
+            <StatusChip status="free" />
+            <UtcTime value={call.createdAt} relative />
+            {providerName ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="truncate">{providerName}</span>
+              </>
+            ) : null}
+          </span>
+        </div>
+        <span className="shrink-0 font-mono text-mono-13 font-semibold text-01">Free</span>
+      </div>
+    </li>
   );
 }
 

@@ -125,3 +125,27 @@ describe("every Activity row is a past-tense sentence (B12)", () => {
     expect(activityHref({ targetType: "call_dispute", targetId: "d1" })).toBe("/operator/disputes/view?id=d1");
   });
 });
+
+describe("takedown confirm and revert lines (BUG-OPS-MARKET-04)", () => {
+  const none = { ...names, target: () => null };
+  const cutoff = (code: string, after: Record<string, unknown>) =>
+    entry({ code, targetType: "moderation_cutoff", targetId: "c1", after });
+
+  it("names the tool from after.name and says takedown, not cutoff", () => {
+    const revert = activitySentence(cutoff("A-19", { reverted: true, name: "e2eprv__e2e_prv_setup_probe", cutoffTargetType: "TOOL" }), none);
+    expect(revert.verb).toBe("reverted the takedown of");
+    expect(revert.target).toBe("e2eprv__e2e_prv_setup_probe");
+    const confirm = activitySentence(cutoff("A-18", { confirmed: true, name: "Weather set", cutoffTargetType: "TOOLSET" }), none);
+    expect(confirm.verb).toBe("confirmed the takedown of");
+    expect(confirm.target).toBe("Weather set");
+  });
+
+  it("writes a public name with its @", () => {
+    expect(activitySentence(cutoff("A-19", { name: "acme", cutoffTargetType: "HANDLE" }), none).target).toBe("@acme");
+  });
+
+  it("falls back to the kind of thing on an older entry with no name", () => {
+    expect(activitySentence(cutoff("A-19", { reverted: true }), none).target).toBe("a tool");
+    expect(activitySentence(cutoff("A-18", { cutoffTargetType: "TOOLSET", name: null }), none).target).toBe("a tool set");
+  });
+});

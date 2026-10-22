@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import type { EscrowDelegate, Money } from "@/interfaces";
 
 import {
+  accountDefaultError,
   agentLimitRows,
+  canUseAccountDefault,
   budgetAgentId,
   ceilingCountsMoreThanAgents,
   hasOldBudget,
@@ -80,6 +82,14 @@ describe("budgetAgentId: the agent whose Assay limits this session can edit", ()
     expect(budgetAgentId(agents, null, null)).toBeNull();
     expect(budgetAgentId([agents[0]!], null, null)).toBe("a");
   });
+  it("uses the agent the server names (subjectAgentId), also for an organization default (BUG-BUY-CONNECT-05)", () => {
+    expect(budgetAgentId(agents, { agentId: null, subjectAgentId: "b" }, "eip155:1:0xaa")).toBe("b");
+    expect(budgetAgentId(agents, { agentId: "a", subjectAgentId: "b" }, null)).toBe("b");
+  });
+  it("names no agent when the server's subject is not on screen, never another agent", () => {
+    expect(budgetAgentId(agents, { agentId: null, subjectAgentId: "zz" }, "eip155:1:0xaa")).toBeNull();
+    expect(budgetAgentId([agents[0]!], { agentId: null, subjectAgentId: "zz" }, null)).toBeNull();
+  });
 });
 
 describe("ceilingCountsMoreThanAgents", () => {
@@ -87,5 +97,26 @@ describe("ceilingCountsMoreThanAgents", () => {
     expect(ceilingCountsMoreThanAgents(usd("2.61"), [usd("0"), null])).toBe(true);
     expect(ceilingCountsMoreThanAgents(usd("15.75"), [usd("15.75")])).toBe(false);
     expect(ceilingCountsMoreThanAgents(null, [usd("1")])).toBe(false);
+  });
+});
+
+/* Lot 1 B6 (BUG-BUY-CONNECT-05 part 2): "Use account default" drops an agent's own policy. */
+describe("Use account default", () => {
+  it("is offered only for the agent whose own policy this page read", () => {
+    expect(canUseAccountDefault({ scope: "AGENT", agentId: "a1" }, "a1", true)).toBe(true);
+    expect(canUseAccountDefault({ scope: "ORGANIZATION", agentId: null }, "a1", true)).toBe(false);
+    expect(canUseAccountDefault({ scope: "AGENT", agentId: "a2" }, "a1", true)).toBe(false);
+    expect(canUseAccountDefault({ scope: "AGENT", agentId: "a1" }, "a1", false)).toBe(false);
+    expect(canUseAccountDefault(null, "a1", true)).toBe(false);
+  });
+
+  it("says why a drop was refused, in plain words", () => {
+    expect(accountDefaultError({ code: "SPEND_POLICY_DROP_REFUSED", context: { reason: "ACCESS_DIFFERS" } })).toMatch(/own tool access/);
+    expect(accountDefaultError({ code: "SPEND_POLICY_DROP_REFUSED", context: { reason: "PAUSED" } })).toMatch(/Resume it first/);
+    expect(accountDefaultError({ code: "SPEND_POLICY_NOT_FOUND", status: 404 })).toMatch(/no default limits/);
+    expect(accountDefaultError({ code: "AUTH_HUMAN_SESSION_REQUIRED", status: 403 })).toMatch(/signed in yourself/);
+    // An older backend has no such route.
+    expect(accountDefaultError({ code: "API_NOT_FOUND", status: 404 })).toBe("This server cannot do this yet. Nothing changed.");
+    expect(accountDefaultError(null)).toMatch(/try again/);
   });
 });
