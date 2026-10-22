@@ -39,6 +39,8 @@ export const ENABLE_PAID_STRINGS = {
   alreadyOn: "Paid calls are already on for this key",
   replaces: "This new payment key replaces the current one",
   done: "Paid calls are on. Go back to your app and ask again.",
+  notWaiting:
+    "This payment key is no longer waiting for approval: your app asked for a newer one, or it was discarded. Nothing changed. Open the newest link your app showed.",
   blocked: "Your account is blocked, so paid calls can't be turned on now.",
   registeredByApp: "Registered by Assay app on this computer",
   registeredByKey: "Registered with an API key",
@@ -535,4 +537,25 @@ export function enablePaidReturnTo(raw: string | null | undefined): string | nul
   const id = url.searchParams.get("credential") ?? "";
   const back = enablePaidReturnHref(id);
   return back === raw ? back : null;
+}
+
+/**
+ * Whether the approval reached the key this page named. Approving a key that
+ * waited for approval must make it the credential's bound key: when
+ * `POST /escrow/delegates` does not list the credential in
+ * `promotedCredentialIds`, it no longer waits with this key (a newer one was
+ * parked, or the owner discarded it) and nothing changed for it. A first key,
+ * already bound, needs no promotion. An answer without the list is not read as
+ * a refusal.
+ */
+export function approvalOutcome(
+  state: Extract<EnablePaidState, { kind: "ready" }>,
+  results: readonly ({ data?: unknown } | undefined)[],
+): "done" | "not-waiting" {
+  if (!state.credential.pendingDelegateAccount) return "done";
+  for (const result of results) {
+    const ids = (result?.data as { promotedCredentialIds?: unknown } | undefined)?.promotedCredentialIds;
+    if (Array.isArray(ids)) return ids.includes(state.credential.id) ? "done" : "not-waiting";
+  }
+  return "done";
 }

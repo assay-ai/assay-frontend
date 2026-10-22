@@ -20,6 +20,7 @@ import {
   collectPages,
   depositRunsHere,
   enablePaidFailure,
+  ENABLE_PAID_STRINGS,
   enablePaidState,
   enablePaidPlan,
   enablePaidReturnHref,
@@ -175,9 +176,13 @@ export default function EnablePaidPage() {
   const [depositOpen, setDepositOpen] = React.useState(false);
   // The replaced key, once approved, while the person stops it on chain (the Agents page's Stop it).
   const [stopping, setStopping] = React.useState<string | null>(null);
+  // The approval landed but this credential no longer waited with this key: said here, as the
+  // credential read again may no longer match the link's key at all.
+  const [notWaiting, setNotWaiting] = React.useState(false);
 
   const failed = keysQuery.error ?? delegatesQuery.error ?? money.escrowQuery.error;
   if (!credentialId) return <Notice text="This link is missing which app it is for. Open the link your app showed again." />;
+  if (notWaiting) return <Notice text={ENABLE_PAID_STRINGS.notWaiting} />;
   if (failed) {
     return (
       <Notice
@@ -279,6 +284,11 @@ export default function EnablePaidPage() {
         steps={steps}
         describeError={(error) => enablePaidFailure(error) ?? describeMoneyError(error)}
         onStopOldKey={payerAccount ? setStopping : undefined}
+        onNotWaiting={() => {
+          setNotWaiting(true);
+          void queryClient.invalidateQueries({ queryKey: ["agents"] });
+          void queryClient.invalidateQueries({ queryKey: escrowKeys.delegates });
+        }}
       />
       {/* Only the escrow's own chain: the page's policy reaches only its RPC. */}
       <DepositSheet open={depositOpen} onOpenChange={setDepositOpen} onlyChainId={state.chainId} />

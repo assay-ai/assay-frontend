@@ -319,6 +319,9 @@ const ERRORS: Record<string, string> = {
   AUTH_SCOPE_MISSING: "This key is not allowed to do this. Create a key that can.",
   ACCOUNT_CREDENTIAL_SCOPES_INVALID: "A key that pays must also be able to call tools. Pick another option.",
   ACCOUNT_CREDENTIAL_EXPIRY_INVALID: "The key must end within one year from now. Pick another expiry.",
+  ACCOUNT_CREDENTIAL_NOT_FOUND: "This key is no longer on this agent. Reload the page.",
+  ACCOUNT_DELEGATE_BIND_CONFLICT:
+    "Another payment key was set up for this key at the same moment. Ask your app to set up its payment key again.",
   SPEND_LIMIT_EXCEEDED: "This call would go over your spend limit.",
   VELOCITY_LIMIT_EXCEEDED: "Spending too fast: this call was refused. Calls are allowed again in a moment.",
   POLICY_AGENT_PAUSED: "This agent is paused by its budget.",

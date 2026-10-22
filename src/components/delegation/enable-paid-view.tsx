@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { CAP_PRESETS, ceilingChange } from "@/features/buyer-money/caps";
 import {
+  approvalOutcome,
   ENABLE_PAID_STRINGS,
   actionLabelFor,
   amountLabel,
@@ -66,6 +67,11 @@ export interface EnablePaidViewProps {
    * has its permission.
    */
   onStopOldKey?: (delegateAccount: string) => void;
+  /**
+   * The approval landed but did not make this page's key the bound one (it no
+   * longer waited for approval): the page reloads the credential.
+   */
+  onNotWaiting?: () => void;
   /** Injected for tests. */
   isTopLevel?: () => boolean;
 }
@@ -98,8 +104,10 @@ export function EnablePaidView({
   steps,
   describeError,
   onStopOldKey,
+  onNotWaiting,
   isTopLevel = defaultIsTopLevel,
 }: EnablePaidViewProps) {
+  const [notWaiting, setNotWaiting] = React.useState(false);
   // The key an approval replaced, kept once approved: the state then shows the new key as bound.
   const [replaced, setReplaced] = React.useState<{ delegateAccount: string; fingerprint: string } | null>(null);
   // Unknown until mounted: framed until shown otherwise.
@@ -302,11 +310,21 @@ export function EnablePaidView({
         disabledReason={disabledReason}
         resetKey={`${draft.perCall}|${draft.perDay}|${draft.days}`}
         describeError={describeError}
-        successTitle={ENABLE_PAID_STRINGS.done}
-        onSuccess={() => {
+        successTitle={notWaiting ? "Your wallet signed" : ENABLE_PAID_STRINGS.done}
+        onSuccess={(results) => {
+          if (approvalOutcome(state, results) === "not-waiting") {
+            setNotWaiting(true);
+            onNotWaiting?.();
+            return;
+          }
           if (state.replacing) setReplaced({ delegateAccount: state.replacing.delegateAccount, fingerprint: state.replacing.fingerprint });
         }}
       />
+      {notWaiting ? (
+        <p role="alert" className="text-body-sm text-warning-700" data-testid="not-waiting">
+          {ENABLE_PAID_STRINGS.notWaiting}
+        </p>
+      ) : null}
 
       {replaced ? (
         <div className="flex flex-col gap-2 rounded-lg border border-01 bg-02 p-3" data-testid="stop-old-key">

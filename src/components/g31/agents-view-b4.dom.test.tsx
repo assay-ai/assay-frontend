@@ -419,6 +419,8 @@ describe("Agents & keys rows: scopes, expiry and a key waiting for approval", ()
     expect(html).toContain('data-testid="credential-pending-key"');
     expect(out).toContain("New payment key 5555 1234 is waiting for your approval");
     expect(out).toContain("It replaces B447 D10C, which keeps paying until you approve. To approve, open the link your app showed.");
+    // The owner may discard the waiting key instead; the bound key is untouched.
+    expect(html).toContain('data-testid="discard-pending-key"');
     // Never a link carrying the waiting key: only the app's own link may name it.
     expect(html).not.toMatch(/enable-paid[^"]*#key/);
   });
