@@ -66,12 +66,12 @@ describe("one action per client", () => {
   });
 
   it("the API-key snippet and Use an API key appear only under My own code", () => {
-    render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url={URL_ROOT} client="claude-code" onCreateKey={() => undefined} />);
-    expect(body()).not.toContain("REST_OF_YOUR_KEY");
+    render(<McpConfigTabs token={null} keyHint="assay_sk_live_…ab12" url={URL_ROOT} client="claude-code" onCreateKey={() => undefined} />);
+    expect(body()).not.toContain("PASTE_YOUR_KEY_ENDING_ab12");
     expect(body()).not.toContain("Use an API key instead");
     cleanup();
-    render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url={URL_ROOT} client="other" onCreateKey={() => undefined} />);
-    expect(body()).toContain("REST_OF_YOUR_KEY");
+    render(<McpConfigTabs token={null} keyHint="assay_sk_live_…ab12" url={URL_ROOT} client="other" onCreateKey={() => undefined} />);
+    expect(body()).toContain("PASTE_YOUR_KEY_ENDING_ab12");
     expect(screen.getByRole("button", { name: "Use an API key instead" })).toBeTruthy();
   });
 });

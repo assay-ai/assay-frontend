@@ -25,7 +25,7 @@ import { relativeTime } from "./format";
  *
  *   - no key yet: step 1 is "Create your first key", and the config then
  *     carries the full key (the only moment it exists);
- *   - a key already: the config names it by its prefix, with "Use an API key
+ *   - a key already: the config names it by its hint, with "Use an API key
  *     instead" (R-UI-8) under My own code one click away instead of editing a placeholder.
  *
  * "Is it working?" follows the URL this page hands out (Servers in use, so
@@ -69,12 +69,12 @@ export function ConnectView() {
   // Its keys not shown to this session: unknown, never "no key".
   const keysHidden = agent !== null && data.keysHiddenFor.has(agent.agentId);
   const servers = useAgentServers(agent?.agentId, { pollMs: poll });
-  // Keys, last call and prefix all belong to the one agent this page hands URLs and keys out for.
+  // Keys, last call and hint all belong to the one agent this page hands URLs and keys out for.
   const live = (agent ? (data.keys[agent.agentId] ?? []) : [])
     .filter((k) => !k.revokedAt)
     .sort((a, b) => ((a.lastUsedAt ?? "") < (b.lastUsedAt ?? "") ? 1 : -1));
   // The key made here, in memory only: never stored, never in the URL.
-  const [created, setCreated] = React.useState<{ token: string; prefix: string; name: string } | null>(null);
+  const [created, setCreated] = React.useState<{ token: string; hint: string; name: string } | null>(null);
   const create = useCreateKey(agent?.agentId ?? null, agent ? (data.keys[agent.agentId] ?? []).length : 0, setCreated);
 
   // The URL this page hands out: its own row under Servers in use, when it has one.
@@ -117,7 +117,7 @@ export function ConnectView() {
         <McpConfigTabs
           guide
           token={created?.token ?? null}
-          keyPrefix={created?.prefix ?? keyForHint(live)?.prefix ?? null}
+          keyHint={created?.hint ?? keyForHint(live)?.hint ?? null}
           url={url}
           client={client}
           onClientChange={setClient}

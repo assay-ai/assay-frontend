@@ -399,7 +399,11 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
         // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
         void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
-        return { explorerUrl: money.chain ? explorerTxUrl(money.chain, relayed.transactionHash) : undefined };
+        return {
+          explorerUrl: money.chain ? explorerTxUrl(money.chain, relayed.transactionHash) : undefined,
+          // Which keys waiting for approval this made bound (the enable-paid page checks its own).
+          data: { promotedCredentialIds: relayed.promotedCredentialIds },
+        };
       },
     },
   ];
