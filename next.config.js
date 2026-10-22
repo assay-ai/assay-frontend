@@ -22,15 +22,6 @@ const getLatestCommit = () => {
   }
 };
 
-/** The origin of a URL from the environment, or nothing when it is unset or not a URL. */
-const originOf = (value) => {
-  try {
-    return value ? new URL(value).origin : "";
-  } catch {
-    return "";
-  }
-};
-
 /**
  * The pinned `@goassay-ai/mcp` version every install command carries (R-MCP-14).
  * Inlined at build time; the build fails when it is unset or not an exact
@@ -69,35 +60,16 @@ if (mcpUrlProblem) throw new Error(`NEXT_PUBLIC_MCP_URL ${mcpUrlProblem}, e.g. h
  * referrer cut to the origin cross-site, and no camera, microphone or
  * geolocation. HSTS only in production, where the site is served over HTTPS.
  *
- * The full script/connect policy ships in Report-Only mode first: Privy, its
- * WalletConnect relay and the backend-served RPCs need their origins, and an
- * enforced policy that misses one breaks sign-in. Promote it once the reports
- * are clean. Privy's list: https://docs.privy.io/security/implementation-guide/content-security-policy
+ * The full site-wide policy (`sitePolicy()` in scripts/csp-policy.js, with the
+ * API and MCP origins of this environment) ships in Report-Only mode first;
+ * production gets the same policy from `public/_headers`, completed by
+ * scripts/connect-csp.js.
  */
-const { PRIVY_FRAMES, CONNECT_ORIGINS } = require("./scripts/csp-policy");
-const REPORT_ONLY_POLICY = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "production" ? "" : " 'unsafe-eval'"} https://challenges.cloudflare.com`,
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "frame-ancestors 'self'",
-  `child-src ${PRIVY_FRAMES.join(" ")}`,
-  `frame-src ${PRIVY_FRAMES.join(" ")}`,
-  [
-    "connect-src 'self'",
-    originOf(process.env.NEXT_PUBLIC_API_BASE_URL),
-    originOf(process.env.NEXT_PUBLIC_MCP_URL),
-    ...CONNECT_ORIGINS,
-  ]
-    .filter(Boolean)
-    .join(" "),
-  "worker-src 'self' blob:",
-  "manifest-src 'self'",
-].join("; ");
+const { sitePolicy, originsOf } = require("./scripts/csp-policy");
+const REPORT_ONLY_POLICY = sitePolicy({
+  connectOrigins: originsOf(process.env.NEXT_PUBLIC_API_BASE_URL, process.env.NEXT_PUBLIC_MCP_URL),
+  dev: process.env.NODE_ENV !== "production",
+});
 
 /**
  * The consent and enable-paid pages (spec R-WEB-4): no framing at all, not
