@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createKeyBody, keyExpiry, keyMayPay, scopesFor, scopesText } from "./key-scopes";
+import { createKeyBody, keyChoiceSummary, keyExpiry, keyMayPay, scopesFor, scopesText } from "./key-scopes";
 
 const NOW = Date.parse("2026-10-22T00:00:00.000Z");
 const DAY = 86_400_000;
@@ -48,5 +48,13 @@ describe("a key's scopes and expiry in words", () => {
     expect(keyExpiry(new Date(NOW + 8 * DAY).toISOString(), NOW)?.soon).toBe(false);
     expect(keyExpiry(new Date(NOW + 7 * DAY).toISOString(), NOW)?.soon).toBe(true);
     expect(keyExpiry("not a date", NOW)).toBeNull();
+  });
+});
+
+describe("keyChoiceSummary", () => {
+  it("names the preset, reports when ticked (never on Read only), and the expiry", () => {
+    expect(keyChoiceSummary("agent", false, 90)).toBe("Agent · expires in 90 days");
+    expect(keyChoiceSummary("free", true, 365)).toBe("Free calls only · can report · expires in 1 year");
+    expect(keyChoiceSummary("read", true, 30)).toBe("Read only · expires in 30 days");
   });
 });

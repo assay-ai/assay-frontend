@@ -52,6 +52,16 @@ export function expiryLabel(days: KeyExpiryDays): string {
   return days === 365 ? "1 year" : `${days} days`;
 }
 
+/**
+ * The current choice in one line, shown next to the closed "Advanced" section:
+ * "Agent · expires in 90 days", "Free calls only · can report · expires in 1 year".
+ */
+export function keyChoiceSummary(preset: KeyPresetId, canReport: boolean, days: KeyExpiryDays): string {
+  const label = (KEY_PRESETS.find((p) => p.id === preset) ?? KEY_PRESETS[0]!).label;
+  const report = canReport && preset !== "read" ? " · can report" : "";
+  return `${label}${report} · expires in ${expiryLabel(days)}`;
+}
+
 const DAY_MS = 86_400_000;
 
 /** `expiresAt` for a key that lasts `days` from `nowMs`. */
