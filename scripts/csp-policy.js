@@ -1,8 +1,9 @@
 /**
  * Content-Security-Policy building blocks, shared by `next.config.js` (the
  * site-wide Report-Only policy `next dev` sends), `public/_headers` (checked
- * against `strictPolicy()` by `src/config/security-headers.test.ts`) and
- * `scripts/connect-csp.js` (which completes the strict policy after the build).
+ * against `strictPolicy()` and `sitePolicy()` by
+ * `src/config/security-headers.test.ts`) and `scripts/connect-csp.js` (which
+ * completes both policies after the build).
  *
  * Privy's list: https://docs.privy.io/security/implementation-guide/content-security-policy
  */
@@ -42,6 +43,18 @@ const CONNECT_ORIGINS = [
   ...STRICT_RPC_ORIGINS,
   "https://*.solana.com",
 ];
+
+/**
+ * Origins only the site-wide policy adds to `connect-src`: the Solana
+ * subscription socket (`createSolanaRpcSubscriptions`, `wss://api.devnet.solana.com`),
+ * which the Solana signing path opens. Kept out of `CONNECT_ORIGINS` so the
+ * enforced strict policy stays exactly as it is.
+ */
+const SITE_CONNECT_ORIGINS = ["wss://*.solana.com"];
+
+/** The `_headers` block that carries `sitePolicy()`, and the header it is sent as. */
+const SITE_PATH = "/*";
+const SITE_HEADER = "Content-Security-Policy-Report-Only";
 
 /** The pages that get the strict policy (spec R-WEB-2): `_headers` path patterns. */
 const STRICT_PATHS = ["/connect/*", "/agents/enable-paid"];
@@ -107,4 +120,75 @@ function fallbackPolicy({ scriptHashes = [] } = {}) {
   ].join("; ");
 }
 
-module.exports = { PRIVY_FRAMES, CONNECT_ORIGINS, STRICT_SCRIPT_ORIGINS, STRICT_RPC_ORIGINS, STRICT_PATHS, strictPolicy, fallbackPolicy };
+/**
+ * The site-wide policy (security checklist P12), for every page but the
+ * strict ones, which detach it in `public/_headers` and keep their enforced
+ * `strictPolicy()`. Sent as `Content-Security-Policy-Report-Only` first, so a
+ * missed origin shows up as a console report and never breaks sign-in;
+ * promote it to an enforced header once production reports are clean. There
+ * is no report endpoint (no `report-uri`/`report-to`): violations go to the
+ * browser console only.
+ *
+ * - `connectOrigins`: the API and MCP origins of the build's environment
+ *   (`NEXT_PUBLIC_API_BASE_URL`, `NEXT_PUBLIC_MCP_URL`), added by
+ *   `scripts/connect-csp.js` (production) and `next.config.js` (next dev).
+ * - `dev`: `next dev` evaluates code (React refresh), so `'unsafe-eval'`
+ *   there only; a production build never has it.
+ *
+ * `script-src` keeps `'unsafe-inline'`, unlike the strict pages: a static
+ * export has no per-request nonce, and hashes are per page (Next writes its
+ * bootstrap and flight data as 12-22 different inline scripts per page). That
+ * means one `_headers` block per exported page (83 today, against Cloudflare
+ * Pages' 100-rule limit) and a line of about 2,300 characters for the largest
+ * page (against the 2,000-character limit). `style-src` keeps it for the same
+ * reason as `strictPolicy()`: React `style` attributes and Privy's injected
+ * stylesheet.
+ *
+ * `frame-ancestors 'self'` and `base-uri 'self'`: the same framing the enforced
+ * site-wide header allows (the app frames itself in the narrow-viewport checks).
+ */
+function sitePolicy({ connectOrigins = [], dev = false } = {}) {
+  return [
+    "default-src 'self'",
+    ["script-src 'self' 'unsafe-inline'", ...(dev ? ["'unsafe-eval'"] : []), ...STRICT_SCRIPT_ORIGINS].join(" "),
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob: https:",
+    "font-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+    `child-src ${PRIVY_FRAMES.join(" ")}`,
+    `frame-src ${PRIVY_FRAMES.join(" ")}`,
+    ["connect-src 'self'", ...connectOrigins, ...CONNECT_ORIGINS, ...SITE_CONNECT_ORIGINS].join(" "),
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+  ].join("; ");
+}
+
+/** The origins of the URLs given (the build's API and MCP URLs), skipping unset or invalid ones and repeats. */
+function originsOf(...values) {
+  const origins = [];
+  for (const value of values) {
+    try {
+      const origin = value ? new URL(value).origin : null;
+      if (origin && origin !== "null" && !origins.includes(origin)) origins.push(origin);
+    } catch {}
+  }
+  return origins;
+}
+
+module.exports = {
+  PRIVY_FRAMES,
+  CONNECT_ORIGINS,
+  SITE_CONNECT_ORIGINS,
+  SITE_PATH,
+  SITE_HEADER,
+  STRICT_SCRIPT_ORIGINS,
+  STRICT_RPC_ORIGINS,
+  STRICT_PATHS,
+  strictPolicy,
+  fallbackPolicy,
+  sitePolicy,
+  originsOf,
+};

@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
  * Completes the strict Content-Security-Policy of `/connect/*` and
- * `/agents/enable-paid` in `out/_headers`, after `next build` (spec R-WEB-2).
+ * `/agents/enable-paid` in `out/_headers`, after `next build` (spec R-WEB-2),
+ * and the site-wide Report-Only policy of `/*` (`sitePolicy()`, checklist P12),
+ * which gets the API and MCP origins of the build's environment.
  *
  * `public/_headers` carries the policy as `strictPolicy()` writes it, with
  * `script-src 'self'` alone. A static export cannot start under that: Next
@@ -23,7 +25,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
-const { STRICT_PATHS, fallbackPolicy, strictPolicy } = require("./csp-policy");
+const { SITE_HEADER, SITE_PATH, STRICT_PATHS, fallbackPolicy, originsOf, sitePolicy, strictPolicy } = require("./csp-policy");
 
 /** Cloudflare Pages' limit on one `_headers` line. */
 const MAX_LINE = 2000;
@@ -98,15 +100,6 @@ function urlPathOf(outDir, file) {
   return `/${rel.replace(/(^|\/)index\.html$/, "").replace(/\.html$/, "")}`.replace(/\/$/, "") || "/";
 }
 
-/** An origin from a URL in the environment, or null. */
-function originOf(value) {
-  try {
-    return value ? new URL(value).origin : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * `headersText` with each strict block's policy completed.
  *
@@ -122,8 +115,11 @@ function originOf(value) {
  *   the two policies, and a browser enforces both.
  * A pattern with no pages built yet keeps the bare policy.
  */
-function completeHeaders(headersText, pages, connectOrigins) {
+function completeHeaders(headersText, pages, connectOrigins, siteConnectOrigins = connectOrigins) {
   const bare = strictPolicy();
+  const siteBare = sitePolicy();
+  const siteLine = new RegExp(`^(\\s+${SITE_HEADER}:\\s*)(.*)$`);
+  let siteDone = 0;
   const hashesOf = (html) => {
     const hashes = new Set();
     for (const page of html) for (const hash of inlineScriptHashes(page)) hashes.add(hash);
@@ -148,6 +144,15 @@ function completeHeaders(headersText, pages, connectOrigins) {
     if (/^\S/.test(line)) block = line.trim();
     const header = /^\s+([A-Za-z-]+):\s*(.*)$/.exec(line);
     if (header) ((seen[block] ??= {})[header[1]] ??= []).push(header[2].trim());
+    const detach = /^\s+!\s*([A-Za-z-]+)\s*$/.exec(line);
+    if (detach) ((seen[block] ??= {})[`!${detach[1]}`] ??= []).push("");
+    const site = block === SITE_PATH ? siteLine.exec(line) : null;
+    if (site) {
+      if (site[2] !== siteBare) throw new Error(`${SITE_PATH}: its ${SITE_HEADER} is not sitePolicy(); fix public/_headers`);
+      siteDone += 1;
+      out.push(`${site[1]}${sitePolicy({ connectOrigins: siteConnectOrigins })}`);
+      continue;
+    }
     const match = STRICT_PATHS.includes(block) ? /^(\s+Content-Security-Policy:\s*)(.*)$/.exec(line) : null;
     if (!match) {
       out.push(line);
@@ -170,6 +175,12 @@ function completeHeaders(headersText, pages, connectOrigins) {
   out.push(...pending);
   for (const pattern of STRICT_PATHS) {
     if (!done.has(pattern)) throw new Error(`${pattern}: no Content-Security-Policy block in _headers`);
+    // The strict pages keep only their enforced policy: the looser site-wide one is detached there.
+    if (seen[pattern]?.[`!${SITE_HEADER}`]?.length !== 1) throw new Error(`${pattern}: needs exactly one "! ${SITE_HEADER}" in _headers`);
+  }
+  if (siteDone !== 1) throw new Error(`${SITE_PATH}: needs exactly one ${SITE_HEADER} in _headers`);
+  for (const other of Object.keys(seen)) {
+    if (other !== SITE_PATH && seen[other][SITE_HEADER]) throw new Error(`${SITE_HEADER}: only ${SITE_PATH} may set it, not ${other}`);
   }
   for (const [pattern, required] of Object.entries(SPLAT_HEADERS)) {
     for (const [name, value] of Object.entries(required)) {
@@ -199,8 +210,9 @@ function main() {
     );
   }
   if (!Object.keys(pages["/connect/*"]).length) throw new Error("/connect/*: no exported pages found under out/connect");
-  const api = originOf(process.env.NEXT_PUBLIC_API_BASE_URL);
-  const text = completeHeaders(fs.readFileSync(file, "utf8"), pages, api ? [api] : []);
+  const api = originsOf(process.env.NEXT_PUBLIC_API_BASE_URL);
+  const site = originsOf(process.env.NEXT_PUBLIC_API_BASE_URL, process.env.NEXT_PUBLIC_MCP_URL);
+  const text = completeHeaders(fs.readFileSync(file, "utf8"), pages, api, site);
   fs.writeFileSync(file, text);
   for (const pattern of STRICT_PATHS) {
     console.log(`connect-csp: ${pattern}: ${Object.keys(pages[pattern]).join(", ") || "no pages yet"}`);
@@ -209,8 +221,9 @@ function main() {
   let block = null;
   for (const line of text.split("\n")) {
     if (/^\S/.test(line)) block = line.trim();
-    else if (/^\s+Content-Security-Policy:/.test(line)) {
-      console.log(`connect-csp: ${block}: ${line.length}/${MAX_LINE} characters (${MAX_LINE - line.length} left)`);
+    else if (/^\s+Content-Security-Policy(-Report-Only)?:/.test(line)) {
+      const name = line.trim().split(":")[0];
+      console.log(`connect-csp: ${block} ${name}: ${line.length}/${MAX_LINE} characters (${MAX_LINE - line.length} left)`);
     }
   }
 }
