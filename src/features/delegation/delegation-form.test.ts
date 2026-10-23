@@ -348,7 +348,7 @@ describe("keeping the current expiry", () => {
     const form = { ...editDelegationForm(grant, NOW), keepExpiry: true };
     const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, soon);
     expect(parsed.ok).toBe(false);
-    expect(!parsed.ok && parsed.errors.validDays).toMatch(/less than about 1 hour 5 minutes/);
+    expect(!parsed.ok && parsed.errors.validDays).toMatch(/less than about 3 hours 7 minutes/);
     // And a grant that close to its end does not start on "keep".
     expect(
       editDelegationForm({ ...grant, validUntil: new Date(soon * 1000).toISOString() }, NOW)
@@ -386,7 +386,7 @@ describe("delegationInvalidText", () => {
       refusal("DelegateValidUntilInvalid — validUntil must be at least 1800004200"),
     );
     expect(text).toMatch(/expiry is too soon/);
-    expect(text).toMatch(/1 hour 5 minutes/);
+    expect(text).toMatch(/3 hours 7 minutes/);
     expect(text).not.toMatch(/DelegateValidUntilInvalid|1800004200/);
   });
 
