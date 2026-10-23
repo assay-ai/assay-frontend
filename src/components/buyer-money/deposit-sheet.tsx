@@ -304,7 +304,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
           {evm ? " Two wallet prompts: one allows the transfer, one makes it." : ""}
         </li>
         <li>Deposits settle on chain and are final: there is no card and no chargeback.</li>
-        <li>You can withdraw what you have not spent at any time; it takes about an hour.</li>
+        <li>You can withdraw what you have not spent at any time; it takes about three hours.</li>
       </ul>
     </WalletActionSheet>
   );

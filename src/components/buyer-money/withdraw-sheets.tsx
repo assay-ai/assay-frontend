@@ -201,7 +201,7 @@ export function WithdrawSheet({
       description={
         cancelling
           ? "Nothing leaves your escrow. Your agents can pay for calls again straight away."
-          : "Takes about an hour: ask now (free), then claim it to your wallet."
+          : "Takes about three hours: ask now (free), then claim it to your wallet."
       }
       steps={steps}
       label={label}
@@ -220,7 +220,7 @@ export function WithdrawSheet({
             paused until then; free calls keep working.
           </>
         ) : (
-          `Next: claim it on the Funding page in about an hour. Paid calls on ${chainName ?? "this chain"} are paused until then; free calls keep working.`
+          `Next: claim it on the Funding page in about three hours. Paid calls on ${chainName ?? "this chain"} are paused until then; free calls keep working.`
         )
       }
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
@@ -232,7 +232,7 @@ export function WithdrawSheet({
             orientation="auto"
             steps={[
               { id: "request", label: "Request (free)", state: "current" },
-              { id: "wait", label: "Wait ~1 hour", state: "upcoming" },
+              { id: "wait", label: "Wait ~3 hours", state: "upcoming" },
               { id: "claim", label: "Claim (you pay gas)", state: "upcoming" },
             ]}
           />
