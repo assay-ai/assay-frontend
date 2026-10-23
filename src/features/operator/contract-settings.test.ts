@@ -173,6 +173,9 @@ describe("the arbiter, verifier keys and the dispute window", () => {
     expect(checkSlashDelay("23", "days", 259_200).ok).toBe(false);
     expect(checkSlashDelay("3", "days", 259_200)).toMatchObject({ ok: false, error: /current/ });
     expect(checkSlashDelay("48", "hours", 259_200)).toEqual({ ok: true, seconds: 172_800 });
+    // D-23: a production chain's floor is 48 h, read from the chain.
+    expect(checkSlashDelay("47", "hours", 259_200, 172_800)).toMatchObject({ ok: false, error: /48 hours/ });
+    expect(checkSlashDelay("48", "hours", 259_200, 172_800)).toEqual({ ok: true, seconds: 172_800 });
   });
 
   it("matches a typed confirmation word loosely", () => {
