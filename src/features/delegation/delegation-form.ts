@@ -56,12 +56,12 @@ export const REDEEM_GRACE_SECONDS = 1_800;
 
 /**
  * The nearest expiry the backend builds a grant for (assay-evm D-21): at least
- * `TIGHTEN_DELAY_SECONDS` (3600) after the signed request's `deadline`, which is
- * the chain's clock plus 300 s — so 3900 s out — plus a margin for the time the
+ * `TIGHTEN_DELAY_SECONDS` (10,800 since D-24) after the signed request's `deadline`,
+ * which is the chain's clock plus 300 s — so 11,100 s out — plus a margin for the time the
  * person takes to sign and for clock drift. Closer, it is refused
  * `SETTLEMENT_DELEGATION_INVALID`.
  */
-export const MIN_VALID_UNTIL_LEAD_SECONDS = 3_900 + 120;
+export const MIN_VALID_UNTIL_LEAD_SECONDS = 11_100 + 120;
 
 /** The backend's refusal of a grant the escrow would refuse (bad caps or expiry). */
 export const DELEGATION_INVALID_CODE = "SETTLEMENT_DELEGATION_INVALID";
