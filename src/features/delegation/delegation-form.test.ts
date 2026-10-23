@@ -342,9 +342,9 @@ describe("keeping the current expiry", () => {
     expect(parsed.ok && parsed.body.validUntil).toBe(String(NOW + 10 * 86_400));
   });
 
-  it("refuses to keep an expiry closer than the D-21 floor (3900 s + margin)", () => {
-    // Past the old 30-minute grace, but inside the hour after the request's deadline.
-    const soon = NOW + 3_900;
+  it("refuses to keep an expiry closer than the D-21 floor (11100 s + margin)", () => {
+    // Past the old one-hour floor, but inside the three hours (D-24) after the request's deadline.
+    const soon = NOW + 11_100;
     const form = { ...editDelegationForm(grant, NOW), keepExpiry: true };
     const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, soon);
     expect(parsed.ok).toBe(false);
@@ -365,8 +365,8 @@ describe("keeping the current expiry", () => {
       editDelegationForm({ ...grant, validUntil: new Date(edge * 1000).toISOString() }, NOW)
         .keepExpiry,
     ).toBe(true);
-    expect(MIN_VALID_UNTIL_LEAD_SECONDS).toBeGreaterThan(3_900);
-    expect(MIN_VALID_UNTIL_LEAD_SECONDS).toBeLessThanOrEqual(3_900 + 300);
+    expect(MIN_VALID_UNTIL_LEAD_SECONDS).toBeGreaterThan(11_100); // D-24: 3 h tighten delay + 300 s deadline
+    expect(MIN_VALID_UNTIL_LEAD_SECONDS).toBeLessThanOrEqual(11_100 + 300);
   });
 });
 
