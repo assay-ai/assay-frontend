@@ -133,7 +133,8 @@ const DEBT_CAUSE_TEXT: Record<string, string> = {
   EscrowWindowLimitExceeded: "it was over the escrow's spending limit for the period",
   EscrowInsufficient: "the escrow did not hold enough funds",
   VoucherSeqNotIncreasing: "a later payment was collected first",
-  VoucherSeqGapTooLarge: "too many later payments were collected first",
+  VoucherSeqUsed: "this payment had already been collected",
+  VoucherSeqGapTooLarge: "its payment number was too far ahead of the escrow's",
   SignerIsNotPayer: "it was not signed by the paying wallet or its agent key",
   InvalidSignature: "its signature could not be checked",
 };
