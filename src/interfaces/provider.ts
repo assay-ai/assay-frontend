@@ -67,7 +67,9 @@ export interface ProviderMe {
  *   verifier key's) is full and an upheld penalty is waiting to execute.
  * - `STAKE_FULLY_RESERVED`: pending penalties reserve the stake that could
  *   back another one.
- * - `BONDED_BELOW_MINIMUM`: the bonded stake is below `minimumStake`.
+ * - `BONDED_BELOW_MINIMUM`: the FREE bonded stake (`freeBondedOf` = bonded minus
+ *   pending and disputed penalties, assay-evm D-26) is below `minimumStake`. A
+ *   proposed penalty reserves stake at once, so it can cause this by itself.
  */
 export type SlashHoldReason = "SLASH_WINDOW_FULL" | "STAKE_FULLY_RESERVED" | "BONDED_BELOW_MINIMUM";
 

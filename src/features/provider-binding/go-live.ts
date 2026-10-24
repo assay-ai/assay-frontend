@@ -364,6 +364,6 @@ export function stakeSummary({
   const exposure = `Why ${multiplier} × your price: your stake has to cover about ${multiplier} calls' worth of refunds to buyers if your API stops working, before anything else can happen. It stays yours unless you break your promise.`;
   // The same 1.5× cushion the Stake page calls "Recommended".
   const recommended = fromMajor(major(overall).mul(RECOMMENDED_FACTOR), overall);
-  const recommendedLine = `We recommend ${fmt(recommended)} (1.5 × ${fmt(overall)}), so one penalty does not take you below the minimum and pause your paid tools.`;
+  const recommendedLine = `We recommend ${fmt(recommended)} (1.5 × ${fmt(overall)}), so one penalty does not take you below the minimum and pause your paid tools: a proposed penalty counts against your stake at once.`;
   return { perTool, total: `${lead}; ${tail}.`, tone, exposure, recommended: recommendedLine };
 }

@@ -82,7 +82,9 @@ const REASON_LABEL: Record<string, string> = {
 const FORFEIT_PREFIX = "provider_forfeit:";
 
 const FORFEIT_CAUSE_LABEL: Record<string, string> = {
-  ProviderBelowMinimumStake: "Forfeited — your stake was below the minimum",
+  ProviderBelowMinimumStake: "Forfeited — your free stake (stake minus pending penalties) was below the minimum",
+  ProviderStakeHeldByUnplannedSlash:
+    "Not collected — your stake was held by penalty records Assay did not make (for example, signed by a revoked key); not counted as your fault",
   ProviderBlocked: "Forfeited — your provider account was blocked",
   PayeeBlocked: "Forfeited — your payout address was blocked",
   PayeeBlockedOnChain: "Forfeited — your payout address was blocked on chain",

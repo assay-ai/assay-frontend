@@ -284,7 +284,7 @@ const INELIGIBILITY: Record<string, string> = {
   PAYOUT_ACCOUNT_UNPROVED: "The provider has not proven their payout address",
   PAYOUT_ENROLMENT_NOT_ACTIVE: "The provider is not set up on this chain",
   STAKE_UNKNOWN: "The provider's stake could not be read",
-  STAKE_BELOW_MINIMUM: "The provider's stake is below the minimum",
+  STAKE_BELOW_MINIMUM: "The provider's free stake (stake minus pending penalties) is below the minimum",
   STAKE_ASSET_MISMATCH: "The provider's stake is in the wrong currency",
   STAKE_GRACE_EXPIRED: "The provider did not top up their stake in time",
   CEILING_REACHED: "The provider's call limit was reached",
@@ -295,7 +295,7 @@ const INELIGIBILITY: Record<string, string> = {
   REVOKED: "Revoked",
   SLASH_WINDOW_FULL: "Too many penalties are open at once",
   STAKE_FULLY_RESERVED: "All stake is reserved for open penalties",
-  BONDED_BELOW_MINIMUM: "Stake is below the minimum",
+  BONDED_BELOW_MINIMUM: "Free stake (stake minus pending penalties) is below the minimum",
 };
 
 /* ------------------------------------------------------------------------

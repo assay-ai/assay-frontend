@@ -31,9 +31,13 @@ describe("call class labels (BUG-R5-03)", () => {
   it("names the cause of a forfeited voucher", () => {
     expect(classLabel("PROVIDER_FORFEITED")).toBe("Forfeited by you");
     expect(reasonLabel("provider_forfeit:ProviderBelowMinimumStake")).toBe(
-      "Forfeited — your stake was below the minimum"
+      "Forfeited — your free stake (stake minus pending penalties) was below the minimum"
     );
     expect(reasonLabel("provider_forfeit:PayeeBlockedOnChain")).toContain("blocked on chain");
+    // A shortfall caused only by penalty records the provider did not cause.
+    expect(reasonLabel("provider_forfeit:ProviderStakeHeldByUnplannedSlash")).toContain(
+      "not counted as your fault",
+    );
     expect(reasonLabel("provider_forfeit:SomethingElse")).toBe("Forfeited — SomethingElse");
   });
 
