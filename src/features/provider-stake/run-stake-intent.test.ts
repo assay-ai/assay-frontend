@@ -220,7 +220,7 @@ describe("runStakeIntent", () => {
 describe("runStakeIntent on eip155", () => {
   const TESTNET = "eip155:46630";
   const PROVIDER = "0x31b1DF6F36ec62075a3BE03a5C0BebB06534bA72";
-  const STAKE = "0x7242F853db478A28Ae76Ace808212d4B68aa73e7";
+  const STAKE = "0xAfe1e699d188Ab5042B693978E889D7c5085F710";
   const USDG = "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
   const DEPOSIT = { kind: "DEPOSIT" as const, amount: "50000000" };
 
