@@ -11,6 +11,8 @@ import {
   needsYouCount,
   needsYouWork,
   oldestCallDisputeDue,
+  RECONCILIATION_STALE_SECONDS,
+  reconciliationIssues,
   overdueToolRequests,
   staleChainData,
   staleChainSentence,
@@ -137,5 +139,59 @@ describe("D16: when Home may not look calm", () => {
     );
     expect(calmStateBlocker({ stale: null, unreadable: true })).toMatch(/^Can't confirm: chain data freshness could not be read/);
     expect(calmStateBlocker({ stale: null, unreadable: false })).toBeNull();
+  });
+});
+
+/* Lot 1 D16: operator Home says "All systems normal" only when reconciliation is OK and fresh. */
+describe("reconciliationIssues", () => {
+  const row = (severity: string, ageSeconds = 60) => ({
+    asset: "eip155:46630/erc20:0xabc",
+    differenceDisplay: 0,
+    severity,
+    ageSeconds,
+    gate: null,
+  });
+
+  it("is quiet when every asset is OK and fresh, and before the rows are read", () => {
+    expect(reconciliationIssues([row("OK")])).toEqual([]);
+    expect(reconciliationIssues(undefined)).toEqual([]);
+  });
+
+  it("names a critical or warning asset, a stale run, no run and an unreadable answer", () => {
+    expect(reconciliationIssues([row("CRITICAL")]).map((i) => i.text)).toEqual([
+      "Reconciliation critical on eip155:46630: withdrawals are frozen",
+    ]);
+    expect(reconciliationIssues([row("WARN")], { assetName: () => "Robinhood" }).map((i) => i.text)).toEqual([
+      "Reconciliation warning on Robinhood",
+    ]);
+    expect(reconciliationIssues([row("OK", RECONCILIATION_STALE_SECONDS + 60)]).map((i) => i.text)).toEqual([
+      "Reconciliation on eip155:46630 last ran 16 min ago",
+    ]);
+    expect(reconciliationIssues([]).map((i) => i.id)).toEqual(["recon:none"]);
+    expect(reconciliationIssues(undefined, { unreadable: true }).map((i) => i.id)).toEqual(["recon:unreadable"]);
+  });
+});
+
+describe("reconciliation fails safe (lot 1 review M1/M2)", () => {
+  const row = (ageSeconds: unknown, severity = "OK") =>
+    ({ asset: "eip155:46630/erc20:0xabc", differenceDisplay: 0, severity, ageSeconds, gate: null }) as never;
+
+  it("never reads a missing or non-numeric run age as fresh", () => {
+    expect(reconciliationIssues([row(undefined)]).map((i) => i.text)).toEqual([
+      "Reconciliation on eip155:46630: when it last ran is unknown",
+    ]);
+    expect(reconciliationIssues([row(Number.NaN)])).toHaveLength(1);
+    expect(reconciliationIssues([row(null)])).toHaveLength(1);
+  });
+
+  it("keeps Home from 'Nothing needs you' on a critical or unreadable reconciliation", () => {
+    expect(calmStateBlocker({ stale: null, unreadable: false, reconciliation: reconciliationIssues([row(60, "CRITICAL")]) })).toBe(
+      "Reconciliation critical on eip155:46630: withdrawals are frozen",
+    );
+    expect(calmStateBlocker({ stale: null, unreadable: false, reconciliation: reconciliationIssues(undefined, { unreadable: true }) })).toBe(
+      "Reconciliation could not be read",
+    );
+    // A warning alone does not block the calm state.
+    expect(calmStateBlocker({ stale: null, unreadable: false, reconciliation: reconciliationIssues([row(60, "WARN")]) })).toBeNull();
   });
 });

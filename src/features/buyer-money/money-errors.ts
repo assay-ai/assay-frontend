@@ -5,15 +5,19 @@ import { EvmDepositRefused } from "@/features/funding/evm-deposit";
 import { ApiError } from "@/libs/ApiClient";
 import { debtRefusalSentence } from "@/libs/buyer-debt";
 import { isRailNotOffered, railNotOfferedText } from "@/libs/chains/paid-rails";
-import { knowsError, plainError } from "@/libs/plain-language";
+import { knowsError, plainApiError, plainError } from "@/libs/plain-language";
+
+/** Said up front when `GET /escrow` reports `withdrawalsFrozen`, and on the refusal itself. */
+export const WITHDRAWALS_FROZEN_TEXT =
+  "Withdrawals are paused for everyone while we check a reconciliation difference. Nothing was taken from your escrow. Try again later.";
 
 /**
  * One sentence for a failed money action (deposit, caps, withdraw, claim,
  * pay permission). The raw message stays under SignAction's Details.
  */
+
 const ESCROW_REFUSALS: Record<string, string> = {
-  SETTLEMENT_WITHDRAWALS_FROZEN:
-    "Withdrawals are paused for everyone while we check a reconciliation difference. Nothing was taken from your escrow. Try again later.",
+  SETTLEMENT_WITHDRAWALS_FROZEN: WITHDRAWALS_FROZEN_TEXT,
   SETTLEMENT_WITHDRAWAL_NOT_YET_AVAILABLE:
     "There is nothing to claim yet: either no request is standing, or its wait has not finished.",
   PAYMENT_ESCROW_NOT_OPEN: "You have no escrow yet. Your first deposit opens it.",
@@ -45,7 +49,7 @@ export function describeMoneyError(error: unknown): string {
   if (debt) return debt;
   if (error instanceof ApiError) {
     if (ESCROW_REFUSALS[error.code]) return ESCROW_REFUSALS[error.code]!;
-    return knowsError(error.code) ? plainError(error.code) : "That did not go through. Nothing was signed. Try again.";
+    return knowsError(error.code) ? plainApiError(error) : "That did not go through. Nothing was signed. Try again.";
   }
   return "That did not go through. You can try again.";
 }

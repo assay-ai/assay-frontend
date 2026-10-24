@@ -24,6 +24,7 @@ import {
   isUserRejection,
   lastExplorerUrl,
   runWalletSteps,
+  signatureCountNote,
   simulatedSteps,
   stepStatuses,
   trackerHeadline,
@@ -298,6 +299,7 @@ export function SignAction({
   const messageId = React.useId();
   const describedBy = disabled && !running && message ? messageId : undefined;
   const single = steps.length === 1 ? steps[0] : undefined;
+  const countNote = signatureCountNote(steps);
 
   return (
     <div className={cn("flex w-full flex-col gap-3", className)}>
@@ -356,6 +358,11 @@ export function SignAction({
             // Always laid out for a one-step flow, so nothing moves while it runs.
             <span className="flex items-center justify-center gap-1.5 text-body-xs text-03">
               One wallet prompt <CostBadge cost={single.cost} />
+            </span>
+          ) : countNote ? (
+            // Said before the first click: the second signature is never a surprise (lot 1 D14).
+            <span className="flex items-center justify-center gap-1.5 text-center text-body-xs text-03" data-testid="signature-count">
+              {countNote}
             </span>
           ) : null}
         </div>

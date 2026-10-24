@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { collectionAt, collectionView, isCollectionState, timelineStamp, timelineZoneNote } from "./receipt-collection";
+import { collectionAt, collectionView, isCollectionState, receiptRefundedByReport, timelineStamp, timelineZoneNote } from "./receipt-collection";
 
 const listedPrice = { amount: "2500000", asset: "a", decimals: 6 };
 
@@ -40,8 +40,22 @@ describe("collectionView", () => {
     }
   });
 
+  it("reads refundedByReport first, the note only when an older server sends no flag (BUG-X-01)", () => {
+    expect(receiptRefundedByReport({ refundedByReport: true, chargeNote: null })).toBe(true);
+    expect(receiptRefundedByReport({ refundedByReport: false, chargeNote: "voided:REFUND" })).toBe(false);
+    expect(receiptRefundedByReport({ chargeNote: "voided:DISPUTE_UPHELD" })).toBe(true);
+    expect(receiptRefundedByReport({ chargeNote: "voided:REFUND" })).toBe(false);
+    const flagged = collectionView("DEBT_VOIDED", { listedPrice, chargeNote: null, refundedByReport: true });
+    expect(flagged.headline).toBe("Refunded: your report was accepted");
+    expect(flagged.explain).not.toMatch(/lapsed/);
+  });
+
   it("tells a REFUND void (failed checks) from a VOID void (no usable result)", () => {
     expect(collectionView("DEBT_VOIDED", { listedPrice, chargeNote: "voided:REFUND" }).explain).toMatch(/failed its checks/);
+    const upheld = collectionView("DEBT_VOIDED", { listedPrice, chargeNote: "voided:DISPUTE_UPHELD" });
+    expect(upheld.headline).toBe("Refunded: your report was accepted");
+    expect(upheld.explain).not.toMatch(/lapsed|failed its checks|debt/);
+    expect(upheld.timeline.label).toBe("Refunded: your report was accepted");
     const view = collectionView("DEBT_VOIDED", { listedPrice, chargeNote: "voided:VOID" });
     expect(view.explain).toMatch(/had no usable result/);
     expect(view.explain).not.toMatch(/failed its checks/);

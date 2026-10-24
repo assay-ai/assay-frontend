@@ -12,22 +12,40 @@ import { notCharged, toDecimal } from "@/utils/money";
  * A fifth word, Owed, is buyer debt (`debt` OUTSTANDING or WRITTEN_OFF): the
  * call was served but its payment was not collected yet, so it is neither
  * charged nor let off, and paid calls stay paused until it is settled.
+ *
+ * A sixth, Did not run, is an EXPIRED call whose payment was never secured:
+ * newer servers send its `withheld` as zero (nothing was held, it never reached
+ * the provider), so it is not one of the not-charged calls the totals and
+ * `GET /withheld` count. Without `withheld` (older servers) an EXPIRED call
+ * stays not charged.
  */
 
-export type CallOutcome = "charged" | "not-charged" | "free" | "checking" | "owed";
+export type CallOutcome = "charged" | "not-charged" | "free" | "checking" | "owed" | "not-run";
 
 export const IN_FLIGHT_STATUSES = ["CREATED", "FUNDS_SECURED", "PROVIDER_EXECUTING", "VERIFYING"] as const;
 export const NOT_CHARGED_STATUSES = ["REFUNDED", "VOIDED", "EXPIRED"] as const;
 export const CHARGED_STATUSES = ["SETTLED"] as const;
+
+/** An EXPIRED call that never held money (`withheld` sent and zero): it never ran. */
+export function neverRan(call: { status: string; charged: Money; withheld?: Money | null }): boolean {
+  return (
+    call.status === "EXPIRED" &&
+    call.withheld != null &&
+    toDecimal(call.withheld).isZero() &&
+    toDecimal(call.charged).isZero()
+  );
+}
 
 export function callOutcome(call: {
   status: string;
   price: Money;
   charged: Money;
   debt?: CallDebt | null;
+  withheld?: Money | null;
 }): CallOutcome {
   if (toDecimal(call.price).isZero()) return "free";
   if ((IN_FLIGHT_STATUSES as readonly string[]).includes(call.status)) return "checking";
+  if (neverRan(call)) return "not-run";
   if (call.debt === "OUTSTANDING" || call.debt === "WRITTEN_OFF") return "owed";
   if (toDecimal(call.charged).gt(0) && !toDecimal(notCharged(call.price, call.charged)).gt(0)) return "charged";
   if ((NOT_CHARGED_STATUSES as readonly string[]).includes(call.status)) return "not-charged";
@@ -77,7 +95,7 @@ export function refundableOnly(filter: CallsFilter): true | undefined {
 }
 
 export function matchesFilter(
-  call: { status: string; price: Money; charged: Money; debt?: CallDebt | null },
+  call: { status: string; price: Money; charged: Money; debt?: CallDebt | null; withheld?: Money | null },
   filter: CallsFilter): boolean {
   if (filter === "all") return true;
   // The API already kept only the refundable ones; nothing to re-derive here.

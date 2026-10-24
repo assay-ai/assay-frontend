@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { debtBlocksPaidCalls, resumeSheetCopy } from "@/features/buyer-debt/debt-summary";
 import { useMeStatusPart } from "@/features/me-status/use-me-status";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
@@ -96,7 +96,7 @@ export function PauseAllConfirm({
       changes={[{ label: "Paid calls", before: pausing ? "Running" : "Paused", after: pausing ? "Paused" : resume.after }]}
       confirmLabel={pausing ? "Pause all paid calls" : "Resume paid calls"}
       onConfirm={onConfirm}
-      describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "That did not go through. Try again.")}
+      describeError={(error) => (error instanceof ApiError ? plainApiError(error) : "That did not go through. Try again.")}
     />
   );
 }

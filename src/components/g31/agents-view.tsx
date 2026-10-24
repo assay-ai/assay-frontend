@@ -10,6 +10,7 @@ import { PaidByInvitation } from "@/components/buyer-money/get-started";
 import { LetAgentPaySheet } from "@/components/buyer-money/let-agent-pay-sheet";
 import { EffectiveLimitLines, type LimitsContext, rowsFor, SpendingLimitsActions, useLimitsContext } from "@/components/buyer-money/agent-limits";
 import { type AgentRow, type KeyRow } from "@/components/buyer-money/use-agents";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { limitLines } from "@/features/buyer-money/spending-limits";
 import { CapMeter } from "@/components/patterns/cap-meter";
 import { CopyChip } from "@/components/patterns/copy-chip";
@@ -22,7 +23,8 @@ import { Field } from "@/components/ui/field";
 import { AGENT_LABEL_MAX, agentLabelError } from "@/features/buyer-money/agent-label";
 import { type AgentReadiness, credentialIsLive } from "@/features/buyer-money/agent-readiness";
 import { capsToForm } from "@/features/buyer-money/caps";
-import { credentialLabel } from "@/features/buyer-money/mcp-config";
+import { keyExpiry, keyMayPay, type KeyExpiryView, scopesText } from "@/features/buyer-money/key-scopes";
+import { shownKeyHint } from "@/features/buyer-money/mcp-config";
 import { permissionExpiry } from "@/features/buyer-money/permission-expiry";
 import { type DelegateBinding, findDelegation, supportsDelegation } from "@/features/delegation/delegation-form";
 import { dollars, fingerprint } from "@/features/delegation/enable-paid";
@@ -31,7 +33,7 @@ import { ME_STATUS_KEY } from "@/features/me-status/use-me-status";
 import type { EscrowDelegate } from "@/interfaces";
 import { formatDate } from "@/libs/utc-time";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { shortAddress } from "@/libs/chains/format";
 import { firstDepositOpensEscrow } from "@/libs/chains/registry";
 import { renameAgent, revokeCredential } from "@/services/account.service";
@@ -44,6 +46,7 @@ import { AgentAccessCard } from "@/components/toolsets/agent-access-card";
 import { ServersInUse } from "@/components/toolsets/servers-in-use";
 import { UpdateFromAlert } from "@/components/toolsets/update-sheet";
 
+import { DiscardPendingKey } from "./discard-pending-key";
 import { explainStopFailure, PayerDelegationsPanel, StopPaymentKeySheet, useStopPaymentKey } from "./agent-payment-delegation";
 import { relativeTime } from "./format";
 import {
@@ -98,7 +101,7 @@ export type PaymentKeyOnChain =
 export interface CredentialRowView {
   /** Not revoked and not expired. */
   live: boolean;
-  /** "Signed in from Assay app (assay-mcp)", "Signed in from {app} ({domain}) · free tools only", "API key {prefix}…". */
+  /** "Signed in from Assay app (assay-mcp)", "Signed in from {app} ({domain}) · free tools only", "API key assay_sk_live_…2fds". */
   source: string;
   /** The payment-key line, or null when the source line already says "free tools only". */
   paymentLine: string | null;
@@ -116,6 +119,12 @@ export interface CredentialRowView {
   keyState: RevokeKeyState;
   /** A revoked or expired row whose key may still be active (chain unknown): kept in view, never folded away. */
   mayBeActive: boolean;
+  /** What the key may do, in plain words ("Calls tools · pays · reads activity"). */
+  scopes: string;
+  /** When it ends ("Expires Jan 20, 2027"), or null when it has no end date. */
+  expiry: KeyExpiryView | null;
+  /** A new payment key waiting for the person's approval, or null. */
+  pending: { text: string; note: string } | null;
 }
 
 export interface CredentialRowContext {
@@ -164,11 +173,13 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
   // chain says it is not (or no longer) authorised. Unknown is never "free".
   const provenFree = chain.kind === "no-key" || chain.kind === "off" || chain.kind === "not-evm" || chain.kind === "expired";
   const client = key.issuedVia === "OAUTH" ? key.oauthClient ?? null : null;
-  const paymentClient = key.issuedVia === "API_KEY" || client?.paymentClient === true;
+  // A key without the payments scope can never pay, whatever its client (the API refuses it).
+  const paymentClient = (key.issuedVia === "API_KEY" || client?.paymentClient === true) && keyMayPay(key.scopes);
 
   let source: string;
   if (key.issuedVia === "API_KEY") {
-    source = `API key ${credentialLabel(key)}`;
+    const hint = shownKeyHint(key.hint);
+    source = hint ? `API key ${hint}` : "API key";
   } else if (client?.paymentClient) {
     source = "Signed in from Assay app (assay-mcp)";
   } else {
@@ -215,7 +226,31 @@ export function credentialRowView(key: KeyRow, ctx: CredentialRowContext): Crede
   const keyState: RevokeKeyState = heldByLive ? "none" : activeOnChain ? "active" : unknown ? "unknown" : "none";
   const mayBeActive = !live && unknown && !heldByLive;
 
-  return { live, source, paymentLine, paymentClient, chain, activeOnChain, stopIt, keyState, mayBeActive };
+  const pending = key.pendingDelegateAccount
+    ? {
+        text:
+          `New payment key ${fingerprint(key.pendingDelegateAccount)} is waiting for your approval` +
+          (key.pendingDelegateRequestedAt ? ` · asked ${formatDate(key.pendingDelegateRequestedAt, { now: ctx.nowMs })}` : ""),
+        note: key.delegateAccount
+          ? `It replaces ${fingerprint(key.delegateAccount)}, which keeps paying until you approve. To approve, open the link your app showed.`
+          : "To approve, open the link your app showed.",
+      }
+    : null;
+
+  return {
+    live,
+    source,
+    paymentLine,
+    paymentClient,
+    chain,
+    activeOnChain,
+    stopIt,
+    keyState,
+    mayBeActive,
+    scopes: scopesText(key.scopes),
+    expiry: keyExpiry(key.expiresAt, ctx.nowMs),
+    pending,
+  };
 }
 
 /**
@@ -334,7 +369,7 @@ export function AgentsView() {
         <PageState
           kind="error"
           title="Your agents could not be loaded"
-          description={data.agentsQuery.error instanceof ApiError ? plainError(data.agentsQuery.error.code) : undefined}
+          description={data.agentsQuery.error instanceof ApiError ? <ApiErrorSentence error={data.agentsQuery.error} /> : undefined}
           code={data.agentsQuery.error instanceof ApiError ? data.agentsQuery.error.code : null}
           onRetry={() => void data.agentsQuery.refetch()}
         />
@@ -355,6 +390,7 @@ export function AgentsView() {
             keys={data.keys[agent.agentId]}
             keysPending={data.keysQuery.isPending}
             keysFailed={data.keysQuery.isError}
+            keysHidden={data.keysHiddenFor.has(agent.agentId)}
             onRetryKeys={data.refetchKeys}
             readiness={data.readiness[agent.agentId]!}
             escrowReady={
@@ -393,7 +429,7 @@ export function AgentsView() {
         tightenDelaySeconds={data.delegatesQuery.data?.tightenDelaySeconds}
         onRevoke={() => revokeCredential(lastRevoke!.agent.agentId, lastRevoke!.key.id)}
         onStopOnChain={() => stopPaymentKey(lastRevoke!.key.delegateAccount!)}
-        describeRevokeError={(error) => (error instanceof ApiError ? plainError(error.code) : "It could not be revoked. Nothing changed; try again.")}
+        describeRevokeError={(error) => (error instanceof ApiError ? plainApiError(error) : "It could not be revoked. Nothing changed; try again.")}
         describeStopError={explainStopFailure}
         onDone={(outcome, keyState) => {
           refresh();
@@ -470,6 +506,7 @@ function CredentialRowItem({
   onEditAccess,
   onPaymentLimits,
   onRevoke,
+  onChanged,
 }: {
   credential: KeyRow;
   view: CredentialRowView;
@@ -478,6 +515,8 @@ function CredentialRowItem({
   onEditAccess: () => void;
   onPaymentLimits: () => void;
   onRevoke: () => void;
+  /** The list is read again (after a key waiting for approval is discarded). */
+  onChanged: () => void;
 }) {
   // Only a key the buyer already authorised on chain (active or expired) is changed here. A new
   // key goes through the enable-paid page, which checks it against the one on the agent's
@@ -494,13 +533,32 @@ function CredentialRowItem({
           {credential.lastUsedAt ? `Last used ${relativeTime(credential.lastUsedAt)}` : "Never used"}
         </span>
       </div>
-      <span className={cn("text-body-xs text-02", credential.prefix ? "font-mono" : undefined)} data-testid="credential-source">
+      <span className={cn("text-body-xs text-02", shownKeyHint(credential.hint) ? "font-mono" : undefined)} data-testid="credential-source">
         {view.source}
+      </span>
+      <span className="text-body-xs text-02" data-testid="credential-scopes">
+        {view.scopes}
+        {view.expiry ? (
+          <>
+            {" · "}
+            <span className={view.expiry.soon ? "text-warning-700" : undefined} data-testid="credential-expiry">
+              {view.expiry.text}
+              {view.expiry.soon ? ": create a new key soon" : ""}
+            </span>
+          </>
+        ) : null}
       </span>
       {view.paymentLine ? (
         <span className="text-body-xs text-02" data-testid="credential-payment-key">
           {view.paymentLine}
         </span>
+      ) : null}
+      {view.pending ? (
+        <div className="flex flex-col gap-0.5 rounded-md bg-warning-10 px-2.5 py-1.5" data-testid="credential-pending-key">
+          <span className="text-body-xs text-warning-700">{view.pending.text}</span>
+          <span className="text-body-xs text-02">{view.pending.note}</span>
+          <DiscardPendingKey agentId={credential.agentId} credentialId={credential.id} onDiscarded={onChanged} />
+        </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-2 pt-1">
         <Button size="sm" variant="secondary" type="button" data-testid="edit-access" onClick={onEditAccess}>
@@ -667,6 +725,7 @@ function AgentCard({
   keys,
   keysPending,
   keysFailed,
+  keysHidden = false,
   onRetryKeys,
   readiness,
   escrowReady,
@@ -685,6 +744,8 @@ function AgentCard({
   keysPending: boolean;
   /** The keys could not be read: say so, never "no key". */
   keysFailed: boolean;
+  /** The keys are not shown to this session (agent-kind, BUG-DEMO-02): say so, no retry. */
+  keysHidden?: boolean;
   onRetryKeys: () => void;
   readiness: AgentReadiness;
   escrowReady: boolean;
@@ -759,7 +820,11 @@ function AgentCard({
       </header>
 
       <SubRow n={1} title="Keys">
-        {keysFailed ? (
+        {keysHidden ? (
+          <p className="text-body-13 text-02" data-testid="keys-hidden">
+            {plainError("AGENT_KEYS_HIDDEN")} This does not change what it can call.
+          </p>
+        ) : keysFailed ? (
           <div className="flex flex-wrap items-center gap-2" role="alert" data-testid="keys-unreadable">
             <p className="text-body-13 text-02">We could not read this agent&apos;s keys. This does not change what it can call.</p>
             <Button size="sm" variant="secondary" type="button" onClick={onRetryKeys}>
@@ -788,6 +853,7 @@ function AgentCard({
                   onLetPay(key.delegateAccount, capsToForm(view.chain.delegation), purpose);
                 }}
                 onRevoke={() => onRevokeKey(key)}
+                onChanged={onChanged}
               />
             ))}
           </ul>
@@ -982,7 +1048,7 @@ function AgentName({ agent }: { agent: AgentRow }) {
             ? problem
             : rename.isError
               ? rename.error instanceof ApiError
-                ? plainError(rename.error.code)
+                ? plainApiError(rename.error)
                 : "The name could not be saved. Try again."
               : undefined
         }

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Money, ProviderEarningsFigures } from "@/interfaces";
 
-import { EARNED_IN_WALLET, callsOfClass, earnedTileSub, earningsSplit, homeUnpaidNotes, unpaidLines } from "./earned-tile";
+import { EARNED_IN_WALLET, callsOfClass, earnedTileSub, earningsSplit, heldInWindowLine, homeUnpaidNotes, unpaidLines } from "./earned-tile";
 
 const USDG = "eip155:46630/erc20:0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
 const usdg = (amount: string): Money => ({ amount, asset: USDG, decimals: 6 });
@@ -257,5 +257,21 @@ describe("callsOfClass", () => {
     expect(result.items).toHaveLength(2);
     expect(result.more).toBe(1);
     expect(callsOfClass(rows, "PROVIDER_FORFEITED")).toEqual({ items: [], total: 0, more: 0 });
+  });
+});
+
+/* Lot 1 D15: provider Money names what is held in the dispute window. */
+describe("heldInWindowLine", () => {
+  it("says the sum and count of calls still held", () => {
+    expect(heldInWindowLine(totals({ pendingInWindow: usdg("2500000"), pendingInWindowCalls: 3 }), format)).toEqual({
+      amount: "$2.50",
+      calls: 3,
+      text: "3 calls passed and are held while a buyer can still dispute them. Paid out when the window closes; not if a dispute is upheld.",
+    });
+  });
+
+  it("is null when nothing is held, or on an older backend", () => {
+    expect(heldInWindowLine(totals({ pendingInWindow: usdg("0"), pendingInWindowCalls: 0 }), format)).toBeNull();
+    expect(heldInWindowLine(totals(), format)).toBeNull();
   });
 });

@@ -63,6 +63,8 @@ export interface SendContractCallDeps {
     to: string;
     data: `0x${string}`;
   }) => Promise<Eip155UnsignedTransaction>;
+  /** The amount the call moves, in words (e.g. "$5.00"), when the caller has one. */
+  readonly amountLabel?: string;
   readonly wait: (chainId: string, hash: `0x${string}`, functionName: string) => Promise<void>;
 }
 
@@ -72,6 +74,19 @@ const DEFAULT_DEPS: SendContractCallDeps = { fill: fillTransaction, wait: waitFo
  * Fill, sign and send `call` from `signer`, then wait for it to be mined.
  * Resolves with the transaction hash once the receipt says success.
  */
+const CALL_TITLES: Record<string, string> = {
+  disputeSlashBatch: "Dispute penalty",
+  upholdSlashBatch: "Uphold penalty",
+  cancelSlashBatch: "Cancel penalty",
+  setBlocked: "Update provider block",
+};
+
+/** Plain-words text of Privy's confirmation screen for one slash call. */
+export function contractCallPrompt(functionName: string, amountLabel?: string): { title: string; description?: string } {
+  const title = CALL_TITLES[functionName] ?? "Confirm on-chain action";
+  return amountLabel ? { title, description: `${title}: ${amountLabel}.` } : { title };
+}
+
 export async function sendSlashContractCall(
   call: SlashContractCall,
   signer: Signer,
@@ -108,7 +123,7 @@ export async function sendSlashContractCall(
     }
     throw error;
   }
-  const hash = (await signer.signAndSend(tx)) as `0x${string}`;
+  const hash = (await signer.signAndSend(tx, { showWalletUIs: true, ...contractCallPrompt(call.functionName, deps.amountLabel) })) as `0x${string}`;
   await deps.wait(call.chainId, hash, call.functionName);
   return hash;
 }

@@ -184,7 +184,7 @@ export default function ProviderHomePage() {
         ) : (
           <SetupChecklist
             title="Get listed"
-            description="Six short steps from here to a tool buyers' agents can call. Each one ticks itself when it is done."
+            description="Five short steps from here to a tool buyers' agents can call, plus an optional stake. Each one ticks itself when it is done."
             steps={steps}
             loading={progress.loading}
           />

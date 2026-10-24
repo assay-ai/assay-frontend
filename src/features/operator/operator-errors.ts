@@ -1,5 +1,5 @@
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 
 /** What a cancel answers when nothing of the penalty stands on chain (409 SLASH_NOTHING_STANDING). */
 export const NOTHING_ON_CHAIN = "Nothing is on chain: nothing can be executed, and there is nothing to sign.";
@@ -32,7 +32,7 @@ export function operatorErrorSentence(error: unknown): string {
     if (SENTENCES[error.code]) return SENTENCES[error.code]!;
     if (error.status === 409) return "This penalty changed in the meantime, so nothing was done. Reload it and try again.";
     if (error.status === 422 || error.code === "VALIDATION_FAILED") return "Some details were not accepted. Check the form and try again.";
-    return plainError(error.code);
+    return plainApiError(error);
   }
   if (error instanceof Error && error.message) return error.message.split("\n")[0]!;
   return "That did not go through. Nothing changed; you can try again.";

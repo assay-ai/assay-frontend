@@ -224,6 +224,14 @@ describe("consent view: the agent", () => {
     expect(view(request()).limitsLine).toBe("$0.50 a call · $5 a day · 100 free calls a day · All tools");
   });
 
+  it("limits line follows the chosen agent, from that agent's own limits in the request (BUG-BUY-CONNECT-05)", () => {
+    const req = request({
+      agents: [agent(), agent({ id: "agt-2", label: "ops", limits: { perCall: usd("10000"), perDay: null, freeCallsPerDay: 100 } })],
+    });
+    expect(view(req, "agt-1").limitsLine).toBe("$0.50 a call · $5 a day · 100 free calls a day · All tools");
+    expect(view(req, "agt-2").limitsLine).toBe("$0.01 a call · No daily limit · 100 free calls a day · All tools");
+  });
+
   it("limits line with no ceilings says so", () => {
     expect(limitsLine(agent({ limits: { perCall: null, perDay: null, freeCallsPerDay: 100 } }))).toBe(
       "No limit a call · No daily limit · 100 free calls a day · All tools",
@@ -549,9 +557,9 @@ describe("fix round 2, R1: Unicode spoofs of a verified name", () => {
     ["Claude Code \u{10102} Verified", "Claude Code"], // Aegean check mark
     ["Claude Code \u{1FBB1}", "Claude Code"], // symbols for legacy computing check mark
     ["Claude Code ⍻", "Claude Code"], // not check mark
-    ["Veri​fied Claude Code", "Claude Code"], // zero-width space inside the word
-    ["Claude Code ‮Verified", "Claude Code"], // RTL override before the word
-    ["Claude Code ‮deifirev", "Claude Code deifirev"], // the override is gone, so it reads as written
+    ["Veri\u200bfied Claude Code", "Claude Code"], // zero-width space inside the word
+    ["Claude Code \u202eVerified", "Claude Code"], // RTL override before the word
+    ["Claude Code \u202edeifirev", "Claude Code deifirev"], // the override is gone, so it reads as written
     ["ClaudeVerified", "Claude"],
     ["Claude Code V̲erified", "Claude Code"], // a combining mark inside the word
     ["Claude Code νεrιfiεd", "Unnamed app"], // Greek ν ε ι, flagged as above

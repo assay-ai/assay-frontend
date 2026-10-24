@@ -9,6 +9,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { ConnectPanel } from "@/components/toolsets/connect-panel";
 import { ResultLine } from "@/components/toolsets/connect-sheet";
 import { useMcpPreview } from "@/components/toolsets/use-toolsets";
+import { isInstallableUrl } from "@/features/buyer-money/mcp-config";
 import { parseMcpUrl } from "@/features/connect/mcp-url";
 import { previewWarnings } from "@/features/toolsets/preview";
 
@@ -22,7 +23,9 @@ function Preview() {
   const url = useSearchParams().get("url");
   const data = useAgentsAndKeys();
   const agent = data.agents[0] ?? null;
-  const readable = url ? parseMcpUrl(url) !== null : false;
+  // The same check as the install commands (mcp-config `checkUrl`): a URL
+  // with a fragment, a space or "<" is refused here too.
+  const readable = url ? isInstallableUrl(url) && parseMcpUrl(url) !== null : false;
   const preview = useMcpPreview(readable ? url : null, agent?.agentId);
 
   if (!url || !readable) {

@@ -10,6 +10,7 @@ import { useSpendPolicyQuery } from "@/components/buyer-money/use-agents";
 import { useToolVersions } from "@/components/contracts/use-tool-versions";
 import { ServingChip } from "@/components/g31/providers-view";
 import { useCatalogue, type ProviderRow } from "@/components/g31/use-catalogue";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { EntityPicker } from "@/components/patterns/entity-picker";
 import { PageState } from "@/components/patterns/page-state";
@@ -34,7 +35,16 @@ import { formatVersionRange } from "@/features/contracts/semver";
 import { fieldList } from "@/features/contracts/text";
 import type { ToolVersionBrief } from "@/interfaces/contracts";
 import { defaultEntry, entryChipLabel, entryInput, entryProblem, providersLeft } from "@/features/toolsets/entry-rules";
-import { DRAFT_NOTICE, ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, VERIFIED_ONLY_LABEL } from "@/features/toolsets/labels";
+import {
+  DRAFT_NOTICE,
+  draftToolCountText,
+  ON_EMPTY_LABELS,
+  PROVIDER_MODE_LABELS,
+  TAKEN_DOWN_LABEL,
+  TAKEN_DOWN_NOTE,
+  takenDownToolIds,
+  VERIFIED_ONLY_LABEL,
+} from "@/features/toolsets/labels";
 import { nothingRunsWarning, type ProviderOffer } from "@/features/toolsets/provider-fit";
 import { shareStatus, sharedPage } from "@/features/toolsets/sharing";
 import { failRateShort, formatCallPrice } from "@/features/explorer/explorer-text";
@@ -58,7 +68,7 @@ import { toast } from "@/utils/toast";
 
 import { ConnectPanel } from "./connect-panel";
 import { ShareDialog } from "./share-dialog";
-import { Chip, statusChipTone } from "./toolset-bits";
+import { Chip, makerOf, statusChipTone } from "./toolset-bits";
 import { PublisherStats, VersionHistory } from "./toolset-versions";
 import { errorText, toolsetKeys, useToolset, useToolsets } from "./use-toolsets";
 
@@ -104,7 +114,7 @@ export function ToolsetPage({ id, slug, free, version }: { id: string | null; sl
       <PageState
         kind={notFound ? "empty" : "error"}
         title={notFound ? "Not found" : "This tool set could not be loaded"}
-        description={notFound ? "No tool set of yours has this address." : plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+        description={notFound ? "No tool set of yours has this address." : query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
         {...(notFound ? { action: { label: "Your tool sets", href: "/toolsets/mine" } } : { onRetry: () => void query.refetch() })}
       />,
     );
@@ -195,7 +205,7 @@ function ToolsetHeader({ set }: { set: Toolset }) {
         <Chip tone={statusChipTone(status.tone)}>{status.label}</Chip>
         <span className="break-all font-mono">/my/{set.slug}</span>
         <span>
-          · {set.toolCount} tool{set.toolCount === 1 ? "" : "s"}
+          · {draftToolCountText(set.toolCount, set.entries)}
         </span>
         {page ? (
           <Link href={page} className="min-h-10 content-center text-primary-600 hover:underline">
@@ -245,6 +255,8 @@ function EntriesEditor({ set }: { set: Toolset }) {
   const policy = useSpendPolicyQuery();
   const [open, setOpen] = React.useState<string | null>(null);
   const rows = rowsOf(set);
+  // Read only: `takenDown` is never part of a saved row.
+  const takenDown = takenDownToolIds(set.entries);
   const save = useMutation({
     mutationFn: (next: Row[]) => replaceToolsetEntries(set.id, next.map(({ toolName: _n, decimals: _d, ...e }) => e)),
     onSuccess: (next) => {
@@ -309,6 +321,7 @@ function EntriesEditor({ set }: { set: Toolset }) {
               decimals={row.decimals ?? decimals}
               asset={asset}
               providers={serving(row.toolId)}
+              takenDown={takenDown.has(row.toolId)}
               versions={catalogue.tools.find((t) => t.toolId === row.toolId)?.versions ?? []}
               open={open === row.toolId}
               onToggle={() => setOpen(open === row.toolId ? null : row.toolId)}
@@ -324,6 +337,15 @@ function EntriesEditor({ set }: { set: Toolset }) {
           ))}
         </ul>
       )}
+
+      {save.isError ? (
+        <p className="flex items-start gap-1.5 text-body-13 text-danger-700" data-testid="entries-save-error">
+          <TriangleAlert aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+          {save.error instanceof ApiError && save.error.code === "TOOLSET_INVALID"
+            ? "This change could not be saved: the tool set does not accept this rule."
+            : errorText(save.error, "The change could not be saved")}
+        </p>
+      ) : null}
 
       <EntityPicker
         label="Add a tool"
@@ -349,6 +371,7 @@ export function EntryRow({
   decimals,
   asset,
   providers,
+  takenDown = false,
   versions,
   open,
   onToggle,
@@ -361,6 +384,8 @@ export function EntryRow({
   decimals: number;
   asset: string;
   providers: ProviderRow[];
+  /** Assay took the tool down: say so instead of "No provider yet" (BUG-X-05). */
+  takenDown?: boolean;
   /** The tool's published versions, from the catalogue card (T3); empty when the card is not at hand. */
   versions: readonly ToolVersionBrief[];
   open: boolean;
@@ -398,7 +423,11 @@ export function EntryRow({
           </button>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {providers.length === 0 ? (
+          {takenDown ? (
+            <span className="rounded-full bg-danger-10 px-2 py-0.5 text-label-xs text-danger-700" data-testid="entry-taken-down">
+              {TAKEN_DOWN_LABEL}
+            </span>
+          ) : providers.length === 0 ? (
             <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">No provider yet</span>
           ) : left === 1 ? (
             <span className="rounded-full bg-warning-10 px-2 py-0.5 text-label-xs text-warning-700">No backup provider</span>
@@ -428,6 +457,11 @@ export function EntryRow({
           </button>
         </div>
       </div>
+      {takenDown ? (
+        <p role="status" className="rounded-lg bg-danger-10 px-3 py-2 text-body-13 text-danger-700" data-testid="entry-taken-down-note">
+          {TAKEN_DOWN_NOTE}
+        </p>
+      ) : null}
       {warning ? (
         <p
           role="status"
@@ -492,7 +526,9 @@ export function RuleEditor({
       : missing.length > 0
         ? `${majorsChipText(majors).replace(/ only$/, "")} doesn't return ${fieldList(missing)}, so no provider could serve these calls. Untick it, or allow a version that has it.`
         : null;
-  const [mode, setMode] = React.useState<ProviderMode>(row.providerMode);
+  // `{maker}__{tool}`: a provider tool. The server accepts only "Any" for it.
+  const providerTool = makerOf(row.toolName) !== null;
+  const [mode, setMode] = React.useState<ProviderMode>(providerTool ? "BEST" : row.providerMode);
   const [ids, setIds] = React.useState<string[]>(row.providerIds);
   const [verified, setVerified] = React.useState(row.minTier !== null);
   const [max, setMax] = React.useState(row.maxPrice ? toDecimal({ ...row.maxPrice, decimals }).toString() : "");
@@ -526,22 +562,29 @@ export function RuleEditor({
     <div className="flex flex-col gap-3 rounded-lg bg-02 p-3" data-testid="rule-editor">
       <div className="flex flex-col gap-1.5">
         <span className="text-label-xs text-02">Providers</span>
-        <Segmented
-          value={mode}
-          onValueChange={(v) => {
-            // Only these and All except mean opposite things: the ticks start again.
-            if (v !== mode) setIds([]);
-            setMode(v as ProviderMode);
-            setTried(false);
-          }}
-          aria-label="Which providers"
-        >
-          {(Object.keys(PROVIDER_MODE_LABELS) as ProviderMode[]).map((m) => (
-            <SegmentedItem key={m} value={m}>
-              {PROVIDER_MODE_LABELS[m]}
-            </SegmentedItem>
-          ))}
-        </Segmented>
+        {providerTool ? (
+          // One maker's own tool has one provider, which the server only accepts as "Any".
+          <p className="text-body-xs text-03" data-testid="provider-tool-note">
+            One maker&apos;s own tool: it has one provider, so there is nothing to choose.
+          </p>
+        ) : (
+          <Segmented
+            value={mode}
+            onValueChange={(v) => {
+              // Only these and All except mean opposite things: the ticks start again.
+              if (v !== mode) setIds([]);
+              setMode(v as ProviderMode);
+              setTried(false);
+            }}
+            aria-label="Which providers"
+          >
+            {(Object.keys(PROVIDER_MODE_LABELS) as ProviderMode[]).map((m) => (
+              <SegmentedItem key={m} value={m}>
+                {PROVIDER_MODE_LABELS[m]}
+              </SegmentedItem>
+            ))}
+          </Segmented>
+        )}
       </div>
       {mode !== "BEST" ? (
         providers.length === 0 ? (

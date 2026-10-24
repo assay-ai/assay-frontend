@@ -4,6 +4,7 @@ import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import * as React from "react";
 
+import { useRestoreFocus } from "@/hooks/useRestoreFocus";
 import { cn } from "@/utils";
 
 /**
@@ -50,30 +51,35 @@ export interface SheetContentProps
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ className, children, showCloseButton = true, ...props }, ref) => (
-  <SheetPortal>
-    <SheetOverlay />
-    <SheetPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] w-full flex-col overflow-y-auto rounded-t-xl border border-01 bg-01 tablet:inset-x-auto tablet:inset-y-auto tablet:left-1/2 tablet:top-1/2 tablet:bottom-auto tablet:w-full tablet:max-w-[560px] tablet:-translate-x-1/2 tablet:-translate-y-1/2 tablet:rounded-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom tablet:data-[state=closed]:slide-out-to-bottom-0 tablet:data-[state=open]:slide-in-from-bottom-0 tablet:data-[state=closed]:zoom-out-95 tablet:data-[state=open]:zoom-in-95",
-        className
-      )}
-      {...props}
-    >
-      <div className="flex w-full shrink-0 justify-center pb-1.5 pt-2.5 tablet:hidden" aria-hidden="true">
-        <div className="h-1 w-9 rounded-full bg-04" />
-      </div>
-      {children}
-      {showCloseButton && (
-        <SheetPrimitive.Close className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-03 transition-colors hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500">
-          <X className="h-4 w-4" />
-          <span className="sr-only">Close</span>
-        </SheetPrimitive.Close>
-      )}
-    </SheetPrimitive.Content>
-  </SheetPortal>
-));
+>(({ className, children, showCloseButton = true, onOpenAutoFocus, onCloseAutoFocus, ...props }, ref) => {
+  const restoreFocus = useRestoreFocus({ onOpenAutoFocus, onCloseAutoFocus });
+  return (
+    <SheetPortal>
+      <SheetOverlay />
+      <SheetPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 flex max-h-[85vh] w-full flex-col overflow-y-auto rounded-t-xl border border-01 bg-01 tablet:inset-x-auto tablet:inset-y-auto tablet:left-1/2 tablet:top-1/2 tablet:bottom-auto tablet:w-full tablet:max-w-[560px] tablet:-translate-x-1/2 tablet:-translate-y-1/2 tablet:rounded-xl data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom tablet:data-[state=closed]:slide-out-to-bottom-0 tablet:data-[state=open]:slide-in-from-bottom-0 tablet:data-[state=closed]:zoom-out-95 tablet:data-[state=open]:zoom-in-95",
+          className
+        )}
+        {...props}
+        onOpenAutoFocus={restoreFocus.onOpenAutoFocus}
+        onCloseAutoFocus={restoreFocus.onCloseAutoFocus}
+      >
+        <div className="flex w-full shrink-0 justify-center pb-1.5 pt-2.5 tablet:hidden" aria-hidden="true">
+          <div className="h-1 w-9 rounded-full bg-04" />
+        </div>
+        {children}
+        {showCloseButton && (
+          <SheetPrimitive.Close className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-full text-03 transition-colors hover:bg-02 hover:text-01 focus-visible:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500">
+            <X className="h-4 w-4" />
+            <span className="sr-only">Close</span>
+          </SheetPrimitive.Close>
+        )}
+      </SheetPrimitive.Content>
+    </SheetPortal>
+  );
+});
 SheetContent.displayName = SheetPrimitive.Content.displayName;
 
 const SheetHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(

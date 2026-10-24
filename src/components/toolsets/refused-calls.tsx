@@ -5,6 +5,7 @@ import { ChevronRight, ShieldX } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
@@ -57,7 +58,7 @@ export function RefusedCallsList({ agentId, openCallId }: { agentId?: string | n
       <PageState
         kind="error"
         title="Refused calls could not be loaded"
-        description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+        description={query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
         code={query.error instanceof ApiError ? query.error.code : null}
         onRetry={() => void query.refetch()}
       />
@@ -130,7 +131,7 @@ export function RefusedCallPanel({ callId, onClose }: { callId: string; onClose?
       <PageState
         kind="error"
         title={notFound ? "This refused call was not found" : "The refused call could not be loaded"}
-        description={notFound ? "It may belong to another account, or the link is incomplete." : plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+        description={notFound ? "It may belong to another account, or the link is incomplete." : query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
         onRetry={notFound ? undefined : () => void query.refetch()}
       />
     );

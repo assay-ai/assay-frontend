@@ -4,6 +4,24 @@ import { CALLS_FILTERS, callOutcome, matchesFilter, parseCallsFilter, refundable
 
 const m = (amount: string) => ({ amount, asset: "a", decimals: 6 });
 
+describe("callOutcome — an EXPIRED call that never held money (BUG-BUY-SPEND-01)", () => {
+  const expired = { status: "EXPIRED", price: m("1000"), charged: m("0") };
+  it("is Did not run when the server says nothing was withheld", () => {
+    expect(callOutcome({ ...expired, withheld: m("0") })).toBe("not-run");
+    expect(matchesFilter({ ...expired, withheld: m("0") }, "not-charged")).toBe(false);
+    expect(matchesFilter({ ...expired, withheld: m("0") }, "all")).toBe(true);
+  });
+  it("stays not charged when money was held, or when an older server sends no withheld", () => {
+    expect(callOutcome({ ...expired, withheld: m("1000") })).toBe("not-charged");
+    expect(callOutcome(expired)).toBe("not-charged");
+    expect(callOutcome({ ...expired, withheld: null })).toBe("not-charged");
+  });
+  it("does not touch other statuses with a zero withheld", () => {
+    expect(callOutcome({ status: "SETTLED", price: m("1000"), charged: m("1000"), withheld: m("0") })).toBe("charged");
+    expect(callOutcome({ status: "VOIDED", price: m("1000"), charged: m("0"), withheld: m("0") })).toBe("not-charged");
+  });
+});
+
 describe("callOutcome", () => {
   it("names each outcome", () => {
     expect(callOutcome({ status: "SETTLED", price: m("1000"), charged: m("1000") })).toBe("charged");

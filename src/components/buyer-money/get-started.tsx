@@ -29,6 +29,7 @@ import {
 import { mcpToolName } from "@/features/connect/mcp-url";
 import { nextKeyName } from "@/features/buyer-money/agent-label";
 import { useCatalogue } from "@/components/g31/use-catalogue";
+import { plainError } from "@/libs/plain-language";
 import { SUPPORT_URL } from "@/libs/support";
 import { supportsDelegation } from "@/features/delegation/delegation-form";
 
@@ -41,6 +42,7 @@ import { useRecordConnect } from "@/components/toolsets/use-toolsets";
 import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
 import { assayMcpRun, keyForHint, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { GasHelpNote } from "./gas-help-note";
+import { readyForPaidCalls } from "@/features/buyer-money/confirming";
 import { useAgentsAndKeys } from "./use-agents";
 
 /**
@@ -159,6 +161,16 @@ function dataLoading(data: AgentsAndKeys): boolean {
   );
 }
 
+/**
+ * Some agent's keys are not shown to this session (an agent session,
+ * BUG-DEMO-02). Which step is done depends on every agent's keys, and the
+ * steps (create a key, let it pay) are a person's, so the checklist does not
+ * guess: it is not shown, and never reads a hidden agent as "no key".
+ */
+function keysHidden(data: AgentsAndKeys): boolean {
+  return data.agents.some((agent) => data.keysHiddenFor.has(agent.agentId));
+}
+
 const DISMISS_EVENT = "assay:get-started-dismissed";
 
 /**
@@ -175,7 +187,7 @@ export function useGetStartedShown(): boolean {
     window.addEventListener(DISMISS_EVENT, onDismiss);
     return () => window.removeEventListener(DISMISS_EVENT, onDismiss);
   }, []);
-  if (dismissed || dataLoading(data)) return false;
+  if (dismissed || dataLoading(data) || keysHidden(data)) return false;
   return !getStartedComplete(getStartedFactsFrom(data).facts);
 }
 
@@ -202,6 +214,8 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
     if (agent) recordConnect.mutate({ url: copied ?? urlForClient(client, mcpEndpointUrl()), serverName: "assay", client });
   };
   const states = getStartedStates(facts);
+  // What agents can spend, the same figure as Funding's headline: no uncredited on-chain money (lot 1 A3).
+  const fundsAvailable = readyForPaidCalls(escrow?.spendable ?? null, null, escrow?.uncreditedOnChain);
   const { chains } = useChains();
   const chainId = chainIdOfAccount(escrow?.account ?? agent?.agentAccount);
   const chain = chainId ? findChain(chains, chainId) : null;
@@ -216,13 +230,15 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   const loading = dataLoading(data);
   // On Overview, render nothing until the data says it is needed: a set-up
   // account should not see a checklist skeleton flash on every visit.
-  const hidden = placement === "overview" && (loading || complete || dismissed);
+  const keysNotShown = keysHidden(data);
+  const hidden = placement === "overview" && (loading || complete || dismissed || keysNotShown);
   // The live listener, only while there is something to wait for on screen: the
   // first call of a key that exists, or the bind of a key that is not revoked.
   // Never while the checklist is hidden, loading or complete: then the agent
   // rows' 30-second read is enough.
   const listen =
     !hidden &&
+    !keysNotShown &&
     !loading &&
     !complete &&
     (states.call === "current" || (states.pay !== "done" && stage === "bind" && agentHasKey)) &&
@@ -241,6 +257,13 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
   }, []);
 
   if (hidden) return null;
+  if (keysNotShown) {
+    return (
+      <p className="text-body-13 text-02" data-testid="get-started-keys-hidden">
+        {plainError("AGENT_KEYS_HIDDEN")} Sign in as yourself to set your agent up.
+      </p>
+    );
+  }
 
   const agentName = agent?.label ?? "your agent";
   // Free calls only on this chain: steps 3 and 4 do not apply, said up front.
@@ -270,7 +293,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
             {createdToken ? <p className="text-body-xs text-03">{newKeyPaysNote(payingKeyName(readiness))}</p> : null}
             <McpConfigTabs
               token={createdToken}
-              keyPrefix={keyForHint(liveKeys)?.prefix ?? null}
+              keyHint={keyForHint(liveKeys)?.hint ?? null}
               onCopy={onCopyConfig}
               onCreateKey={() => createInPlace.mutate()}
               agentName={agent?.label ?? null}
@@ -330,7 +353,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
         freeOnlyNote
       ) : states.funds === "done" ? (
           <p className="text-body-13 text-02" data-testid="step-funds-done">
-            Your escrow is open{escrow?.spendable ? ` with ${formatLimit(escrow.spendable)} available` : ""}. Add more any time
+            Your escrow is open{fundsAvailable ? ` with ${formatLimit(fundsAvailable)} available` : ""}. Add more any time
             on{" "}
             <Link href="/funding" className="font-semibold text-primary-600 hover:underline">
               Money

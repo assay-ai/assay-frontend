@@ -8,6 +8,7 @@ import * as React from "react";
 
 import { useCatalogue } from "@/components/g31/use-catalogue";
 import { useToolNames } from "@/components/g31/use-tool-names";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
@@ -188,7 +189,7 @@ export function ToolsetsView() {
         <PageState
           kind="error"
           title="Your tool sets could not be loaded"
-          description={plainError(query.error instanceof ApiError ? query.error.code : "ERR_NETWORK")}
+          description={query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
           code={query.error instanceof ApiError ? query.error.code : null}
           onRetry={() => void query.refetch()}
         />

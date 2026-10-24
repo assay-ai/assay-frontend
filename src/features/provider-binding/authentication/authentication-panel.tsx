@@ -9,7 +9,7 @@ import { CodeBlock } from "@/components/ui/code-block";
 import { Radio } from "@/components/ui/radio";
 import type { BindingAuthMode, CredentialHeaderInput, CredentialSetSummary } from "@/interfaces/provider-bindings";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { deleteBindingCredentials, listBindingCredentials } from "@/services/provider-tool-bindings.service";
 
 import { CredentialHeadersForm } from "./credential-headers-form";
@@ -165,7 +165,7 @@ export function AuthenticationPanel({
       await deleteBindingCredentials(bindingId, setOrigin);
       refresh();
     } catch (caught) {
-      setRemoveError(caught instanceof ApiError ? plainError(caught.code, caught.status) : "Those headers could not be removed. Try again.");
+      setRemoveError(caught instanceof ApiError ? plainApiError(caught) : "Those headers could not be removed. Try again.");
     } finally {
       setRemoving(null);
     }

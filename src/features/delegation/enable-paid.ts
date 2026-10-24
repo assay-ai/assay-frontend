@@ -22,7 +22,8 @@ import { expiryFromDays, findDelegation, MAX_DELEGATION_DAYS } from "./delegatio
  * the credential is the signed-in account's, it is live, its client may hold a
  * payment key (the built-in `assay-mcp` client, or an API key), the key in the
  * link's fragment (put there by `assay-mcp` on this computer, never by a
- * server) equals the key bound to the credential, and the chain has paid
+ * server) equals the key waiting for approval on the credential, or else its
+ * bound key (`pendingDelegateAccount ?? delegateAccount`), and the chain has paid
  * calls. Approve itself is gated on the person ticking that the fingerprint
  * matches what their app showed.
  */
@@ -36,7 +37,10 @@ export const ENABLE_PAID_STRINGS = {
   notFound: "This app isn't on the account you are signed in with. Sign in with the account your app uses.",
   noRail: "Paid calls aren't available on this network yet.",
   alreadyOn: "Paid calls are already on for this key",
+  replaces: "This new payment key replaces the current one",
   done: "Paid calls are on. Go back to your app and ask again.",
+  notWaiting:
+    "This payment key is no longer waiting for approval: your app asked for a newer one, or it was discarded. Nothing changed. Open the newest link your app showed.",
   blocked: "Your account is blocked, so paid calls can't be turned on now.",
   registeredByApp: "Registered by Assay app on this computer",
   registeredByKey: "Registered with an API key",
@@ -82,6 +86,9 @@ export interface EnablePaidCredential {
   expiresAt: string | null;
   revokedAt: string | null;
   delegateAccount?: string | null;
+  /** A key the app proved while `delegateAccount` was bound: this page's approval makes it the bound key. */
+  pendingDelegateAccount?: string | null;
+  pendingDelegateRequestedAt?: string | null;
 }
 
 export interface EnablePaidInput {
@@ -113,8 +120,13 @@ export type EnablePaidState =
       registeredBy: string;
       /** The key as the link named it. */
       address: string;
-      /** CAIP-10 as the credential holds it. */
+      /** CAIP-10 as the credential holds it: the key waiting for approval when there is one, else the bound key. */
       delegateAccount: string;
+      /**
+       * The bound key the approved one replaces (a key waiting for approval
+       * while another is bound), or null. It keeps paying until this approval.
+       */
+      replacing: { delegateAccount: string; fingerprint: string; text: string } | null;
       chainId: string;
       fingerprint: string;
       keyCheck: string;
@@ -166,7 +178,9 @@ export function enablePaidState(input: EnablePaidInput): EnablePaidState {
   if (!live(credential, input.nowMs)) return refuse("signed-out", ENABLE_PAID_STRINGS.signedOut);
   if (!mayHoldPaymentKey(credential)) return refuse("not-payment-client", ENABLE_PAID_STRINGS.notPaymentClient);
   if (input.fragmentKey === null || input.fragmentKey === "") return refuse("missing-key", ENABLE_PAID_STRINGS.missingKey);
-  const bound = credential.delegateAccount ?? null;
+  // The key this page approves: the one waiting for approval when there is one, else the bound key.
+  const pending = credential.pendingDelegateAccount ?? null;
+  const bound = pending ?? credential.delegateAccount ?? null;
   const boundAddress = addressOfAccount(bound);
   if (!ADDRESS.test(input.fragmentKey) || !bound || !ADDRESS.test(boundAddress)) {
     return refuse("key-mismatch", ENABLE_PAID_STRINGS.keyMismatch);
@@ -183,15 +197,27 @@ export function enablePaidState(input: EnablePaidInput): EnablePaidState {
   const fp = fingerprint(bound);
   const name = displayClientName(credential.name, { builtin: true });
   const agent = input.agents.find((a) => a.agentId === credential.agentId);
+  const current = pending ? (credential.delegateAccount ?? null) : null;
+  const replacing =
+    current && addressOfAccount(current).toLowerCase() !== boundAddress.toLowerCase()
+      ? {
+          delegateAccount: current,
+          fingerprint: fingerprint(current),
+          text:
+            `${ENABLE_PAID_STRINGS.replaces}, ${fingerprint(current)}. ` +
+            "Once you approve, this app pays with the new key only. The current key keeps its permission on chain until you stop it.",
+        }
+      : null;
   return {
     kind: "ready",
     credential,
     agentLabel: agent?.label || credential.agentId,
-    title: `Turn on paid calls for ${name}`,
+    title: replacing ? `Replace the payment key for ${name}` : `Turn on paid calls for ${name}`,
     registeredBy:
       credential.issuedVia === "OAUTH" ? ENABLE_PAID_STRINGS.registeredByApp : ENABLE_PAID_STRINGS.registeredByKey,
     address: input.fragmentKey,
     delegateAccount: bound,
+    replacing,
     chainId,
     fingerprint: fp,
     keyCheck: `Check this matches what your app showed: ${fp}`,
@@ -511,4 +537,25 @@ export function enablePaidReturnTo(raw: string | null | undefined): string | nul
   const id = url.searchParams.get("credential") ?? "";
   const back = enablePaidReturnHref(id);
   return back === raw ? back : null;
+}
+
+/**
+ * Whether the approval reached the key this page named. Approving a key that
+ * waited for approval must make it the credential's bound key: when
+ * `POST /escrow/delegates` does not list the credential in
+ * `promotedCredentialIds`, it no longer waits with this key (a newer one was
+ * parked, or the owner discarded it) and nothing changed for it. A first key,
+ * already bound, needs no promotion. An answer without the list is not read as
+ * a refusal.
+ */
+export function approvalOutcome(
+  state: Extract<EnablePaidState, { kind: "ready" }>,
+  results: readonly ({ data?: unknown } | undefined)[],
+): "done" | "not-waiting" {
+  if (!state.credential.pendingDelegateAccount) return "done";
+  for (const result of results) {
+    const ids = (result?.data as { promotedCredentialIds?: unknown } | undefined)?.promotedCredentialIds;
+    if (Array.isArray(ids)) return ids.includes(state.credential.id) ? "done" : "not-waiting";
+  }
+  return "done";
 }

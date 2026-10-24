@@ -1,6 +1,6 @@
 {
-  "ref": "b92b4f59ae561e898380d9bd8221769d28a05de7",
-  "commit": "b92b4f59ae561e898380d9bd8221769d28a05de7",
+  "ref": "b11e554ccde39d03cf6c29def42bf7e71946e396",
+  "commit": "b11e554ccde39d03cf6c29def42bf7e71946e396",
   "files": {
     "src/features/connect/server-name.vectors.json": {
       "from": "vectors/server-names.json",
@@ -8,7 +8,7 @@
     },
     "src/features/connect/commands.vectors.json": {
       "from": "vectors/commands.json",
-      "sha256": "96e10d793dd0fde999388922a58b65097bd092f6fe128766d589c4794617aa64"
+      "sha256": "a0c41a2d648e1e02cd0ebb99b632ef75147abff6ba34cccd39c0d470d00152c8"
     }
   }
 }

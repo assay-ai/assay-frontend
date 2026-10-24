@@ -151,7 +151,7 @@ export interface ProviderTool extends ProviderToolSummary {
   draft: ProviderToolDraft | null;
   /** The one implementation; created with the listing wizard. */
   binding: ProviderToolBindingRef | null;
-  /** `https://mcp.assay.ai/@acme` once a tool is LISTED. */
+  /** `https://mcp.goassay.ai/@acme` once a tool is LISTED. */
   mcpUrls: { handle: string | null };
   quality: ProviderToolQuality;
   /** The earliest `sunsetAt` a deprecation accepts if sent now (now + the 90-day minimum, UTC). */

@@ -18,6 +18,7 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { AccountBlockBanner } from "@/features/account-block/account-block-banner";
 import { SlashHoldBanner } from "@/features/slash-hold/slash-hold-banner";
 import { ChecklistPill } from "@/components/patterns/setup-checklist";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useProviderToolNames } from "@/features/provider-binding/tool-name";
 import { useListingProgress } from "@/features/provider-home/use-listing-progress";
 import { useProviderInbox } from "@/features/provider-home/use-provider-inbox";
@@ -121,6 +122,9 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
   }, []);
   const pathname = usePathname();
   const bindingParam = useSearchParams().get("binding");
+  // The tab names the page ("Money — Assay"), as the buyer app does.
+  const pageTitle = providerTitleFor(pathname);
+  useDocumentTitle(pageTitle === "Assay" ? "Assay" : `${pageTitle} — Assay`);
 
   /*
     The rail's binding list is shell data, so it is fetched once here rather

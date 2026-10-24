@@ -20,6 +20,7 @@ import {
   type PenaltyRow,
   type PenaltyTab,
 } from "@/features/provider-penalties/model";
+import { isOffChainCase, OffChainProposals, offChainRows, useOffChainProposals } from "@/features/provider-penalties/off-chain";
 import { DisputeSheet, PenaltyDrawer, PenaltyRowCard } from "@/features/provider-penalties/penalty-ui";
 import { PENALTY_DEPLOYMENT, caseKey, usePenalties } from "@/features/provider-penalties/use-penalties";
 import { trackSubmissions } from "@/features/provider-stake/pending-chain-tx";
@@ -70,6 +71,10 @@ export default function PenaltiesPage() {
   const caseParam = useSearchParam("case").toLowerCase();
   const penalties = usePenalties({ withCases: "all" });
   const counts = countByTab(penalties.rows);
+  // Known to Assay, not on chain yet (lot 1 B8): the chain list cannot show them. None on a demo or an older backend.
+  const offChainQuery = useOffChainProposals(!penalties.demo);
+  const offChain = offChainRows(offChainQuery.data);
+  const caseOffChain = isOffChainCase(offChain, caseParam);
 
   const requested = caseParam
     ? (penalties.rows.find((row) => row.id === caseParam || row.proposalId?.toLowerCase() === caseParam) ?? null)
@@ -209,10 +214,18 @@ export default function PenaltiesPage() {
         ))}
       </div>
 
-      {caseParam && !requested && !penalties.isLoading && !penalties.isError ? (
+      {caseParam && !requested && caseOffChain ? (
+        <p role="status" className="w-full rounded-lg border border-01 bg-01 px-4 py-3 text-body-13 text-02" data-testid="penalty-case-off-chain">
+          That penalty is proposed but not on your stake on the chain yet, so it is listed under &ldquo;Proposed, not yet
+          on chain&rdquo; below. Nothing can be taken before it is on chain.{" "}
+          <button type="button" className="text-primary-600 underline-offset-2 hover:underline" onClick={() => setQuery({ case: null })}>
+            Dismiss
+          </button>
+        </p>
+      ) : caseParam && !requested && !penalties.isLoading && !penalties.isError ? (
         <p role="status" className="w-full rounded-lg border border-01 bg-01 px-4 py-3 text-body-13 text-02">
-          That link points to a penalty that is not on your stake, so there is nothing to open. Your own penalties are
-          listed below.{" "}
+          We cannot open that penalty: it is not on your stake on the chain, which is where this page reads penalties
+          from. If it was proposed just now, it can take a moment to appear there.{" "}
           <button type="button" className="text-primary-600 underline-offset-2 hover:underline" onClick={() => setQuery({ case: null })}>
             Dismiss
           </button>
@@ -225,7 +238,11 @@ export default function PenaltiesPage() {
         <PageState
           kind="empty"
           title="No stake wallet yet"
-          description="Penalties can only be proposed against stake. You have no stake wallet, so there are none."
+          description={
+            offChain.length > 0
+              ? "Penalties are taken from a stake wallet, read from the chain. You have no stake wallet yet, so none is on chain; the proposals below are known to Assay only."
+              : "This page lists the penalties on your stake wallet, read from the chain. You have no stake wallet yet, so it has nothing to list."
+          }
           action={{ label: "Go to Stake", href: "/provider/capital" }}
         />
       ) : penalties.isError ? (
@@ -254,6 +271,8 @@ export default function PenaltiesPage() {
           ))}
         </ul>
       )}
+
+      <OffChainProposals rows={offChain} highlight={caseOffChain ? caseParam : undefined} />
 
       {penalties.lookupUnavailable ? (
         <p className="text-body-xs text-03">

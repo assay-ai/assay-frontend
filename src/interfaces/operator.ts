@@ -132,6 +132,24 @@ export interface ApprovalDecision {
   result?: unknown;
 }
 
+/** One row of `GET /operator/dashboard/data.json` → `reconciliation[]`: the latest run per asset. */
+export interface ReconciliationAssetRow {
+  /** CAIP-19. */
+  asset: string;
+  /** vault balance − liabilities, display units; null when the run could not read the chain. */
+  differenceDisplay: number | null;
+  severity: "OK" | "WARN" | "CRITICAL" | string;
+  /** Seconds since the latest run started. */
+  ageSeconds: number;
+  gate: { status: "OK" | "WARN" | "CRITICAL"; summary: string } | null;
+}
+
+/** `GET /operator/dashboard/data.json`, the parts the console reads. */
+export interface OperatorDashboardData {
+  generatedAt: string;
+  reconciliation: ReconciliationAssetRow[];
+}
+
 /** `GET /operator/health` — the six tiles across the top of the operator console. */
 export interface PlatformHealth {
   intentsPerMinute: number;
@@ -296,6 +314,13 @@ export interface OperatorCaseBrief {
   chainStanding: boolean;
   /** The provider's penalties upheld or executed in the last 30 days (follow-up C4). Absent from an older backend. */
   upheldViolations30d?: number;
+  /**
+   * Why the last chain attempt failed (`chain_last_error`): a program error
+   * name, a local refusal code such as `PROVIDER_STAKE_AUTHORITY_UNPROVEN`, or
+   * `transport`. Null when the last attempt did not fail; absent from an older
+   * backend.
+   */
+  chainLastError?: string | null;
   /**
    * B18: the three operator actions for a case stuck behind a requested
    * cancel the backend's sweep cannot settle, each with whether its guard

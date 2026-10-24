@@ -185,3 +185,60 @@ describe("test input kept with the draft", () => {
     expect(readTestInput("b-3")).toBeNull();
   });
 });
+
+describe("ConnectStage stale check after a save (BUG-PRV-CATALOG-01)", () => {
+  const SHORTHAND = '{"results":{"name":"$.name"}}';
+  const canonical = (version: number): ToolBindingDetail =>
+    ({ ...bindingWith("NONE"), version, responseMapping: { results: { $from: "$.results", $item: { name: "$.name" } } } }) as unknown as ToolBindingDetail;
+
+  const setup = () => {
+    const onSave = vi.fn().mockResolvedValue(canonical(2));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (binding: ToolBindingDetail) => (
+      <QueryClientProvider client={client}>
+        <ConnectStage
+          tool={TOOL}
+          binding={binding}
+          initialEndpoint="https://p.test/v1"
+          readOnly={false}
+          testPassedBefore
+          onSave={onSave as never}
+          onContinue={() => undefined}
+        />
+      </QueryClientProvider>
+    );
+    const view = render(ui(bindingWith("NONE")));
+    fireEvent.click(screen.getByRole("button", { name: /Advanced mapping/ }));
+    fireEvent.click(screen.getByLabelText("Edit as JSON"));
+    const box = () => screen.getByLabelText(/response.* as JSON/i) as HTMLTextAreaElement;
+    const exit = () => fireEvent.click(screen.getByRole("button", { name: "Save draft and exit" }));
+    return { onSave, view, ui, box, exit };
+  };
+
+  it("a saved shorthand is not dirty once the binding carries its canonical form; a new edit is", async () => {
+    const { onSave, view, ui, box, exit } = setup();
+    fireEvent.change(box(), { target: { value: SHORTHAND } });
+    exit();
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    view.rerender(ui(canonical(2)));
+    router.push.mockClear();
+    exit();
+    await waitFor(() => expect(router.push).toHaveBeenCalled());
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: /Continue to Go live/ }).hasAttribute("disabled")).toBe(false);
+
+    fireEvent.change(box(), { target: { value: '{"results":{"title":"$.title"}}' } });
+    exit();
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
+  });
+
+  it("stops applying once the binding moves to a later version", async () => {
+    const { onSave, view, ui, box, exit } = setup();
+    fireEvent.change(box(), { target: { value: SHORTHAND } });
+    exit();
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    view.rerender(ui(canonical(3)));
+    exit();
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
+  });
+});

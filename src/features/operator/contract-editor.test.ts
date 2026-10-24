@@ -17,6 +17,7 @@ import {
   suggestion,
   suggestToolName,
   toolNameFrom,
+  standardToolNameProblem,
   toolNameProblem,
 } from "./contract-editor";
 import { activeOperatorNav, operatorNavFor, operatorTitleFor } from "./nav";
@@ -159,5 +160,20 @@ describe("names and errors", () => {
     expect(contractErrorMessage(invalid)).toEqual({ text: "The server didn't accept the draft. Fix these first:", problems: ["Write a one-line summary."] });
     const taken = new ApiError("TOOL_CONTRACT_NAME_TAKEN", "x", 409, undefined, { suggestion: "get_weather_2" });
     expect(contractErrorMessage(taken).text).toBe('That name is taken. "get_weather_2" is free.');
+  });
+});
+
+// BUG-OPS-MARKET-03: the promotion sheet refuses what the API refuses.
+describe("standardToolNameProblem", () => {
+  const RULE = "snake_case, starting with a letter, no “__”, at most 48 characters.";
+  it("refuses two underscores in a row, as the accept sheet does", () => {
+    expect(standardToolNameProblem("tide__x")).toBe(RULE);
+    expect(standardToolNameProblem("Bad Name")).toBe(RULE);
+    expect(standardToolNameProblem("a")).toBe(RULE);
+  });
+  it("still takes a snake_case name and says nothing while empty", () => {
+    expect(standardToolNameProblem("tide_times")).toBeNull();
+    expect(standardToolNameProblem(" tide_times ")).toBeNull();
+    expect(standardToolNameProblem("")).toBeNull();
   });
 });

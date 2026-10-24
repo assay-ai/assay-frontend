@@ -100,11 +100,15 @@ jobs:
       - run: pnpm test
       - run: pnpm build
 
-      # Demo pages hold made-up data: keep them out of search results.
-      - name: Keep the demo out of search engines
-        if: github.ref_name == 'demo'
+      # Only production may be indexed: demo holds made-up data and develop is a
+      # test deployment. The header goes into the existing /* block: Cloudflare
+      # Pages keeps only one block per path, so a second /* block would drop the
+      # site-wide headers (CSP, HSTS ...).
+      - name: Keep demo and develop out of search engines
+        if: github.ref_name != 'main'
         run: |
-          printf '\n/*\n  X-Robots-Tag: noindex, nofollow\n' >> out/_headers
+          awk '{ print } $0 == "/*" && !done { print "  X-Robots-Tag: noindex, nofollow"; done = 1 } END { if (!done) exit 1 }' out/_headers > out/_headers.tmp
+          mv out/_headers.tmp out/_headers
 
       # Spec R-WEB-2/3/4: the exact out/ that is deployed must carry integrity
       # on every script and the strict headers, whichever branch was pushed.

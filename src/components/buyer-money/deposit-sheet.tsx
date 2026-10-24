@@ -125,8 +125,15 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
         : "Allow the escrow to take the amount",
       cost: "gas",
       skip: !evm,
-      run: async ({ report, previousAttempt }) => {
-        const signer = requireSigner(signerState, ownerAddress ? money.ownerShort : null);
+      // No prompt at all when the allowance already covers the amount.
+      mayNotPrompt: true,
+      // Privy's details row wants a short action; the amount is in the description.
+      promptTitle: `Approve ${symbol}`,
+      promptDescription: parsed.value
+        ? `Lets the Assay escrow take ${formatDecimal(parsed.value)} ${symbol} from your wallet for the deposit that follows. You pay the network fee.`
+        : undefined,
+      run: async ({ report, previousAttempt, prompt }) => {
+        const signer = requireSigner(signerState, ownerAddress ? money.ownerShort : null, prompt);
         if (!runRef.current || runRef.current.amountAtomic !== parsed.atomic) {
           runRef.current = { chainId: chainId!, amountAtomic: parsed.atomic!, created: null, createdAt: 0 };
         }
@@ -143,8 +150,11 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
       id: "deposit",
       label: `Deposit ${parsed.value ? formatDecimal(parsed.value) : ""} ${symbol}`.replace(/\s+/g, " "),
       cost: evm ? "gas" : "free",
-      run: async ({ report, previousAttempt }) => {
-        const signer = requireSigner(signerState, ownerAddress ? money.ownerShort : null);
+      promptDescription: parsed.value
+        ? `Moves ${formatDecimal(parsed.value)} ${symbol} from your wallet into your escrow, which only your wallet controls.${evm ? " You pay the network fee." : ""}`
+        : undefined,
+      run: async ({ report, previousAttempt, prompt }) => {
+        const signer = requireSigner(signerState, ownerAddress ? money.ownerShort : null, prompt);
         if (!runRef.current || runRef.current.amountAtomic !== parsed.atomic) {
           runRef.current = { chainId: chainId!, amountAtomic: parsed.atomic!, created: null, createdAt: 0 };
         }
