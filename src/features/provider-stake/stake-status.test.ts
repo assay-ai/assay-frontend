@@ -14,7 +14,7 @@ describe("stakeStatus", () => {
     expect(reading.health).toBe("short");
     expect(reading.label).toBe("Short");
     expect(reading.sentence).toBe(
-      "Short: $20.00 below the $100.00 minimum. Add stake to keep paid calls running.",
+      "Short: $20.00 below the $100.00 minimum. Pending penalties count against your stake. Add stake to keep paid calls running.",
     );
   });
 
@@ -23,7 +23,7 @@ describe("stakeStatus", () => {
     expect(reading.health).toBe("close");
     expect(reading.label).toBe("Covered, close to the minimum");
     expect(reading.sentence).toBe(
-      "Covered, close to the minimum: $19.95 above the $100.00 minimum. A penalty could take you below it. Recommended: $150.00.",
+      "Covered, close to the minimum: $19.95 above the $100.00 minimum. A proposed penalty counts against your stake at once and could take you below it; keep your stake above the minimum. Recommended: $150.00.",
     );
   });
 

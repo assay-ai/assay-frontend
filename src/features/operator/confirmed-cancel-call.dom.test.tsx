@@ -21,7 +21,7 @@ const OTHER = `0x${"2".repeat(64)}`;
 // A server that labels the call with this case's id but encodes another one.
 const call = (encoded: string, signature = "cancelSlash(bytes32)"): SlashContractCall => ({
   chainId: "eip155:46630",
-  to: "0x7242F853db478A28Ae76Ace808212d4B68aa73e7",
+  to: "0xAfe1e699d188Ab5042B693978E889D7c5085F710",
   data: encodeCall(signature, [encoded]),
   value: "0",
   signer: ARBITER,

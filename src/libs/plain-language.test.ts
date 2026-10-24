@@ -138,7 +138,7 @@ describe("plain (any key)", () => {
     ["DATA_RESULT", "The provider returned data"],
     ["SETTLED", "Charged"],
     ["stale_timestamp", "The data was older than allowed"],
-    ["STAKE_BELOW_MINIMUM", "The provider's stake is below the minimum"],
+    ["STAKE_BELOW_MINIMUM", "The provider's free stake (stake minus pending penalties) is below the minimum"],
     ["SPEND_LIMIT_EXCEEDED", "This call would go over your spend limit"],
     ["NOT_A_KNOWN_KEY", "Not a known key"],
   ])("%s → %s", (key, expected) => {

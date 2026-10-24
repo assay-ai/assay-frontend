@@ -118,7 +118,13 @@ export interface ProviderChainStake {
   chainId: string;
   /** False when the stake source has no reading for this provider ON THIS CHAIN. */
   hasKnownStake: boolean;
-  /** `null` when `hasKnownStake` is false. Never a synthetic zero. */
+  /**
+   * `null` when `hasKnownStake` is false. Never a synthetic zero.
+   *
+   * On EVM this is the FREE bonded stake, `freeBondedOf` = bonded minus pending
+   * (and disputed) penalties (assay-evm D-26): what the escrow's payment gate
+   * compares with the minimum. A proposed penalty lowers it at once.
+   */
   staked: Money | null;
   /** When `staked` was read. `null` when `hasKnownStake` is false. */
   observedAt: string | null;

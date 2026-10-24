@@ -27,14 +27,14 @@ export const SLASH_HOLD_ERROR_CODES: ReadonlySet<string> = new Set([
 const PROVIDER_REASON_TEXT: Readonly<Record<string, string>> = Object.freeze({
   SLASH_WINDOW_FULL: "today's penalty limit is full and a penalty is waiting",
   STAKE_FULLY_RESERVED: "your stake is fully reserved by pending penalties",
-  BONDED_BELOW_MINIMUM: "your stake is below the minimum",
+  BONDED_BELOW_MINIMUM: "your free stake (your stake minus pending penalties) is below the minimum",
 });
 
 /** The same reasons in the third person, for the operator console. */
 const OPERATOR_REASON_TEXT: Readonly<Record<string, string>> = Object.freeze({
   SLASH_WINDOW_FULL: "Daily penalty limit full, a penalty waiting",
   STAKE_FULLY_RESERVED: "Stake fully reserved by pending penalties",
-  BONDED_BELOW_MINIMUM: "Stake below the minimum",
+  BONDED_BELOW_MINIMUM: "Free stake (stake minus pending penalties) below the minimum",
 });
 
 function lookup(table: Readonly<Record<string, string>>, reason: string): string | null {
