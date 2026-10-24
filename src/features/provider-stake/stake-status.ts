@@ -7,6 +7,9 @@ import { formatDecimal, formatMoney, toDecimal } from "@/utils/money";
  * Stake health, one rule for every screen that talks about it: Home, Stake,
  * the Inbox and the Add stake sheet (D21).
  *
+ * `staked` is the FREE stake on EVM (stake minus pending penalties,
+ * `freeBondedOf`, assay-evm D-26): a proposed penalty counts at once.
+ *
  *   short    staked < minimum: paid calls are at risk now
  *   close    minimum ≤ staked < minimum × 1.2: covered, but a penalty could
  *            take you below it (the backend's headroom notice, same 20%)
@@ -61,7 +64,7 @@ export function stakeStatus(input: {
     return {
       health: "short",
       label: "Short",
-      sentence: `Short: ${formatMoney(gap)} below the ${minimum} minimum. Add stake to keep paid calls running.`,
+      sentence: `Short: ${formatMoney(gap)} below the ${minimum} minimum. Pending penalties count against your stake. Add stake to keep paid calls running.`,
       gap,
     };
   }
@@ -72,7 +75,7 @@ export function stakeStatus(input: {
     return {
       health: "close",
       label: "Covered, close to the minimum",
-      sentence: `Covered, close to the minimum: ${formatMoney(gap)} above the ${minimum} minimum. A penalty could take you below it.${recommendedText}`,
+      sentence: `Covered, close to the minimum: ${formatMoney(gap)} above the ${minimum} minimum. A proposed penalty counts against your stake at once and could take you below it; keep your stake above the minimum.${recommendedText}`,
       gap,
     };
   }

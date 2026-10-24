@@ -16,7 +16,7 @@ const EXPECTED = { contract: "stake" as const, functionName: "upholdSlashBatch",
 
 const call = (overrides: Partial<SlashContractCall> = {}): SlashContractCall => ({
   chainId: "eip155:46630",
-  to: "0x7242F853db478A28Ae76Ace808212d4B68aa73e7",
+  to: "0xAfe1e699d188Ab5042B693978E889D7c5085F710",
   data: DATA,
   value: "0",
   signer: ARBITER,
@@ -36,7 +36,7 @@ const filled: Eip155UnsignedTransaction = {
   chainId: "eip155:46630",
   kind: "transaction",
   from: ARBITER,
-  to: "0x7242F853db478A28Ae76Ace808212d4B68aa73e7",
+  to: "0xAfe1e699d188Ab5042B693978E889D7c5085F710",
   data: DATA,
   value: "0",
   nonce: "1",
@@ -172,7 +172,7 @@ describe("sendSlashContractCall", () => {
     const setBlocked = encodeCall("setBlocked(address,bool)", [CHECKSUMMED, true]);
     await expect(
       sendSlashContractCall(
-        call({ to: "0xBF2DE8e24254Cf6f2313Ab4B5CeBE8066bBdb0e5", data: setBlocked, functionName: "setBlocked" }),
+        call({ to: "0x7d4F60198a1519074ce1E316911E2f130643231c", data: setBlocked, functionName: "setBlocked" }),
         s,
         { contract: "config", functionName: "setBlocked", args: [ARBITER, true] },
         deps,

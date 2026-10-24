@@ -15,7 +15,7 @@ describe("holdSentence", () => {
       }),
     ).toBe(
       "Paid calls are not being routed to you on Robinhood Chain testnet since 2026-10-15 07:30 UTC, "
-      + "because today's penalty limit is full and a penalty is waiting and your stake is below the minimum.",
+      + "because today's penalty limit is full and a penalty is waiting and your free stake (your stake minus pending penalties) is below the minimum.",
     );
   });
 
