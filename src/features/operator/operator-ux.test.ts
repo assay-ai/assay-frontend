@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import type { OnChainDisputeState } from "@/interfaces/provider-disputes";
 
 import type {
@@ -396,6 +396,12 @@ describe("the next step for this operator", () => {
   });
 
   it("after suspending a disputed penalty, waits for the arbiter on the dispute's own clock (B1)", () => {
+    // caseNextStep compares the deadline with the wall clock, so pin it to NOW.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     // Disputed 23 days ago, frozen executable time long past: the record is still Disputed on chain.
     const b = brief({
       status: "OVERTURNED",
