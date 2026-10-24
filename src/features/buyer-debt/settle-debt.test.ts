@@ -156,6 +156,10 @@ describe("settleDebt", () => {
 
     expect(result.remainingDebts).toBe(0);
     expect(signTypedData).toHaveBeenCalledTimes(1);
+    const options = (signTypedData.mock.calls[0] as unknown as [unknown, Record<string, unknown>])[1];
+    expect(options.showWalletUIs).toBe(true);
+    expect(options.title).toMatch(/^Pay debt: .*\d/);
+    expect(options.description).toMatch(/\d/);
     expect(submit).toHaveBeenCalledWith("int_1", { voucher: issued.voucher, signature: "0xsig" });
   });
 

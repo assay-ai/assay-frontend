@@ -162,16 +162,81 @@ export interface Signer {
  * The `AuthorizeDelegate` and `SetLimits` call sites pass it explicitly. An
  * injected wallet (MetaMask, …) always shows its own prompt.
  */
-export interface WalletPromptOptions {
+export interface WalletPromptOptions extends WalletPromptText {
   showWalletUIs: true;
+}
+
+/**
+ * What Privy's own confirmation screen says, so the prompt names the amount
+ * the sheet showed (lot 1 D14). Only the fields the installed SDK
+ * (`@privy-io/react-auth` 3.37) documents are used:
+ *
+ * - a signature (`signTypedData`, `signMessage`): `SignMessageModalUIOptions`
+ *   `title` and `description`;
+ * - a transaction (`signTransaction`, `signAndSend`):
+ *   `SendTransactionModalUIOptions` has no title, so `title` becomes
+ *   `transactionInfo.action` (the details row) and `description` its
+ *   `description`.
+ *
+ * An injected wallet (MetaMask, …) shows its own prompt and never sees these.
+ */
+export interface WalletPromptText {
+  title?: string;
+  description?: string;
 }
 
 /** {@link WalletPromptOptions} for `signTypedData`. */
 export type SignTypedDataOptions = WalletPromptOptions;
 
-/** Privy's `uiOptions` for a call: forced on when asked, else left to Privy's default. */
-function privyUi(options: WalletPromptOptions | undefined): { uiOptions?: { showWalletUIs: true } } {
-  return options?.showWalletUIs === true ? { uiOptions: { showWalletUIs: true } } : {};
+/** The text fields that are set, and nothing for the ones that are not. */
+function promptText(options: WalletPromptText): WalletPromptText {
+  return {
+    ...(options.title ? { title: options.title } : {}),
+    ...(options.description ? { description: options.description } : {}),
+  };
+}
+
+/** Privy's `uiOptions` for a signature: forced on when asked, else left to Privy's default. */
+function privyUi(options: WalletPromptOptions | undefined): {
+  uiOptions?: { showWalletUIs: true; title?: string; description?: string };
+} {
+  if (options?.showWalletUIs !== true) return {};
+  const text = promptText(options);
+  return { uiOptions: { showWalletUIs: true, ...text } };
+}
+
+/** The details row of Privy's Send Transaction screen. */
+interface PrivyTransactionInfo {
+  action: string;
+}
+
+/** Privy's `uiOptions` for a transaction: the same, in the Send Transaction screen's fields. */
+function privyTxUi(options: WalletPromptOptions | undefined): {
+  uiOptions?: { showWalletUIs: true; description?: string; transactionInfo?: PrivyTransactionInfo };
+} {
+  if (options?.showWalletUIs !== true) return {};
+  const text = promptText(options);
+  const details = text.title ? { transactionInfo: { action: text.title } } : {};
+  const description = text.description ? { description: text.description } : {};
+  return { uiOptions: { showWalletUIs: true, ...description, ...details } };
+}
+
+/**
+ * The same signer, with `text` on every confirmation it asks for. A sheet
+ * wraps the signer of one wallet step with it, so the feature code that signs
+ * stays as it is and still forces the confirmation (`showWalletUIs: true`);
+ * text a call passes itself wins.
+ */
+export function withWalletPrompt(signer: Signer, text: WalletPromptText | undefined): Signer {
+  if (!text || (!text.title && !text.description)) return signer;
+  const merge = <O extends WalletPromptOptions | undefined>(options: O): O =>
+    (options ? { ...promptText(text), ...options } : options) as O;
+  return {
+    ...signer,
+    signTransaction: (tx, options) => signer.signTransaction(tx, merge(options)),
+    signTypedData: (request, options) => signer.signTypedData(request, merge(options)),
+    signAndSend: (tx, options) => signer.signAndSend(tx, merge(options)),
+  };
 }
 
 export const CHAIN_OPERATION_UNSUPPORTED = "CHAIN_OPERATION_UNSUPPORTED";
@@ -576,7 +641,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
                   type: 2,
                 },
                 // `{ address }` for the reason `signTypedData` gives below.
-                { address: wallet.address, ...privyUi(options) },
+                { address: wallet.address, ...privyTxUi(options) },
               );
               return signature as `0x${string}`;
             };
@@ -778,7 +843,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
               transaction: base64ToBytes(tx.transactionBase64),
               wallet,
               chain: toSolanaChain(boundChainId),
-              ...(options ? { options: privyUi(options) } : {}),
+              ...(options ? { options: privyTxUi(options) } : {}),
             });
             /*
               Base64 out, not raw bytes. Every caller hands the result straight
@@ -823,7 +888,7 @@ export function useSigner(options: { chainId: string | null; address?: string })
               transaction: base64ToBytes(tx.transactionBase64),
               wallet,
               chain: toSolanaChain(boundChainId),
-              ...(options ? { options: privyUi(options) } : {}),
+              ...(options ? { options: privyTxUi(options) } : {}),
             });
             return base58Encode(signature);
           },

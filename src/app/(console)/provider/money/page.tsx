@@ -22,7 +22,7 @@ import { lossOf } from "@/features/provider-penalties/model";
 import { usePenalties } from "@/features/provider-penalties/use-penalties";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { isTransactionRef } from "@/features/provider-earnings/payments";
-import { callsOfClass, earningsSplit, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
+import { callsOfClass, earningsSplit, heldInWindowLine, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
 import {
   callCount,
   notCreditedBreakdown,
@@ -117,6 +117,8 @@ export default function ProviderMoneyPage() {
   const split = earningsSplit(earnings.data?.totals);
   // Normal money format; a sub-cent amount still shows its own digits (see `formatMoney`).
   const unpaid = unpaidLines(earnings.data?.totals, (value) => formatMoney(value, { decimals: 2 }));
+  // Passed, still held while the buyer can dispute (lot 1 D15).
+  const heldInWindow = heldInWindowLine(earnings.data?.totals, (value) => formatMoney(value, { decimals: 2 }));
   const monthName = MONTH.format(now);
   // The home's "Details" link lands on the block, which renders only once the month has loaded.
   const hasUnpaid = unpaid.length > 0;
@@ -211,6 +213,13 @@ export default function ProviderMoneyPage() {
               <span className="text-body-13 text-02">In your wallet this month</span>
               <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
             </div>
+            {heldInWindow ? (
+              <div className="flex flex-col gap-0.5" data-testid="money-held-in-window">
+                <span className="text-body-13 text-02">Held in the dispute window</span>
+                <span className="font-mono text-mono-13 font-semibold text-01">{heldInWindow.amount}</span>
+                <span className="text-body-xs text-03">{heldInWindow.text}</span>
+              </div>
+            ) : null}
             <MoneySplit
               segments={
                 [

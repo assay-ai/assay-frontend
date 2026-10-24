@@ -17,7 +17,7 @@ import { REMOVED_TOOL_DRAFT, useProviderToolNames } from "@/features/provider-bi
 import { REPLY_PROMISE } from "@/features/provider-tool-requests/request-sheet";
 import type { ToolBindingSummary } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
-import { plainError } from "@/libs/plain-language";
+import { plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { discardToolBinding, listToolBindings } from "@/services/provider-tool-bindings.service";
 import { PROVIDER_BINDINGS_PAGE, providerQueries } from "@/features/provider-home/queries";
@@ -36,7 +36,7 @@ function discardError(error: unknown): string {
   if (error instanceof ApiError && error.code === "PROVIDER_BINDING_NOT_DISCARDABLE") {
     return "This listing was published or already took calls, so it can no longer be discarded. Pause it instead.";
   }
-  return error instanceof ApiError ? plainError(error.code, error.status) : "It could not be discarded. Try again.";
+  return error instanceof ApiError ? plainApiError(error) : "It could not be discarded. Try again.";
 }
 
 export default function ProviderToolsPage() {

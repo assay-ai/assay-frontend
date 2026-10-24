@@ -21,13 +21,15 @@ import { addressFamily, useProviderSetup, type ProviderSetup } from "@/features/
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { waitingPeriodOf, waitingPeriodPhrase } from "@/features/provider-stake/withdraw-state";
 import { useChainName } from "@/hooks/useChainName";
+import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { ApiError } from "@/libs/ApiClient";
 import { GLOSSARY } from "@/libs/glossary";
-import { knowsError, plainError } from "@/libs/plain-language";
+import { knowsError, plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
 import { cn } from "@/utils";
+import { addressOfAccount } from "@/utils/chain";
 
 /**
  * Provider setup — `/provider/setup`. Three steps on one page:
@@ -67,6 +69,8 @@ function stageDone(setup: ProviderSetup, stage: Exclude<Stage, "done">): boolean
 }
 
 export default function ProviderSetupPage() {
+  // This page sits outside the console layout, so it names its own tab (BUG-NF-06).
+  useDocumentTitle("Set up — Assay");
   const setup = useProviderSetup();
   const params = useSearchParams();
   const requested = STAGE_FROM_PARAM[params.get("step") ?? ""] ?? null;
@@ -157,7 +161,7 @@ export default function ProviderSetupPage() {
 
 /** A plain sentence for an API error; the server's own message when the dictionary has none. */
 function errorSentence(error: unknown): string {
-  if (error instanceof ApiError) return knowsError(error.code) ? plainError(error.code) : error.message;
+  if (error instanceof ApiError) return knowsError(error.code) ? plainApiError(error) : error.message;
   return error instanceof Error && error.message ? error.message : "That did not go through. Try again.";
 }
 
@@ -352,7 +356,7 @@ function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void 
     >
       {active.map((account) => (
         <Outcome key={account.chainId} tone="teal" icon={<CircleCheck />}>
-          Paid to <span className="font-mono text-mono-13 [overflow-wrap:anywhere]">{account.accountId}</span> on{" "}
+          Paid to <span className="font-mono text-mono-13 [overflow-wrap:anywhere]">{addressOfAccount(account.accountId)}</span> on{" "}
           {chainName(account.chainId)}.
         </Outcome>
       ))}

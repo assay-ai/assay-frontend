@@ -18,6 +18,15 @@ describe("try errors", () => {
   });
 });
 
+// BUG-PRV-SETUP-01: an oversized paste is a 413 with its own sentence, not "something went wrong".
+describe("an oversized try", () => {
+  it("says it is too large", () => {
+    expect(tryErrorView(new ApiError("PAYLOAD_TOO_LARGE", "The request body is too large.", 413)).text).toBe(
+      "This is too large to try. Paste a shorter command or document, or only the operation you want to list.",
+    );
+  });
+});
+
 describe("try requests", () => {
   it("sends a curl as is, and an OpenAPI with the operation and test-only headers", () => {
     expect(tryBody("curl https://a.example/x")).toEqual({ curl: "curl https://a.example/x" });

@@ -49,6 +49,11 @@ export interface ToolsetEntry extends Omit<ToolsetEntryInput, "maxPrice"> {
   toolName: string;
   category: string;
   maxPrice: Money | null;
+  /**
+   * Newer servers: Assay took the tool down (its own takedown or its handle's,
+   * or it was removed), so agents no longer see it. Read only, never sent back.
+   */
+  takenDown?: boolean;
 }
 
 /** The MCP URLs of one tool set (`ToolsetUrlsDto`); a shared one only while it is shared. */

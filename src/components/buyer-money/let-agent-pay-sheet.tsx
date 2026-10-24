@@ -3,6 +3,7 @@
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 
+import { formatLimit } from "@/components/g31/format";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
@@ -320,21 +321,30 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
     }
     return { chainId: money.chainId.split(":")[1]!, verifyingContract: contract };
   };
+  // The page's shown ceiling; else raise the escrow caps to cover the agent, never lowering one set higher.
+  const max = (a: string, b: string | undefined) => (b && BigInt(b) > BigInt(a) ? b : a);
+  const escrowCaps = chosen
+    ? (ceiling ?? {
+        maxVoucherAmount: max(chosen.maxVoucherAmount, openingCaps?.perCall),
+        maxPerWindow: max(chosen.maxPerWindow, openingCaps?.perWindow),
+      })
+    : null;
+  // The amounts the wallet prompt names (lot 1 D14), as the sheet prints them.
+  const shown = (atomic: string) => formatLimit({ amount: atomic, asset: "", decimals: money.decimals });
   return [
     {
       id: "caps",
       label: "Raise your account ceiling to fit",
       cost: "free",
       skip: Boolean(chosen && planSignatures(openingCaps, chosen).length === 1),
-      run: async ({ report }) => {
-        const signer = requireSigner(money.signerState, money.ownerShort);
+      promptTitle: "Set your account ceiling",
+      promptDescription: escrowCaps
+        ? `At most ${shown(escrowCaps.maxVoucherAmount)} a call and ${shown(escrowCaps.maxPerWindow)} in 24 hours, for all your agents together. Then ${agentName}'s own limits. Free, no gas.`
+        : undefined,
+      run: async ({ report, prompt }) => {
+        const signer = requireSigner(money.signerState, money.ownerShort, prompt);
         report({ stage: "preparing" });
-        // The page's shown ceiling; else raise the escrow caps to cover the agent, never lowering one set higher.
-        const max = (a: string, b: string | undefined) => (b && BigInt(b) > BigInt(a) ? b : a);
-        const escrowCaps = ceiling ?? {
-          maxVoucherAmount: max(chosen!.maxVoucherAmount, openingCaps?.perCall),
-          maxPerWindow: max(chosen!.maxPerWindow, openingCaps?.perWindow),
-        };
+        if (!escrowCaps) throw new Error("Choose its limits.");
         const intent = await createEscrowLimitsIntent(escrowCaps);
         report({ stage: "wallet" });
         // Signed only if the payload carries exactly these caps.
@@ -348,8 +358,11 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
       id: "grant",
       label: `Let ${agentName} pay`,
       cost: "free",
-      run: async ({ report }) => {
-        const signer = requireSigner(money.signerState, money.ownerShort);
+      promptDescription: chosen
+        ? `${agentName} may pay at most ${shown(chosen.maxVoucherAmount)} a call and ${shown(chosen.maxPerWindow)} in 24 hours from your escrow. It cannot withdraw. Free, no gas.`
+        : undefined,
+      run: async ({ report, prompt }) => {
+        const signer = requireSigner(money.signerState, money.ownerShort, prompt);
         report({ stage: "preparing" });
         const caps = {
           maxVoucherAmount: { amount: chosen!.maxVoucherAmount, asset: "", decimals: money.decimals },
@@ -386,7 +399,11 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
         void queryClient.invalidateQueries({ queryKey: ["escrow"] });
         // The debts ride on `GET /me/status` now; they refreshed with the escrow before.
         void queryClient.invalidateQueries({ queryKey: ME_STATUS_KEY });
-        return { explorerUrl: money.chain ? explorerTxUrl(money.chain, relayed.transactionHash) : undefined };
+        return {
+          explorerUrl: money.chain ? explorerTxUrl(money.chain, relayed.transactionHash) : undefined,
+          // Which keys waiting for approval this made bound (the enable-paid page checks its own).
+          data: { promotedCredentialIds: relayed.promotedCredentialIds },
+        };
       },
     },
   ];

@@ -9,8 +9,7 @@ import * as React from "react";
  * A Content-Security-Policy belongs to the document, and a client-side
  * navigation keeps the document. So moving into or out of these pages is a
  * full page load: entering, so the page gets its own strict headers; leaving,
- * so the rest of the app (sign-in included, whose captcha the strict policy
- * refuses) does not run under them.
+ * so the rest of the app (sign-in included) does not run under them.
  */
 export function isStrictPagePath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;

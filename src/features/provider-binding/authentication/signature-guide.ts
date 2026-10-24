@@ -12,7 +12,7 @@
  */
 
 /**
- * Shown above the snippet while `@assay-ai/provider-verify` is not on npm.
+ * Shown above the snippet while `@goassay-ai/provider-verify` is not on npm.
  * Set to null once the package is published, and the line goes away.
  */
 export const SIGNATURE_PACKAGE_NOTE: string | null =
@@ -42,7 +42,7 @@ export function requestKeysUrl(apiBaseUrl: string | undefined): string | null {
 /** An Express example with the key set of this deployment. */
 export function signatureSnippet(keysUrl: string | null): string {
   return [
-    'import { assayVerify } from "@assay-ai/provider-verify/express";',
+    'import { assayVerify } from "@goassay-ai/provider-verify/express";',
     "",
     "// Before any body parser. A call without a valid signature gets 401.",
     keysUrl ? `app.use(assayVerify({ jwksUrl: "${keysUrl}" }));` : "app.use(assayVerify());",

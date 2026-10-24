@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { changePercent, previousTotal, rankRows, spendCsv, spendCsvFilename } from "./spend-view";
+import { changePercent, paidGroups, previousTotal, rankRows, spendCsv, spendCsvFilename } from "./spend-view";
 import type { SummaryGroup } from "./wire";
 
 const m = (amount: string) => ({ amount, asset: "eip155:1/erc20:0x1", decimals: 6 });
@@ -70,6 +70,33 @@ describe("rankRows", () => {
     expect(rows[1]!.delta).toBeNull();
     expect(rows[2]!.free).toBe(true);
   });
+  it("marks a free-tier-only group (calls 0, freeCalls > 0) as free and counts its free calls", () => {
+    const freeOnly = { ...group("free", "0", "0", 0), freeCalls: 4 };
+    const [row] = rankRows([freeOnly], (k) => k);
+    expect(row!.free).toBe(true);
+    expect(row!.calls).toBe(4);
+  });
+  it("does not count a zero-price intent twice (in calls and in freeCalls)", () => {
+    const [row] = rankRows([{ ...group("free", "0", "0", 2), freeCalls: 5 }], (k) => k);
+    expect(row!.calls).toBe(5);
+  });
+  it("keeps an empty group (no calls, no free calls) not free, as before", () => {
+    const [row] = rankRows([group("none", "0", "0", 0)], (k) => k);
+    expect(row!.free).toBe(false);
+    expect(row!.calls).toBe(0);
+  });
+  it("keeps a paid row's count as its paid calls", () => {
+    const [row] = rankRows([{ ...group("paid", "100", "100", 3), freeCalls: 9 }], (k) => k);
+    expect(row!.free).toBe(false);
+    expect(row!.calls).toBe(3);
+  });
+});
+
+describe("paidGroups", () => {
+  it("leaves out a free-tier-only group (calls 0) and keeps paid ones", () => {
+    const groups = [group("paid", "100", "100", 2), { ...group("free", "0", "0", 0), freeCalls: 3 }];
+    expect(paidGroups(groups).map((g) => g.key)).toEqual(["paid"]);
+  });
 });
 
 describe("spend CSV", () => {
@@ -79,11 +106,19 @@ describe("spend CSV", () => {
       labelOf: () => "search, web",
       assetLabel: "USDG on Robinhood",
     });
-    expect(csv.split("\n")[0]).toBe("Tool,Tool id,Asset,Calls,Listed,Charged,Not charged,Not charged calls,Owed,Owed calls");
-    expect(csv.split("\n")[1]).toBe('"search, web",t1,USDG on Robinhood,10,0.001500,0.001000,0.000500,1,0.000000,0');
+    expect(csv.split("\n")[0]).toBe("Tool,Tool id,Asset,Calls,Listed,Charged,Not charged,Not charged calls,Owed,Owed calls,Free calls");
+    expect(csv.split("\n")[1]).toBe('"search, web",t1,USDG on Robinhood,10,0.001500,0.001000,0.000500,1,0.000000,0,0');
     expect(spendCsvFilename("tool", "2026-10-09T10:00:00.000Z", "2026-10-16T00:00:00.000Z")).toBe(
       "spend-by-tool_2026-10-09_2026-10-15.csv",
     );
+  });
+});
+
+describe("spend CSV, free-only group (fe-followup M5)", () => {
+  it("counts the free calls, never '0 calls'", () => {
+    const g = { ...group("t1", "0", "0", 0), freeCalls: 4 };
+    const csv = spendCsv([g], { dimensionHeader: "Tool", labelOf: (k) => k, assetLabel: "USDG" });
+    expect(csv.split("\n")[1]).toBe("t1,t1,USDG,4,0.000000,0.000000,0.000000,0,0.000000,0,4");
   });
 });
 
@@ -95,6 +130,6 @@ describe("owed (buyer debt) is its own bucket", () => {
     expect(row!.owedPct).toBeGreaterThan(0);
     const csv = spendCsv([g], { dimensionHeader: "Tool", labelOf: (k) => k, assetLabel: "USDG" });
     expect(csv.split("\n")[0]).toContain("Owed,Owed calls");
-    expect(csv.split("\n")[1]!.endsWith(",0.000250,1")).toBe(true);
+    expect(csv.split("\n")[1]!.endsWith(",0.000250,1,0")).toBe(true);
   });
 });

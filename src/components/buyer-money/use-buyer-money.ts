@@ -10,7 +10,7 @@ import { DEPOSIT_FINALITY_KEY, depositFinalityTick, type DepositFinalityWait } f
 import { WalletNotReady } from "@/features/buyer-money/money-errors";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChains } from "@/hooks/useChains";
-import { type Signer, type UseSignerResult, useSigner } from "@/hooks/useSigner";
+import { type Signer, type UseSignerResult, useSigner, type WalletPromptText, withWalletPrompt } from "@/hooks/useSigner";
 import type { BuyerEscrow } from "@/interfaces";
 import type { ApiError } from "@/libs/ApiClient";
 import { shortAddress } from "@/libs/chains/format";
@@ -127,8 +127,13 @@ export function useBuyerMoney(options: { refetchInterval?: number | false } = {}
  * step, so the message lands in SignAction's failure line (via
  * `describeMoneyError`) rather than as a generic error.
  */
-export function requireSigner(state: UseSignerResult, owner?: string | null): Signer {
-  if (state.status === "ready") return state.signer;
+/**
+ * The ready signer, or a plain reason it is not. `prompt` (a wallet step's
+ * `context.prompt`) is put on every confirmation it asks for, so Privy's
+ * screen names the amount (lot 1 D14).
+ */
+export function requireSigner(state: UseSignerResult, owner?: string | null, prompt?: WalletPromptText): Signer {
+  if (state.status === "ready") return withWalletPrompt(state.signer, prompt);
   if (state.status === "address-not-connected") {
     throw new WalletNotReady(
       owner

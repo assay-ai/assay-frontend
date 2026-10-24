@@ -10,6 +10,8 @@ import { ALERT_ICON, presentAlert, useAlertLimitContext, useMarkAlertsRead } fro
 import { AgentHealthList } from "@/components/buyer-money/agent-health";
 import { GetStarted, useGetStartedShown } from "@/components/buyer-money/get-started";
 import { useFreeOnlyChain } from "@/components/buyer-money/use-buyer-money";
+import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
+import { plainError } from "@/libs/plain-language";
 import { Button } from "@/components/ui/button";
 import { EntityName } from "@/components/patterns/entity-name";
 import { UtcTime } from "@/components/patterns/utc-time";
@@ -47,7 +49,6 @@ import { ATTENTION_SHOWN, useOverview } from "@/features/buyer/use-overview";
 import type { FullBalance } from "@/features/g30/balance";
 import { useChainName } from "@/hooks/useChainName";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -244,7 +245,7 @@ export default function OverviewPage() {
         <PageState
           kind="error"
           title="The overview could not be loaded"
-          description={plainError(error.code)}
+          description={<ApiErrorSentence error={error} fallback={plainError(undefined)} />}
           onRetry={reload}
           code={error.code}
           details={error.message}
@@ -524,7 +525,7 @@ export default function OverviewPage() {
                                   ? `${formatMoney(call.price, { decimals: 4 })} owed`
                                   : formatMoney(call.charged, { decimals: 4 })}
                           </span>
-                          {toDecimal(uncharged).gt(0) && outcome !== "checking" && outcome !== "owed" ? (
+                          {toDecimal(uncharged).gt(0) && outcome !== "checking" && outcome !== "owed" && outcome !== "not-run" ? (
                             <span className="font-mono text-mono-xs text-teal-600">
                               {formatMoney(uncharged, { decimals: 4 })} not charged
                             </span>

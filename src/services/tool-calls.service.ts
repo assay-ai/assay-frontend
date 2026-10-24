@@ -14,6 +14,13 @@ export interface ToolCall {
    */
   charged: Money;
   /**
+   * What the refund guarantee kept back, the receipt's `withheld`: the listed
+   * price of a call that held money and was not charged, else zero. Zero for
+   * an EXPIRED call that never held anything (it never ran). Absent on older
+   * servers.
+   */
+  withheld?: Money;
+  /**
    * SETTLED, but the provider caused the payment to fail and forfeited it:
    * not charged, nobody paid.
    */
@@ -56,6 +63,39 @@ export interface ListToolCallsQuery extends ListQuery {
    * predicate (the receipt's `refundableIfReportedNow`), never a clock rule.
    */
   refundable?: boolean;
+}
+
+/**
+ * A served free call (lot 1 B5, BUG-AGT-01): `GET /tool-calls?include=free`
+ * lists them beside the paid ones. No intent, no payment status, no money:
+ * there is no receipt to open.
+ */
+export interface FreeToolCall {
+  kind: "free";
+  intentId: null;
+  /** `X-Assay-Call-Id`. */
+  callId: string;
+  toolId: string | null;
+  toolName: string | null;
+  providerId: string | null;
+  pricingMode: "FREE" | "FREEMIUM" | string;
+  verdict: WireVerdict;
+  createdAt: string;
+}
+
+export function isFreeToolCall(call: ToolCall | FreeToolCall): call is FreeToolCall {
+  return (call as FreeToolCall).kind === "free";
+}
+
+/**
+ * `GET /tool-calls?include=free&kind=free` — the served free calls only, the
+ * Calls page's Free chip. One cursor, newest first. An older backend refuses
+ * the parameter (400); the caller then falls back to the plain list.
+ */
+export function listFreeToolCalls(
+  query: Pick<ListToolCallsQuery, "limit" | "cursor" | "toolId" | "providerId" | "from" | "to" | "search"> = {},
+): Promise<CursorPage<FreeToolCall>> {
+  return api.get<CursorPage<FreeToolCall>>("/tool-calls", { ...query, include: "free", kind: "free" } as Record<string, unknown>);
 }
 
 /** GET /tool-calls — the recent-calls list on the Overview and the spine of the Spend explorer. */

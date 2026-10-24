@@ -5,7 +5,7 @@ import type { Eip155UnsignedTransaction } from "@/interfaces/chain-transaction";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
 
-import { connectedSpelling, sendSlashContractCall, signerMatches, signerRoleLabel } from "./send-contract-call";
+import { connectedSpelling, contractCallPrompt, sendSlashContractCall, signerMatches, signerRoleLabel } from "./send-contract-call";
 
 const ARBITER = "0x2222222222222222222222222222222222222222";
 const CHECKSUMMED = "0x18A508C9AF1c6fc512015276F6ca2E9aaBd74680";
@@ -74,6 +74,14 @@ describe("signerRoleLabel", () => {
   });
 });
 
+describe("contractCallPrompt", () => {
+  it("uses plain words, a generic fallback, and the amount when given", () => {
+    expect(contractCallPrompt("disputeSlashBatch")).toEqual({ title: "Dispute penalty" });
+    expect(contractCallPrompt("somethingElse")).toEqual({ title: "Confirm on-chain action" });
+    expect(contractCallPrompt("upholdSlashBatch", "$5.00").description).toContain("$5.00");
+  });
+});
+
 describe("sendSlashContractCall", () => {
   it("fills, sends from the signer and waits for the receipt", async () => {
     const { signer: s, signAndSend } = signer(ARBITER);
@@ -81,7 +89,7 @@ describe("sendSlashContractCall", () => {
     const wait = vi.fn(async () => undefined);
     await expect(sendSlashContractCall(call(), s, EXPECTED, { fill, wait })).resolves.toBe(`0x${"f".repeat(64)}`);
     expect(fill).toHaveBeenCalledWith({ chainId: "eip155:46630", from: ARBITER, to: call().to, data: DATA });
-    expect(signAndSend).toHaveBeenCalledWith(filled);
+    expect(signAndSend).toHaveBeenCalledWith(filled, { showWalletUIs: true, title: "Uphold penalty" });
     expect(wait).toHaveBeenCalledWith("eip155:46630", `0x${"f".repeat(64)}`, "upholdSlashBatch");
   });
 

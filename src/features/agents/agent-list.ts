@@ -4,7 +4,6 @@ import { useQuery, type QueryFunctionContext } from "@tanstack/react-query";
 
 import type { AgentsWithKeysPage } from "@/components/buyer-money/use-agents";
 import type { CursorPage } from "@/interfaces";
-import { ApiError } from "@/libs/ApiClient";
 import { listAgents, type Agent } from "@/services/account.service";
 
 /**
@@ -29,13 +28,41 @@ export const AGENTS_WITH_KEYS_KEY = ["agents", "with-keys"] as const;
  * `private, no-cache`, so an unchanged list costs a 304.
  */
 export async function readAgentsWithKeys(): Promise<AgentsWithKeysPage> {
+  // A person's read: an agent key is refused the whole list (`AUTH_HUMAN_SESSION_REQUIRED`),
+  // so there is no keyless fallback to read instead.
   const page = (await listAgents({ limit: AGENTS_PAGE, include: "credentials,health" })) as unknown as AgentsWithKeysPage;
-  // A row without its keys would read as "No key": refuse it as a failed read instead.
-  if ((page.items ?? []).some((agent) => !agent.credentials || !agent.health)) {
-    throw new ApiError("AGENT_KEYS_MISSING", "The agents came back without their keys", 0);
-  }
-  return page;
+  // A row without its keys would read as "No key": it is marked hidden
+  // instead, and its keys read as not shown. A person's session never gets
+  // such a row from the API; if it ever did, a quiet line shows and nothing
+  // is logged (the frontend logs no account data).
+  const items = page.items ?? [];
+  const hidden = items.filter((agent) => !agent.credentials || !agent.health).map((agent) => agent.agentId);
+  if (hidden.length === 0) return page;
+  return {
+    ...page,
+    keysHiddenFor: hidden,
+    items: items.map((agent) =>
+      agent.credentials && agent.health ? agent : { ...agent, credentials: { items: [], hasMore: false }, health: NO_HEALTH },
+    ),
+  };
 }
+
+
+/** The code `useAgentsAndKeys` reports when the keys were not shown to this session. */
+export const AGENT_KEYS_HIDDEN = "AGENT_KEYS_HIDDEN";
+
+
+const NO_HEALTH = {
+  evaluatedAt: "",
+  liveKeyCount: 0,
+  unrevokedKeyCount: 0,
+  keyBound: false,
+  boundKeyCount: 0,
+  firstCallSeen: false,
+  lastUsedAt: null,
+  earliestLastUsedAt: null,
+  lastUsedAtAnyKey: null,
+};
 
 
 /**

@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { apiKeyConfig, installCommand, tryBuild, installText, isLocalClient, isMcpClient, keyForHint, keyMode, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
+import { apiKeyConfig, installCommand, tryBuild, installText, isLocalClient, isMcpClient, keyForHint, keyMode, shownKeyHint, urlForClient, type McpClient } from "@/features/buyer-money/mcp-config";
 import { newKeyPaysNote, payingKeyName } from "@/components/buyer-money/create-key";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import {
@@ -258,15 +258,15 @@ export function ConnectBody({
   const nameRefused = nameRefusal !== null;
   const nameTaken = nameUsed && !nameRefused && otherNames.includes(serverName);
 
-  // The key: the full one only when it was created here (memory only); otherwise its prefix.
+  // The key: the full one only when it was created here (memory only); otherwise its hint.
   const agentKeys: KeyRow[] = effectiveAgentId ? (data.keys[effectiveAgentId] ?? []) : [];
   const liveKeys = agentKeys.filter((k) => !k.revokedAt);
-  const [created, setCreated] = React.useState<{ token: string; prefix: string; name: string } | null>(null);
-  // An app sign-in (OAuth grant) has no prefix to name in the config: skip it.
+  const [created, setCreated] = React.useState<{ token: string; hint: string; name: string } | null>(null);
+  // An app sign-in (OAuth grant) has no hint to name in the config: skip it.
   const hintKey = keyForHint(liveKeys);
-  const keyPrefix = created?.prefix ?? hintKey?.prefix ?? null;
+  const keyHint = created?.hint ?? hintKey?.hint ?? null;
   const keyName = created?.name ?? hintKey?.name ?? null;
-  const createKey = useCreateKey(effectiveAgentId, agentKeys.length, (key) => setCreated({ token: key.token, prefix: key.prefix, name: key.name }));
+  const createKey = useCreateKey(effectiveAgentId, agentKeys.length, (key) => setCreated({ token: key.token, hint: key.hint, name: key.name }));
   // A key made for another agent is not this agent's.
   React.useEffect(() => setCreated(null), [effectiveAgentId]);
 
@@ -314,7 +314,7 @@ export function ConnectBody({
       : isLocalClient(client)
       ? (tryBuild(() => installText(installCommand(client, { url, name: serverName }))) ?? "")
       : needsKey
-        ? (tryBuild(() => apiKeyConfig({ url, token: created?.token ?? null, keyPrefix, serverName })) ?? "")
+        ? (tryBuild(() => apiKeyConfig({ url, token: created?.token ?? null, keyHint, serverName })) ?? "")
         : url;
 
   const handOut = (copiedUrl?: string) => {
@@ -604,7 +604,7 @@ export function ConnectBody({
 
         {url && !blocked ? (
           <div className="flex min-w-0 flex-col gap-2">
-            <KeyLine prefix={keyPrefix} keyName={keyName} agentName={agent?.label ?? null} full={Boolean(created)} client={client} />
+            <KeyLine hint={keyHint} keyName={keyName} agentName={agent?.label ?? null} full={Boolean(created)} client={client} />
             {created ? (
               <p className="text-body-xs text-03">
                 {newKeyPaysNote(effectiveAgentId ? payingKeyName(data.readiness[effectiveAgentId]) : null)}
@@ -635,7 +635,7 @@ export function ConnectBody({
               nameRefused={nameRefused}
               secondUrl={secondUrl}
               token={created?.token ?? null}
-              keyPrefix={keyPrefix}
+              keyHint={keyHint}
               url={url}
               serverName={serverName}
               client={client}
@@ -1012,18 +1012,18 @@ export function ResultLine({
   );
 }
 
-function KeyLine({ prefix, keyName, agentName, full, client }: { prefix: string | null; keyName: string | null; agentName: string | null; full: boolean; client: McpClient }) {
+function KeyLine({ hint, keyName, agentName, full, client }: { hint: string | null; keyName: string | null; agentName: string | null; full: boolean; client: McpClient }) {
   // Only My own code carries a key; the other clients sign in, so a key line says nothing about them.
   if (client !== "other") return null;
-  if (!prefix) {
+  const shown = shownKeyHint(hint);
+  if (!shown) {
     return <p className="text-body-13 text-02">{agentName ?? "This agent"} has no key yet. Create one below: the config then carries it.</p>;
   }
-  const mode = keyMode(prefix);
-  const shown = prefix.replace(/[.…]+$/, "");
+  const mode = keyMode(shown);
   return (
     <p className="text-body-xs text-03" data-testid="connect-key-line">
       Uses the {mode ? `${mode} ` : ""}key {keyName ? <>“{keyName}” </> : null}
-      <span className="font-mono text-01">{shown}…</span>
+      <span className="font-mono text-01">{shown}</span>
       {agentName ? <> of {agentName}</> : null}
       {full ? <span className="text-warning-700"> · shown in full once: copy it now.</span> : " · the full key was shown once, when it was made."}
     </p>

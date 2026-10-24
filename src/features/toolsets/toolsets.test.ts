@@ -20,7 +20,7 @@ import {
   restoreBody,
 } from "./access-result";
 import { defaultEntry, entryChipLabel, entryProblem, providersLeft, slugFrom } from "./entry-rules";
-import { ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, REFUSAL_LAYER_LABELS } from "./labels";
+import { draftToolCountText, ON_EMPTY_LABELS, PROVIDER_MODE_LABELS, REFUSAL_LAYER_LABELS, takenDownToolIds } from "./labels";
 import { cantRunTools, copyBlocked, offersFreeOnly, overBudgetWith, previewCounts, previewSummary, previewWarnings, tokensText } from "./preview";
 import { providerReason, refusedCallView, viaText } from "./refused";
 
@@ -615,5 +615,19 @@ describe("T2 plain labels", () => {
     for (const word of words) expect(word).not.toMatch(/PRIVATE|UNLISTED|PUBLIC|FULL|SEARCH|discovery|toolset|handle|pinned/);
     expect(VISIBILITY_LABELS).toEqual({ PRIVATE: "Only my team", UNLISTED: "Anyone with the link", PUBLIC: "Listed in the catalogue" });
     expect(lockLabel(3)).toBe("Lock to v3 (no surprise changes)");
+  });
+});
+
+describe("taken-down entries (BUG-X-05)", () => {
+  const entries = [{ toolId: "a", takenDown: true }, { toolId: "b", takenDown: false }, { toolId: "c" }];
+  it("finds the entries Assay took down, none from an older server", () => {
+    expect([...takenDownToolIds(entries)]).toEqual(["a"]);
+    expect(takenDownToolIds([{ toolId: "x" }]).size).toBe(0);
+  });
+  it("leaves them out of the Draft's tool count and says how many were removed", () => {
+    expect(draftToolCountText(3, entries)).toBe("2 tools · 1 removed by Assay");
+    expect(draftToolCountText(1, [{ toolId: "a", takenDown: true }])).toBe("0 tools · 1 removed by Assay");
+    expect(draftToolCountText(1, [{ toolId: "c" }])).toBe("1 tool");
+    expect(draftToolCountText(2, [])).toBe("2 tools");
   });
 });

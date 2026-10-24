@@ -9,10 +9,12 @@ import {
   cursorDeeplink,
   installCommand,
   installText,
+  isInstallableUrl,
   KEY_PLACEHOLDER,
-  KEY_PREFIX_VISIBLE_LENGTH,
+  keyHintLast4,
   keyMode,
   keyPlaceholder,
+  shownKeyHint,
   keyForHint,
   remoteInstall,
   vscodeDeeplink,
@@ -21,58 +23,61 @@ import {
   type LocalMcpClient,
 } from "@/features/buyer-money/mcp-config";
 
-describe("keyMode — read off the key's visible prefix", () => {
+describe("keyMode — read off the key's hint", () => {
   it("names an API key live", () => {
-    expect(keyMode("assay_sk_live_ab12")).toBe("live");
+    expect(keyMode("assay_sk_live_…ab12")).toBe("live");
   });
 
-  it("says nothing for any other prefix: there is no test key", () => {
-    expect(keyMode("assay_live_ab12")).toBeNull();
-    expect(keyMode("assay_test_ab12")).toBeNull();
-    expect(keyMode("other_sk_live_ab12")).toBeNull();
+  it("says nothing for any other start: there is no test key", () => {
+    expect(keyMode("assay_live_…ab12")).toBeNull();
+    expect(keyMode("assay_test_…ab12")).toBeNull();
+    expect(keyMode("other_sk_live_…ab12")).toBeNull();
     expect(keyMode(null)).toBeNull();
     expect(keyMode(undefined)).toBeNull();
   });
 });
 
 describe("keyPlaceholder — what stands in for a key not on screen", () => {
-  it("names an API key by its prefix", () => {
-    expect(keyPlaceholder("assay_sk_live_ab12cd34")).toBe("assay_sk_live_ab12cd34…REST_OF_YOUR_KEY");
-    expect(keyPlaceholder("assay_sk_live_ab12cd34…")).toBe("assay_sk_live_ab12cd34…REST_OF_YOUR_KEY");
+  it("names an API key by its last 4 characters", () => {
+    expect(keyPlaceholder("assay_sk_live_…2fds")).toBe("PASTE_YOUR_KEY_ENDING_2fds");
   });
 
-  it("never echoes a full token: only the visible prefix is kept", () => {
+  it("never echoes a full token or an old 20-character prefix", () => {
     const token = "assay_sk_live_ab12cd34ef56gh78ij90kl12mn34op56";
-    const out = keyPlaceholder(token);
-    expect(out).toBe(`${token.slice(0, KEY_PREFIX_VISIBLE_LENGTH)}…REST_OF_YOUR_KEY`);
-    expect(out).not.toContain(token);
-    expect(KEY_PREFIX_VISIBLE_LENGTH).toBe(22);
+    expect(keyPlaceholder(token)).toBe(KEY_PLACEHOLDER);
+    expect(keyPlaceholder("assay_sk_live_ab12cd")).toBe(KEY_PLACEHOLDER);
+    expect(keyHintLast4(token)).toBeNull();
+    expect(shownKeyHint(token)).toBeNull();
   });
 
-  it("is the bare placeholder without a prefix, or with one that is not an API key's", () => {
+  it("is the bare placeholder without a hint, or with one that is not an API key's", () => {
     expect(keyPlaceholder(null)).toBe(KEY_PLACEHOLDER);
     expect(keyPlaceholder("")).toBe(KEY_PLACEHOLDER);
-    expect(keyPlaceholder("assay_live_ab12")).toBe(KEY_PLACEHOLDER);
+    expect(keyPlaceholder("assay_live_…ab12")).toBe(KEY_PLACEHOLDER);
   });
 });
 
 describe("credentialLabel — how a credential row shows its key", () => {
-  it("shows an API key's prefix", () => {
-    expect(credentialLabel({ prefix: "assay_sk_live_ab12" })).toBe("assay_sk_live_ab12…");
-    expect(credentialLabel({ prefix: "assay_sk_live_ab12…" })).toBe("assay_sk_live_ab12…");
+  it("shows an API key's hint, and nothing more of the key", () => {
+    expect(credentialLabel({ hint: "assay_sk_live_…2fds" })).toBe("assay_sk_live_…2fds");
+    expect(credentialLabel({ hint: "assay_sk_live_ab12cd34ef56gh78ij90kl12mn34op56", issuedVia: "API_KEY" })).toBe("API key");
   });
 
-  it("names an app sign-in (null prefix) by its client, never 'null…'", () => {
-    expect(credentialLabel({ prefix: null })).toBe("App sign-in");
-    expect(credentialLabel({ prefix: null, oauthClient: null })).toBe("App sign-in");
-    expect(credentialLabel({ prefix: null, oauthClient: { name: "Claude Code" } })).toBe("Signed in with Claude Code");
+  it("names an API key older than hints as an API key, not an app sign-in", () => {
+    expect(credentialLabel({ hint: null, issuedVia: "API_KEY" })).toBe("API key");
+  });
+
+  it("names an app sign-in (null hint) by its client, never 'null…'", () => {
+    expect(credentialLabel({ hint: null })).toBe("App sign-in");
+    expect(credentialLabel({ hint: null, oauthClient: null })).toBe("App sign-in");
+    expect(credentialLabel({ hint: null, oauthClient: { name: "Claude Code" } })).toBe("Signed in with Claude Code");
   });
 });
 
 describe("keyForHint — the key an API-key hint names", () => {
-  it("skips app sign-ins, which have no prefix to show", () => {
-    const grant = { id: "g", prefix: null };
-    const key = { id: "k", prefix: "assay_sk_live_ab12" };
+  it("skips app sign-ins, which have no hint to show", () => {
+    const grant = { id: "g", hint: null };
+    const key = { id: "k", hint: "assay_sk_live_…ab12" };
     expect(keyForHint([grant, key])).toBe(key);
     expect(keyForHint([grant])).toBeNull();
     expect(keyForHint([])).toBeNull();
@@ -123,7 +128,7 @@ describe("install commands equal the proxy's vectors, byte for byte", () => {
   });
 
   it("the Cursor deeplink decodes to the stdio entry", () => {
-    const input = { V: "1.2.3", url: "https://mcp.assay.ai/my/weather", name: "assay-weather" };
+    const input = { V: "1.2.3", url: "https://mcp.goassay.ai/my/weather", name: "assay-weather" };
     const link = new URL(cursorDeeplink(input));
     expect(link.searchParams.get("name")).toBe("assay-weather");
     const config = JSON.parse(Buffer.from(link.searchParams.get("config")!, "base64").toString("utf8"));
@@ -131,14 +136,14 @@ describe("install commands equal the proxy's vectors, byte for byte", () => {
   });
 
   it("the VS Code link decodes to name, type, command and args", () => {
-    const input = { V: "1.2.3", url: "https://mcp.assay.ai/", name: "assay" };
+    const input = { V: "1.2.3", url: "https://mcp.goassay.ai/", name: "assay" };
     const decoded = JSON.parse(decodeURIComponent(vscodeDeeplink(input).slice("vscode:mcp/install?".length)));
     expect(decoded).toEqual({ name: "assay", type: "stdio", command: "npx", args: ["-y", "@goassay-ai/mcp@1.2.3", "--name", "assay"] });
   });
 
   it("refuses a version that is not exact", () => {
     for (const bad of ["", "1", "^1.2.3", "latest", "1.2"]) {
-      expect(() => installCommand("claude-code", { V: bad, url: "https://mcp.assay.ai/", name: "assay" })).toThrow();
+      expect(() => installCommand("claude-code", { V: bad, url: "https://mcp.goassay.ai/", name: "assay" })).toThrow();
     }
   });
 });
@@ -147,7 +152,7 @@ describe("the pinned version comes from the build environment", () => {
   it("reads NEXT_PUBLIC_ASSAY_MCP_VERSION", () => {
     vi.stubEnv("NEXT_PUBLIC_ASSAY_MCP_VERSION", "2.0.1");
     expect(assayMcpVersion()).toBe("2.0.1");
-    expect(installCommand("codex", { url: "https://mcp.assay.ai/", name: "assay" })).toContain("@goassay-ai/mcp@2.0.1");
+    expect(installCommand("codex", { url: "https://mcp.goassay.ai/", name: "assay" })).toContain("@goassay-ai/mcp@2.0.1");
     vi.unstubAllEnvs();
   });
 
@@ -155,7 +160,7 @@ describe("the pinned version comes from the build environment", () => {
     for (const bad of ["", "^1.0.0", "latest"]) {
       vi.stubEnv("NEXT_PUBLIC_ASSAY_MCP_VERSION", bad);
       expect(() => assayMcpVersion()).toThrow();
-      expect(() => installCommand("claude-code", { url: "https://mcp.assay.ai/", name: "assay" })).toThrow();
+      expect(() => installCommand("claude-code", { url: "https://mcp.goassay.ai/", name: "assay" })).toThrow();
     }
     vi.unstubAllEnvs();
   });
@@ -163,24 +168,24 @@ describe("the pinned version comes from the build environment", () => {
 
 describe("the API-key snippet", () => {
   it("is a remote entry with the key in a header, and only here", () => {
-    const out = JSON.parse(apiKeyConfig({ url: "https://mcp.assay.ai/", token: "assay_sk_live_k1" }));
-    expect(out.mcpServers.assay).toEqual({ type: "http", url: "https://mcp.assay.ai/", headers: { Authorization: "Bearer assay_sk_live_k1" } });
-    expect(apiKeyConfig({ url: "https://mcp.assay.ai/", token: null })).toContain(KEY_PLACEHOLDER);
+    const out = JSON.parse(apiKeyConfig({ url: "https://mcp.goassay.ai/", token: "assay_sk_live_k1" }));
+    expect(out.mcpServers.assay).toEqual({ type: "http", url: "https://mcp.goassay.ai/", headers: { Authorization: "Bearer assay_sk_live_k1" } });
+    expect(apiKeyConfig({ url: "https://mcp.goassay.ai/", token: null })).toContain(KEY_PLACEHOLDER);
   });
 });
 
 describe("hostile input produces no command and no deeplink", () => {
-  const good = { V: "1.2.3", url: "https://mcp.assay.ai/", name: "assay" };
+  const good = { V: "1.2.3", url: "https://mcp.goassay.ai/", name: "assay" };
   const names = ["x&config=AAAA", "a b", "A", "1a", "a_b", "a'b", "$(id)", "assay;rm", "n\u00e4me", "", "a".repeat(57)];
   const urls = [
-    "https://user:secret@mcp.assay.ai/my/x",
-    "https://mcp.assay.ai/#tok",
-    "https://mcp.assay.ai/a b",
-    'https://mcp.assay.ai/a"b',
-    "https://mcp.assay.ai/a'b",
+    "https://user:secret@mcp.goassay.ai/my/x",
+    "https://mcp.goassay.ai/#tok",
+    "https://mcp.goassay.ai/a b",
+    'https://mcp.goassay.ai/a"b',
+    "https://mcp.goassay.ai/a'b",
     "javascript:alert(1)",
-    "ftp://mcp.assay.ai/",
-    "https://mcp.assay.ai/caf\u00e9",
+    "ftp://mcp.goassay.ai/",
+    "https://mcp.goassay.ai/caf\u00e9",
     "not a url",
     "",
   ];
@@ -219,7 +224,7 @@ describe("hostile input produces no command and no deeplink", () => {
 describe("a hosted connector gets one URL: copied, recorded and previewed", () => {
   it("carries free=1 for claude.ai and ChatGPT, from the single source", () => {
     for (const client of ["claude-ai", "chatgpt"] as const) {
-      for (const base of ["https://mcp.assay.ai/", "https://mcp.assay.ai/my/weather", "https://mcp.assay.ai/?tools=a_b&free=1"]) {
+      for (const base of ["https://mcp.goassay.ai/", "https://mcp.goassay.ai/my/weather", "https://mcp.goassay.ai/?tools=a_b&free=1"]) {
         const u = urlForClient(client, base);
         expect(new URL(u).searchParams.get("free")).toBe("1");
         expect(urlForClient(client, u)).toBe(u);
@@ -229,6 +234,21 @@ describe("a hosted connector gets one URL: copied, recorded and previewed", () =
         expect(recorded).toBe(copied);
       }
     }
-    expect(urlForClient("claude-code", "https://mcp.assay.ai/")).toBe("https://mcp.assay.ai/");
+    expect(urlForClient("claude-code", "https://mcp.goassay.ai/")).toBe("https://mcp.goassay.ai/");
+  });
+});
+
+// BUG-BUY-CONNECT-03: /connect/preview asks the same question the commands do.
+describe("isInstallableUrl", () => {
+  it("refuses a fragment, a space, '<' and credentials", () => {
+    for (const url of ["http://localhost:3200/#x", "http://localhost:3200/a b", "http://localhost:3200/<a", "http://u:p@localhost:3200/", "ftp://localhost/", "/relative"]) {
+      expect(isInstallableUrl(url)).toBe(false);
+    }
+  });
+
+  it("takes a canonical MCP URL", () => {
+    for (const url of ["http://localhost:3200/", "https://mcp.assay.ai/?tools=weather.get,geo.lookup", "https://mcp.assay.ai/t/acme"]) {
+      expect(isInstallableUrl(url)).toBe(true);
+    }
   });
 });

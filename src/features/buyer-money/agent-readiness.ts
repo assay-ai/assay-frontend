@@ -43,6 +43,8 @@ export interface ReadinessInput {
   credentials: readonly ReadinessCredential[] | undefined;
   /** The keys' read failed (so `credentials` stays `undefined`). */
   credentialsUnreadable?: boolean;
+  /** The keys are not shown to this session (an agent-kind one, BUG-DEMO-02). */
+  credentialsHidden?: boolean;
   /** `undefined` = not read yet. */
   delegates: readonly EscrowDelegate[] | undefined;
   /** The pay permissions' read failed. */
@@ -113,11 +115,16 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
       grant: null,
       boundCredentials: [],
       freeOnly: Boolean(input.freeOnlyChain),
-      loading: !input.credentialsUnreadable,
+      // Hidden keys are settled, not pending: never a skeleton that never ends.
+      loading: !input.credentialsUnreadable && !input.credentialsHidden,
       status: "checking",
-      sentence: input.credentialsUnreadable
-        ? "We could not read its keys just now. This does not change what it can call."
-        : "Checking its keys…",
+      sentence: input.credentialsHidden
+        ? input.freeOnlyChain
+          ? `Free calls only: ${input.freeOnlyChain} serves free calls only, so this agent makes free calls there and pays for none. Its keys show when you sign in as yourself.`
+          : "Its keys show when you sign in as yourself, not with an agent key. This does not change what it can call."
+        : input.credentialsUnreadable
+          ? "We could not read its keys just now. This does not change what it can call."
+          : "Checking its keys…",
       next: null,
     };
   }

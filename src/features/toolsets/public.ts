@@ -39,8 +39,12 @@ export function priceRangeText(tools: readonly Pick<PublicTool, "fromPrice" | "p
 
 export interface TrustFacts {
   priceRange: string | null;
-  /** Tools only one provider runs: if it is down, the call fails. */
+  /** Tools nobody serves: calls to them fail. */
+  unserved: string[];
+  /** Tools with exactly one provider: if it is down, the call fails. */
   noBackup: string[];
+  /** True only when every tool is known to have two or more providers. */
+  allBackedUp: boolean;
   /** One maker's own tools, not reviewed by Assay (the server's `notReviewed`). */
   notReviewed: string[];
   /** Tools no longer served. */
@@ -51,25 +55,39 @@ export interface TrustFacts {
 /** The facts shown above Connect on a tool set's page and as chips on its card. */
 export function trustFacts(
   card: Pick<PublicToolsetCard, "toolIds"> & { routesToPublisher?: boolean; entries?: PublicToolsetEntry[] },
-  catalogue: readonly PublicTool[],
+  catalogue: readonly PublicTool[] | null,
 ): TrustFacts {
-  const byId = new Map(catalogue.map((t) => [t.id, t]));
+  const byId = new Map((catalogue ?? []).map((t) => [t.id, t]));
   const tools = card.toolIds.map((id) => byId.get(id)).filter((t): t is PublicTool => Boolean(t));
   const nameOf = (id: string) => card.entries?.find((e) => e.toolId === id)?.toolName ?? byId.get(id)?.name ?? id;
   const entryOf = (id: string) => card.entries?.find((e) => e.toolId === id);
   const removed = (card.entries ?? []).filter((e) => e.removed).map((e) => e.toolName);
-  const noBackup = card.toolIds.filter((id) => {
+  // How many providers serve each tool; a tool missing from the catalogue is
+  // read from the set's own entry, and counts as 0 when nothing says otherwise.
+  const providersOf = (id: string): number | null => {
     const tool = byId.get(id);
     const entry = entryOf(id);
-    if (!tool || entry?.removed) return false;
+    if (entry?.removed) return null;
+    if (!tool) {
+      // A maker's own API is not in the catalogue by design; it has its own line.
+      if (entry?.notReviewed) return null;
+      if (entry) return entry.providerCount;
+      // The public catalogue lists every tool somebody serves: once it has loaded, a missing tool has none.
+      return catalogue ? 0 : null;
+    }
     // An "Only these" rule with one provider leaves no backup either.
-    const providers = entry && entry.providerMode === "ONLY" ? Math.min(entry.providerCount, tool.providerCount) : tool.providerCount;
-    return providers === 1;
-  });
+    return entry && entry.providerMode === "ONLY" ? Math.min(entry.providerCount, tool.providerCount) : tool.providerCount;
+  };
+  const counts = card.toolIds.map((id) => ({ id, providers: providersOf(id) }));
+  const unserved = counts.filter((c) => c.providers === 0).map((c) => c.id);
+  const noBackup = counts.filter((c) => c.providers === 1).map((c) => c.id);
+  const allBackedUp = counts.length > 0 && counts.every((c) => c.providers !== null && c.providers >= 2);
   const notReviewed = (card.entries ?? []).filter((e) => e.notReviewed && !e.removed).map((e) => e.toolId);
   return {
     priceRange: priceRangeText(tools),
+    unserved: unserved.map(nameOf),
     noBackup: noBackup.map(nameOf),
+    allBackedUp,
     notReviewed: notReviewed.map(nameOf),
     removed,
     routesToPublisher: Boolean(card.routesToPublisher),

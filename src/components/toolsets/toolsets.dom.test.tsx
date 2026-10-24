@@ -311,8 +311,8 @@ describe("the client tabs", () => {
   });
 
   it("My own code, without the key, names it by its prefix", () => {
-    const out = text(render(<McpConfigTabs token={null} keyPrefix="assay_sk_live_ab12" url="https://mcp.example.com/" client="other" />));
-    expect(out).toContain("assay_sk_live_ab12…REST_OF_YOUR_KEY");
+    const out = text(render(<McpConfigTabs token={null} keyHint="assay_sk_live_…ab12" url="https://mcp.example.com/" client="other" />));
+    expect(out).toContain("PASTE_YOUR_KEY_ENDING_ab12");
   });
 
   it("snippets wrap on a phone, so the URL and the header stay visible (review F, 390px)", () => {

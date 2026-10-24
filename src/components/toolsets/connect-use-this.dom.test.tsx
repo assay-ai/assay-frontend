@@ -18,7 +18,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined, r
 
 const AGENT = "11111111-1111-1111-1111-111111111111";
 const HOST = "https://mcp.example.com";
-const KEY = { id: "k1", agentId: AGENT, name: "laptop", prefix: "assay_sk_live_ab12", scopes: [], lastUsedAt: null, expiresAt: null, revokedAt: null, createdAt: "2026-10-18T00:00:00Z" };
+const KEY = { id: "k1", agentId: AGENT, name: "laptop", hint: "assay_sk_live_…ab12", scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, createdAt: "2026-10-18T00:00:00Z" };
 
 function render(initialUrl: string, servers: unknown[] = []): string {
   vi.stubEnv("NEXT_PUBLIC_MCP_URL", `${HOST}/`);
@@ -127,7 +127,7 @@ describe("a typed name that does not fit", () => {
         <McpConfigTabs guide token={null} url={`${HOST}/c/weather`} client={id} serverName="assay-weather-forecast-and-alerts-for-everyone" nameRefused />,
       );
       expect(html, id).toContain(NO_COMMAND_TEXT);
-      expect(html, id).not.toMatch(/npx -y @goassay-ai\/mcp@|cursor:\/\/|vscode:|mcpServers|REST_OF_YOUR_KEY/);
+      expect(html, id).not.toMatch(/npx -y @goassay-ai\/mcp@|cursor:\/\/|vscode:|mcpServers|PASTE_YOUR_KEY_ENDING/);
       // Every Copy of a command or config is off; copying the bare URL ("Copy the URL only", the URL chip) carries no name.
       const enabledCopies = [...html.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)].filter(
         ([, attrs, inner]) => !attrs!.includes('disabled=""') && !attrs!.includes('data-testid="copy-url-only"') && !attrs!.includes(`title="${HOST}/c/weather"`) && /Copy/.test(inner!),

@@ -11,6 +11,20 @@ const money = (amount: string) => ({ amount, asset: "x", decimals: 6 });
 const call = (status: string, verdict: string | null, price = "50000", id = Math.random().toString()): ToolCall =>
   ({ intentId: id, toolId: "t", providerId: "p", status, price: money(price), charged: money(status === "SETTLED" ? price : "0"), verdict, createdAt: "" }) as ToolCall;
 
+describe("foldReasons — EXPIRED calls that never held money (BUG-BUY-MONEY-01)", () => {
+  it("leaves out an EXPIRED call whose withheld is zero, keeps one that held money", () => {
+    const neverRan = { ...call("EXPIRED", null, "10000", "a"), withheld: money("0") };
+    const held = { ...call("EXPIRED", null, "10000", "b"), withheld: money("10000") };
+    const rows = foldReasons([], [neverRan, held]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ reason: "EXPIRED", calls: 1 });
+  });
+  it("keeps an EXPIRED call from an older server (no withheld) as before", () => {
+    const rows = foldReasons([], [call("EXPIRED", null, "10000", "c")]);
+    expect(rows[0]).toMatchObject({ reason: "EXPIRED", calls: 1 });
+  });
+});
+
 describe("foldReasons", () => {
   it("covers every not-charged call under its real reason, not only those with a verdict", () => {
     const calls = [

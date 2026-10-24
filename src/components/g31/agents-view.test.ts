@@ -34,8 +34,8 @@ function key(patch: Partial<KeyRow> = {}): KeyRow {
     name: "Assay app on this Mac",
     issuedVia: "OAUTH",
     oauthClient: BUILTIN,
-    prefix: null,
-    scopes: [],
+    hint: null,
+    scopes: ["tools:call", "payments", "activity:read"],
     lastUsedAt: null,
     expiresAt: null,
     revokedAt: null,
@@ -122,8 +122,8 @@ describe("Agents & keys rows (spec §9.2)", () => {
   });
 
   it("an API key row names its key", () => {
-    const row = view(key({ issuedVia: "API_KEY", oauthClient: null, prefix: "assay_sk_live_ab12", name: "CI deploy" }));
-    expect(row.source).toBe("API key assay_sk_live_ab12…");
+    const row = view(key({ issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…ab12", name: "CI deploy" }));
+    expect(row.source).toBe("API key assay_sk_live_…ab12");
     expect(row.paymentClient).toBe(true);
     expect(row.paymentLine).toBe("Payment key: none — free tools only");
   });
@@ -163,6 +163,50 @@ describe("Agents & keys rows (spec §9.2)", () => {
     }
     // Once read: proven off, it is folded away like any ended row.
     expect(view(revoked, []).mayBeActive).toBe(false);
+  });
+});
+
+describe("Agents & keys rows: scopes, expiry and a key waiting for approval", () => {
+  const NEW = `${EVM}:0x${"2".repeat(32)}77aa88bb`;
+
+  it("says what the key may do and when it ends", () => {
+    const row = view(key({ issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…ab12", expiresAt: "2027-01-17T12:00:00.000Z" }));
+    expect(row.scopes).toBe("Calls tools · pays · reads activity");
+    expect(row.expiry).toEqual({ text: "Expires Jan 17, 2027", soon: false });
+  });
+
+  it("an end within a week is soon; a past one says expired", () => {
+    expect(view(key({ expiresAt: "2026-10-22T12:00:00.000Z" })).expiry).toEqual({ text: "Expires Oct 22", soon: true });
+    expect(view(key({ expiresAt: "2026-10-01T12:00:00.000Z" })).expiry).toEqual({ text: "Expired Oct 1", soon: false });
+    expect(view(key({ expiresAt: null })).expiry).toBeNull();
+  });
+
+  it("a free-calls-only key is never offered a payment key or payment limits", () => {
+    const row = view(key({ issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…ab12", scopes: ["tools:call"] }));
+    expect(row.scopes).toBe("Calls tools");
+    expect(row.paymentClient).toBe(false);
+    expect(row.paymentLine).toBeNull();
+  });
+
+  it("a read-only key with the reports box", () => {
+    expect(view(key({ scopes: ["activity:read", "reports:write"] })).scopes).toBe("Reads activity · reports bad results");
+  });
+
+  it("shows a new payment key waiting for approval, and that the bound one keeps paying", () => {
+    const row = view(
+      key({ delegateAccount: DELEGATE, pendingDelegateAccount: NEW, pendingDelegateRequestedAt: "2026-10-19T09:00:00.000Z" }),
+      [grant()],
+    );
+    expect(row.pending).toEqual({
+      text: "New payment key 77AA 88BB is waiting for your approval · asked Oct 19",
+      note: "It replaces B447 D10C, which keeps paying until you approve. To approve, open the link your app showed.",
+    });
+    // The bound key's line is unchanged: it still pays.
+    expect(row.paymentLine).toContain("Payment key B447 D10C · on");
+  });
+
+  it("no key waiting: no pending line", () => {
+    expect(view(key({ delegateAccount: DELEGATE }), [grant()]).pending).toBeNull();
   });
 });
 

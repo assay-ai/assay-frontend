@@ -87,6 +87,37 @@ export interface CaseFacts {
    * 5 days", counted from the proposal. Null otherwise.
    */
   notOnChainForDays: number | null;
+  /**
+   * Not on chain yet and the last attempt to put it there failed: the reason in
+   * plain words (`chainLastError`, BUG-OPS-CASES-02). Null otherwise, and on an
+   * older backend that does not send it.
+   */
+  chainFailure: string | null;
+}
+
+/**
+ * The plain reason behind a stored `chain_last_error`, for the operator. A
+ * code this file does not know is named as it is, so it can still be looked up.
+ */
+export function chainErrorText(code: string): string {
+  switch (code) {
+    case "transport":
+      return "Assay could not reach the chain, or the chain gave no usable answer.";
+    case "PROVIDER_STAKE_AUTHORITY_UNPROVEN":
+      return "The provider has no proved stake wallet on this chain, so no transaction can be built that names its stake.";
+    case "SLASH_NO_HARMED_AGENTS":
+      return "No harmed agent could be named for this penalty, so there is nobody to pay it to.";
+    case "SLASH_BENEFICIARY_EVIDENCE_REFUSED":
+      return "The evidence for who is paid was refused.";
+    case "SLASH_PLAN_EVIDENCE_MISMATCH":
+      return "The penalty's plan does not match its evidence.";
+    default:
+      // A local SLASH_* / PROVIDER_* refusal never reached the chain (fe-followup M6); a
+      // contract's custom error is CamelCase (`ProposalAlreadyExists`); anything else is not blamed on either.
+      if (/^(SLASH|PROVIDER)_/.test(code)) return `Assay did not send it (${code}).`;
+      if (/^[A-Z][a-z]+[A-Za-z0-9]*$/.test(code)) return `The chain refused it (${code}).`;
+      return `The last attempt failed (${code}).`;
+  }
 }
 
 function plusSeconds(iso: string | null, seconds: number): string | null {
@@ -167,6 +198,7 @@ export function caseFacts(brief: OperatorCaseBrief, now: number = Date.now()): C
       appliedMinor: brief.manualActions?.recordExecution.appliedMinor ?? null,
     },
     notOnChainForDays,
+    chainFailure: stage === "not-on-chain" && brief.chainLastError ? chainErrorText(brief.chainLastError) : null,
   };
 }
 
@@ -540,6 +572,20 @@ export function caseNextStep(
         until: null,
       };
     case "not-on-chain":
+      // The last attempt failed: say why, so a stuck proposal never reads as a healthy wait.
+      if (facts.chainFailure) {
+        return {
+          kind: "waiting",
+          title:
+            facts.notOnChainForDays !== null
+              ? `Not on chain after ${daysText(facts.notOnChainForDays)}: the last attempt failed`
+              : "Not on chain yet: the last attempt failed",
+          description: `${facts.chainFailure} Assay tries again on its next pass; nothing can be executed until it is on chain.`,
+          action: null,
+          secondary: null,
+          until: null,
+        };
+      }
       if (facts.notOnChainForDays !== null) {
         return {
           kind: "waiting",

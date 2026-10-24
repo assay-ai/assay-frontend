@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 /* Spec R-WEB-2/3/4, T18: scripts/add-sri.js and scripts/check-built-headers.js on a small built tree. */
 const require = createRequire(import.meta.url);
 const { completeHeaders } = require("../../scripts/connect-csp.js") as {
-  completeHeaders: (text: string, pages: Record<string, Record<string, string>>, origins: string[]) => string;
+  completeHeaders: (text: string, pages: Record<string, Record<string, string>>, origins: string[], siteOrigins?: string[]) => string;
 };
 const { addSri } = require("../../scripts/add-sri.js") as { addSri: (dir: string) => { scripts: number; preloads: number; inline: number } };
 const { checkOut } = require("../../scripts/check-built-headers.js") as { checkOut: (dir: string) => string[] };
@@ -24,10 +24,13 @@ const page = (extra = "") =>
 /* The checker expects the API origin of NEXT_PUBLIC_API_BASE_URL in `connect-src`; pin it so the result does not depend on the shell or CI env. */
 const API_BASE_URL = "https://api.example.com/api/v1";
 const API_ORIGIN = "https://api.example.com";
+const MCP_URL = "https://mcp.example.com/";
+const MCP_ORIGIN = "https://mcp.example.com";
 
 const dirs: string[] = [];
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_API_BASE_URL", API_BASE_URL);
+  vi.stubEnv("NEXT_PUBLIC_MCP_URL", MCP_URL);
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -35,7 +38,7 @@ afterEach(() => {
 });
 
 /** A built tree: the strict pages, a chunk, and `_headers` completed the way the build does (with the API origin). */
-function build(connectOrigins: string[] = [API_ORIGIN]): string {
+function build(connectOrigins: string[] = [API_ORIGIN], siteOrigins: string[] = [API_ORIGIN, MCP_ORIGIN]): string {
   const dir = mkdtempSync(join(tmpdir(), "built-"));
   dirs.push(dir);
   execFileSync("mkdir", ["-p", join(dir, "connect"), join(dir, "agents"), join(dir, "_next/static/chunks")]);
@@ -46,7 +49,7 @@ function build(connectOrigins: string[] = [API_ORIGIN]): string {
     "/connect/*": { "/connect/authorize": readFileSync(join(dir, "connect/authorize.html"), "utf8") },
     "/agents/enable-paid": { "/agents/enable-paid": readFileSync(join(dir, "agents/enable-paid.html"), "utf8") },
   };
-  writeFileSync(join(dir, "_headers"), completeHeaders(HEADERS, pages, connectOrigins));
+  writeFileSync(join(dir, "_headers"), completeHeaders(HEADERS, pages, connectOrigins, siteOrigins));
   return dir;
 }
 
@@ -84,6 +87,17 @@ describe("check-built-headers", () => {
     expect(checkOut(build([])).join("\n")).toMatch(/\/connect\/authorize.*connect-src is not the strict policy's/);
   });
 
+  it("fails a site-wide Report-Only policy without this build's MCP origin", () => {
+    expect(checkOut(build([API_ORIGIN], [API_ORIGIN])).join("\n")).toMatch(/\/\*: Content-Security-Policy-Report-Only is not sitePolicy\(\)/);
+  });
+
+  it("fails a strict page that no longer detaches the site-wide Report-Only policy", () => {
+    const dir = build();
+    const file = join(dir, "_headers");
+    writeFileSync(file, readFileSync(file, "utf8").replace("  ! Content-Security-Policy-Report-Only\n", ""));
+    expect(checkOut(dir).join("\n")).toMatch(/\/connect\/authorize: does not detach Content-Security-Policy-Report-Only/);
+  });
+
   it("fails a script without integrity", () => {
     const dir = build();
     const file = join(dir, "connect/authorize.html");
@@ -119,7 +133,7 @@ describe("check-built-headers", () => {
     const dir = build();
     const file = join(dir, "_headers");
     const text = readFileSync(file, "utf8");
-    writeFileSync(file, text.replace("script-src 'self'", "script-src 'self' https://cdn.example.com").replace(/ {2}X-Frame-Options: DENY\n/, "").replace("Referrer-Policy: no-referrer", "Referrer-Policy: origin"));
+    writeFileSync(file, text.replace("script-src 'self' https://challenges.cloudflare.com", "script-src 'self' https://cdn.example.com https://challenges.cloudflare.com").replace(/ {2}X-Frame-Options: DENY\n/, "").replace("Referrer-Policy: no-referrer", "Referrer-Policy: origin"));
     const out = checkOut(dir).join("\n");
     expect(out).toMatch(/script-src widened/);
     expect(out).toMatch(/X-Frame-Options must be DENY/);

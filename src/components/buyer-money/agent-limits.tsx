@@ -18,6 +18,8 @@ import { nextUtcMidnight, nextUtcMonth, windowRefillAt } from "@/features/buyer-
 import {
   agentLimitRows,
   budgetAgentId,
+  canUseAccountDefault,
+  accountDefaultError,
   ceilingCountsMoreThanAgents,
   limitLines,
   type LimitLine,
@@ -28,8 +30,8 @@ import { useChains } from "@/hooks/useChains";
 import type { Money } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { freeOnlyCeilingText, freeOnlyLimitsText } from "@/libs/chains/paid-rails";
-import { plainError } from "@/libs/plain-language";
-import { updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
+import { plainApiError, plainError } from "@/libs/plain-language";
+import { dropAgentSpendPolicy, updateSpendPolicy, type SpendPolicy } from "@/services/limits.service";
 import { getReceiptsSummary } from "@/services/receipts.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
@@ -205,7 +207,7 @@ export function BudgetOnlySheet({
       onOpenChange(false);
       onSaved?.();
     } catch (caught) {
-      setError(caught instanceof ApiError ? plainError(caught.code) : "The limits could not be saved. Try again.");
+      setError(caught instanceof ApiError ? plainApiError(caught) : "The limits could not be saved. Try again.");
     } finally {
       setBusy(false);
     }
@@ -416,9 +418,45 @@ export function AgentLimitsCard({ ctx, agent, onChanged }: { ctx: LimitsContext;
             </>
           ) : null}
           <SpendingLimitsActions ctx={ctx} agent={agent} readiness={readiness} onChanged={onChanged} showStop={false} />
+          {canUseAccountDefault(ctx.policy, agent.agentId, applies) ? (
+            <UseAccountDefault agentId={agent.agentId} agentName={name} onChanged={onChanged} />
+          ) : null}
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * "Use account default" (lot 1 B6): drops this agent's own Assay limits, so
+ * the account default applies to it again. Audited by the backend; nothing on
+ * chain changes (its payment key's limits stay as signed).
+ */
+function UseAccountDefault({ agentId, agentName, onChanged }: { agentId: string; agentName: string; onChanged: () => void }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="flex flex-col items-start gap-1">
+      <Button size="sm" variant="secondary" type="button" onClick={() => setOpen(true)} data-testid="use-account-default">
+        Use account default
+      </Button>
+      <p className="text-body-xs text-03">{agentName} has its own limits. Drop them to use your account&apos;s default limits.</p>
+      <ConfirmSheet
+        open={open}
+        onOpenChange={setOpen}
+        tone="primary"
+        title={`Use the account default for ${agentName}?`}
+        description="Its own Assay limits are dropped and your account's default limits apply to it from now. Its payment key's on-chain limits stay as signed. The change is recorded under your name."
+        confirmLabel="Use account default"
+        onConfirm={async () => {
+          await dropAgentSpendPolicy(agentId);
+          void queryClient.invalidateQueries({ queryKey: ["spend-policy"] });
+          toast.success(`${agentName} uses your account's default limits now.`);
+          onChanged();
+        }}
+        describeError={(error) => accountDefaultError(error instanceof ApiError ? error : null)}
+      />
+    </div>
   );
 }
 
@@ -540,7 +578,7 @@ export function OldRuleLine({ policy, freeOnly = false }: { policy: SpendPolicy 
         changes={[{ label: "Refuse calls above", before: amount, after: "No rule" }]}
         confirmLabel="Remove the rule"
         onConfirm={() => remove.mutateAsync()}
-        describeError={(error) => (error instanceof ApiError ? plainError(error.code) : "That did not go through. Try again.")}
+        describeError={(error) => (error instanceof ApiError ? plainApiError(error) : "That did not go through. Try again.")}
       />
     </div>
   );
