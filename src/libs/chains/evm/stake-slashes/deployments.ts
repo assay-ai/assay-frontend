@@ -21,6 +21,14 @@
  * CREATE2 landed in block `0x8743934` = 141,834,548). The RPC and explorer are
  * the ones `providers/index.tsx` already writes out for the same chain.
  *
+ * ## Two stacks on the same chain
+ *
+ * The develop and production backends both run on Robinhood testnet, each
+ * with its own contracts. `NEXT_PUBLIC_EVM_DEPLOYMENT` picks the set at build
+ * time; the deploy workflow derives it from the branch (`main` →
+ * `production`), never from an environment variable the API could influence.
+ * Unset (local and e2e builds) means the develop set.
+ *
  * ## Also the trust anchor for every signature and call
  *
  * The same record pins the escrow, config and settlement token, so every
@@ -59,20 +67,40 @@ export interface StakeDeployment {
   readonly fallbackAssetSymbol: string;
 }
 
-export const ROBINHOOD_TESTNET_STAKE: StakeDeployment = {
+const ROBINHOOD_TESTNET = {
   chainId: "eip155:46630",
   displayName: "Robinhood Chain testnet",
   rpcUrl: "https://rpc.testnet.chain.robinhood.com",
   explorerBaseUrl: "https://explorer.testnet.chain.robinhood.com",
+  settlementToken: "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3",
+  fallbackAssetDecimals: 6,
+  fallbackAssetSymbol: "USDG",
+} as const;
+
+/** The develop stack's contracts (api-dev). */
+export const ROBINHOOD_TESTNET_DEV_STAKE: StakeDeployment = {
+  ...ROBINHOOD_TESTNET,
   stakeContract: "0xAfe1e699d188Ab5042B693978E889D7c5085F710",
   escrowContract: "0x343606d8Db3872EEC5Ea56cb43b9F4606Bfdf71f",
   configContract: "0x7d4F60198a1519074ce1E316911E2f130643231c",
-  settlementToken: "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3",
   deployBlock: BigInt(141_834_548),
   configDeployBlock: BigInt(141_834_514),
-  fallbackAssetDecimals: 6,
-  fallbackAssetSymbol: "USDG",
 };
+
+/** The production trial stack's contracts (api), deployed from the same commit as develop's. */
+export const ROBINHOOD_TESTNET_PRODUCTION_STAKE: StakeDeployment = {
+  ...ROBINHOOD_TESTNET,
+  stakeContract: "0x33De8AD7a1A2Ce9817bB18Cc17b76C23f92B4cFd",
+  escrowContract: "0xE68A6E2810027dB5da48c2110bd3993eD8177115",
+  configContract: "0xB33Cdac203cC50099a64a9316C71A1c17C11C66C",
+  deployBlock: BigInt(141_936_083),
+  configDeployBlock: BigInt(141_936_054),
+};
+
+export const ROBINHOOD_TESTNET_STAKE: StakeDeployment =
+  process.env.NEXT_PUBLIC_EVM_DEPLOYMENT === "production"
+    ? ROBINHOOD_TESTNET_PRODUCTION_STAKE
+    : ROBINHOOD_TESTNET_DEV_STAKE;
 
 /** Every chain this page can check. One today. */
 export const STAKE_DEPLOYMENTS: readonly StakeDeployment[] = [ROBINHOOD_TESTNET_STAKE];
