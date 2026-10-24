@@ -13,7 +13,9 @@ describe("the hold reasons", () => {
   it("says each of the three to the provider in plain words", () => {
     expect(providerHoldReasonText("SLASH_WINDOW_FULL")).toBe("today's penalty limit is full and a penalty is waiting");
     expect(providerHoldReasonText("STAKE_FULLY_RESERVED")).toBe("your stake is fully reserved by pending penalties");
-    expect(providerHoldReasonText("BONDED_BELOW_MINIMUM")).toBe("your stake is below the minimum");
+    expect(providerHoldReasonText("BONDED_BELOW_MINIMUM")).toBe(
+      "your free stake (your stake minus pending penalties) is below the minimum",
+    );
   });
 
   it("names an unknown reason as it came", () => {

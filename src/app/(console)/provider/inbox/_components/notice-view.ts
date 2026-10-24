@@ -290,7 +290,7 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
       return {
         title: `${tool ?? "One paid tool"}: your stake is below the ${formatMoney(required)} minimum`,
         body:
-          `Your stake (${formatMoney(staked)}) is below the ${formatMoney(required)} minimum. ` +
+          `Your stake (${formatMoney(staked)}, after pending penalties) is below the ${formatMoney(required)} minimum. ` +
           `Paid calls continue${until ? ` until ${until}` : ` for ${grace}`}; unpaid earnings go to your stake meanwhile. ` +
           `If it is still below then, ${tool ?? "the tool"} stops taking paid calls. Add stake.`,
         target: addStake,

@@ -410,15 +410,21 @@ export function delayToForm(seconds: number): { value: string; unit: DelayUnit }
   return { value: String(Math.round(seconds / 60)), unit: "minutes" };
 }
 
+/** The chain's floor in words: "10 minutes" on a test chain, "48 hours" in production. */
+export function slashDelayMinText(seconds: number): string {
+  return seconds % 3600 === 0 ? `${seconds / 3600} hours` : `${Math.round(seconds / 60)} minutes`;
+}
+
 export function checkSlashDelay(
   value: string,
   unit: DelayUnit,
   currentSeconds: number,
+  minSeconds: number = CONFIG_LIMITS.minSlashDelaySeconds,
 ): { ok: true; seconds: number } | { ok: false; error: string } {
   if (!/^\d+$/.test(value.trim())) return { ok: false, error: "Enter a whole number." };
   const seconds = Number(value) * UNIT_SECONDS[unit];
-  if (seconds < CONFIG_LIMITS.minSlashDelaySeconds || seconds > CONFIG_LIMITS.maxSlashDelaySeconds) {
-    return { ok: false, error: "The contract allows 10 minutes to 22 days." };
+  if (seconds < minSeconds || seconds > CONFIG_LIMITS.maxSlashDelaySeconds) {
+    return { ok: false, error: `The contract allows ${slashDelayMinText(minSeconds)} to 22 days.` };
   }
   if (seconds === currentSeconds) return { ok: false, error: "This is the current window." };
   return { ok: true, seconds };

@@ -56,12 +56,23 @@ export const REDEEM_GRACE_SECONDS = 1_800;
 
 /**
  * The nearest expiry the backend builds a grant for (assay-evm D-21): at least
- * `TIGHTEN_DELAY_SECONDS` (3600) after the signed request's `deadline`, which is
- * the chain's clock plus 300 s — so 3900 s out — plus a margin for the time the
+ * `TIGHTEN_DELAY_SECONDS` (10,800 since D-24) after the signed request's `deadline`,
+ * which is the chain's clock plus 300 s — so 11,100 s out — plus a margin for the time the
  * person takes to sign and for clock drift. Closer, it is refused
  * `SETTLEMENT_DELEGATION_INVALID`.
  */
-export const MIN_VALID_UNTIL_LEAD_SECONDS = 3_900 + 120;
+export const MIN_VALID_UNTIL_LEAD_SECONDS = 11_100 + 120;
+
+/** {@link MIN_VALID_UNTIL_LEAD_SECONDS} in words, rounded up to whole minutes ("3 hours 7 minutes"). */
+export function minValidUntilLeadText(): string {
+  const total = Math.ceil(MIN_VALID_UNTIL_LEAD_SECONDS / 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} hour${h === 1 ? "" : "s"}`);
+  if (m > 0) parts.push(`${m} minute${m === 1 ? "" : "s"}`);
+  return parts.join(" ");
+}
 
 /** The backend's refusal of a grant the escrow would refuse (bad caps or expiry). */
 export const DELEGATION_INVALID_CODE = "SETTLEMENT_DELEGATION_INVALID";
@@ -171,7 +182,7 @@ export function parseDelegationForm(
   if (keep) {
     if (currentValidUntil < Math.floor(nowSeconds) + MIN_VALID_UNTIL_LEAD_SECONDS) {
       errors.validDays =
-        "The current expiry is less than about 1 hour 5 minutes away — choose a number of days instead.";
+        `The current expiry is less than about ${minValidUntilLeadText()} away — choose a number of days instead.`;
     }
   } else if (
     !/^\d+$/.test(days) ||
@@ -384,7 +395,7 @@ export function delegationInvalidText(error: unknown): string | null {
   if (/ValidUntil/i.test(reason)) {
     return (
       "The expiry is too soon. An agent’s authorisation must last at least about " +
-      `1 hour 5 minutes from now (and at most ${MAX_DELEGATION_DAYS} days). Choose a later expiry and sign again.`
+      `${minValidUntilLeadText()} from now (and at most ${MAX_DELEGATION_DAYS} days). Choose a later expiry and sign again.`
     );
   }
   return (

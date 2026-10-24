@@ -31,9 +31,9 @@ const BUYER = "0x4924000000000000000000000000000000000d89";
 const REQUIREMENTS = {
   namespace: "eip155",
   chainId: "eip155:46630",
-  contract: "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f",
+  contract: "0x343606d8Db3872EEC5Ea56cb43b9F4606Bfdf71f",
   method: "depositFor(address,uint64)",
-  spender: "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f",
+  spender: "0x343606d8Db3872EEC5Ea56cb43b9F4606Bfdf71f",
   buyer: BUYER,
   asset: "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3",
   amount: "5000000",

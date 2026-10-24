@@ -40,6 +40,7 @@ import {
   checkNewArbiter,
   checkNewVerifier,
   checkSlashDelay,
+  slashDelayMinText,
   confirmWordMatches,
   delayToForm,
   formToParams,
@@ -889,7 +890,7 @@ function DelaySheet({ open, settings, deployment, onClose, onDone }: SheetProps)
         { icon: ShieldCheck, text: "Penalties already proposed keep the window they were given" },
       ]}
       prepare={() => {
-        const checked = checkSlashDelay(value, unit, settings.slashDelaySeconds);
+        const checked = checkSlashDelay(value, unit, settings.slashDelaySeconds, settings.minSlashDelaySeconds);
         if (!checked.ok) {
           setError(checked.error);
           return null;
@@ -913,7 +914,7 @@ function DelaySheet({ open, settings, deployment, onClose, onDone }: SheetProps)
             setError(undefined);
           }}
           inputMode="numeric"
-          hint={`10 min to 528 h. Now ${settings.slashDelaySeconds % 3600 === 0 ? `${settings.slashDelaySeconds / 3600} h` : durationText(settings.slashDelaySeconds)}.`}
+          hint={`${slashDelayMinText(settings.minSlashDelaySeconds)} to 528 h. Now ${settings.slashDelaySeconds % 3600 === 0 ? `${settings.slashDelaySeconds / 3600} h` : durationText(settings.slashDelaySeconds)}.`}
           error={error}
         />
         <Segmented value={unit} onValueChange={(next) => setUnit(next as DelayUnit)} aria-label="Unit">

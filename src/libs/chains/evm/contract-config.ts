@@ -91,6 +91,7 @@ export const CONFIG_VIEWS_ABI = parseAbi([
   "function arbiter() view returns (address)",
   "function paused() view returns (bool)",
   "function slashDelaySeconds() view returns (uint64)",
+  "function minSlashDelaySeconds() view returns (uint64)",
   "function params() view returns (ParamSet)",
   "function verifierKey(address verifier) view returns (VerifierKey)",
   "function ASSET() view returns (address)",
@@ -109,6 +110,7 @@ export const CONFIG_LIMITS = Object.freeze({
   maxSlashCapBps: 5_000,
   minUnbondingSeconds: 11 * 86_400,
   maxUnbondingSeconds: 30 * 86_400,
+  /** The test-chain floor (D-23); production chains enforce 48 h. The form uses the chain's own `minSlashDelaySeconds()`. */
   minSlashDelaySeconds: 10 * 60,
   maxSlashDelaySeconds: 22 * 86_400,
   maxVerifierLifetimeSeconds: 365 * 86_400,
@@ -125,6 +127,8 @@ export interface ContractSettings {
   readonly arbiter: Address | null;
   readonly paused: boolean;
   readonly slashDelaySeconds: number;
+  /** The floor `setSlashDelay` enforces on this chain: 48 h, or 10 min on a test chain (D-23). */
+  readonly minSlashDelaySeconds: number;
   readonly params: ConfigParams;
   /** The settlement token's scale, for the money fields. */
   readonly asset: { readonly decimals: number; readonly symbol: string; readonly fromChain: boolean };
@@ -174,12 +178,13 @@ export function createConfigChainReader(deployment: StakeDeployment): ConfigChai
     },
     readVerifierKey: (verifier) => read("verifierKey", [verifier]),
     async readSettings() {
-      const [owner, admin, arbiter, paused, delay, params] = await Promise.all([
+      const [owner, admin, arbiter, paused, delay, minDelay, params] = await Promise.all([
         read<Address>("owner"),
         read<Address>("admin"),
         read<Address>("arbiter"),
         read<boolean>("paused"),
         read<bigint>("slashDelaySeconds"),
+        read<bigint>("minSlashDelaySeconds"),
         read<ConfigParams>("params"),
       ]);
       let asset: ContractSettings["asset"];
@@ -200,6 +205,7 @@ export function createConfigChainReader(deployment: StakeDeployment): ConfigChai
         arbiter: arbiter.toLowerCase() === ZERO_ADDRESS ? null : arbiter,
         paused,
         slashDelaySeconds: Number(delay),
+        minSlashDelaySeconds: Number(minDelay),
         params: { ...params, takeRateBps: Number(params.takeRateBps), slashAgentBps: Number(params.slashAgentBps), slashPlatformBps: Number(params.slashPlatformBps), slashCapBps: Number(params.slashCapBps) },
         asset,
       };

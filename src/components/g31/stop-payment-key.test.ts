@@ -6,7 +6,7 @@ import type { DelegateIntent } from "@/interfaces";
 const calls: string[] = [];
 const PAYER = "0x18103e1D79257c695B2FBbd4b346CD2Ba7927296";
 const DELEGATE = "0x76B98fD03eE16e2673532769891f1400b447d10C";
-const ESCROW = "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f";
+const ESCROW = "0x343606d8Db3872EEC5Ea56cb43b9F4606Bfdf71f";
 
 const REVOKE_INTENT: DelegateIntent = {
   kind: "REVOKE_DELEGATE",
