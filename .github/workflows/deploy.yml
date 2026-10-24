@@ -69,6 +69,9 @@ jobs:
       NEXT_PUBLIC_DEMO_CHAINS: ${{ vars.NEXT_PUBLIC_DEMO_CHAINS || secrets.NEXT_PUBLIC_DEMO_CHAINS }}
       NEXT_PUBLIC_SHOW_KITCHEN_SINK: ${{ vars.NEXT_PUBLIC_SHOW_KITCHEN_SINK || secrets.NEXT_PUBLIC_SHOW_KITCHEN_SINK }}
       CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || secrets.CLOUDFLARE_PAGES_PROJECT }}
+      # Which pinned contracts the bundle trusts (src/libs/chains/evm/stake-slashes/deployments.ts).
+      # Derived from the branch, not from a Variable, so it cannot drift from the backend it ships with.
+      NEXT_PUBLIC_EVM_DEPLOYMENT: ${{ github.ref_name == 'main' && 'production' || 'dev' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
