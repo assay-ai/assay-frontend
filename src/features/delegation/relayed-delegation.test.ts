@@ -26,7 +26,7 @@ function authorizeIntent(
         name: "Assay Settlement",
         version: "2",
         chainId: "46630",
-        verifyingContract: "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f",
+        verifyingContract: "0x343606d8Db3872EEC5Ea56cb43b9F4606Bfdf71f",
       },
       types: {
         AuthorizeDelegate: [
@@ -55,7 +55,7 @@ function authorizeIntent(
   } as DelegateIntent;
 }
 
-const ESCROW = "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f";
+const ESCROW = "0x343606d8Db3872EEC5Ea56cb43b9F4606Bfdf71f";
 const DOMAIN = { chainId: "46630", verifyingContract: ESCROW };
 const EXPECTED = {
   domain: DOMAIN,

@@ -43,7 +43,7 @@ function setLimitsRequest(
       name: "Assay Settlement",
       version: "2",
       chainId: "46630",
-      verifyingContract: "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f",
+      verifyingContract: "0x343606d8Db3872EEC5Ea56cb43b9F4606Bfdf71f",
     },
     types: {
       SetLimits: [
@@ -458,7 +458,7 @@ describe("a payload the buyer did not choose is refused before the wallet is ask
       maxPriorityFeePerGas: "1",
     },
   });
-  const ESCROW = "0x1eDb0E45747cfEf778bDB4f4418319efc0DD814f";
+  const ESCROW = "0x343606d8Db3872EEC5Ea56cb43b9F4606Bfdf71f";
   const USDG = "0xDbbC156dD414f43f2c952C1Be0f16A0B9a826Cd3";
 
   it("sends withdraw() to the pinned escrow", async () => {

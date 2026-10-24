@@ -19,7 +19,7 @@ const ID = `0x${"1".repeat(64)}` as const;
 
 const call = (functionName: "upholdSlashBatch" | "cancelSlashBatch"): SlashContractCall => ({
   chainId: "eip155:46630",
-  to: "0x7242F853db478A28Ae76Ace808212d4B68aa73e7",
+  to: "0xAfe1e699d188Ab5042B693978E889D7c5085F710",
   data: encodeCall(`${functionName}(bytes32[])`, [[ID]]),
   value: "0",
   signer: ARBITER,
@@ -50,7 +50,7 @@ describe("ContractCallAction", () => {
     const html = markup(call("cancelSlashBatch"));
     expect(html).toContain("What you sign");
     expect(html).toContain("Cancel 1 penalty on chain: 0x1111…1111");
-    expect(html).toContain("Stake contract 0x7242…73e7");
+    expect(html).toContain("Stake contract 0xAfe1…F710");
     expect(html).toContain("Robinhood Chain testnet");
     expect(html).toContain("Arbiter key 0x2222…2222");
   });
