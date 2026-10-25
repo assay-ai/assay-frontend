@@ -22,10 +22,10 @@ describe("the penalty page's money card", () => {
   });
 
   it("takes agents plus platform from the stake, never the provider's own share", () => {
-    expect(stakeReduction(USD("28470000"), 6000)).toEqual(USD("25623000"));
-    expect(stakeReduction(USD("28470000"), null)).toBeNull();
+    expect(stakeReduction(USD("28470000"), 6000, 3000)).toEqual(USD("25623000"));
+    expect(stakeReduction(USD("28470000"), null, 3000)).toBeNull();
     // As drawn: $2.25 + $1.13 of $3.75, the same figures the money card shows.
-    expect(stakeReduction(USD("3750000"), 6000, true)).toEqual(USD("3380000"));
+    expect(stakeReduction(USD("3750000"), 6000, 3000, true)).toEqual(USD("3380000"));
   });
 });
 
@@ -170,7 +170,7 @@ describe("round 4: the penalty page tells one story", () => {
 
   it("draws the If-upheld split to the cent of the total", async () => {
     const { displaySplit } = await import("./penalty-money");
-    const split = displaySplit(USD("28470000"), 6000)!;
+    const split = displaySplit(USD("28470000"), 6000, 3000)!;
     expect(BigInt(split.agents.amount) + BigInt(split.platform.amount) + BigInt(split.neverTaken.amount)).toBe(BigInt(28470000));
   });
 });

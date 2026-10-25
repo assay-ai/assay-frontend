@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAgentList } from "@/features/agents/agent-list";
 import * as React from "react";
 
+import { useChainTerms } from "@/hooks/useChainTerms";
 import { useChains } from "@/hooks/useChains";
 import { isUserRejection, useSigner } from "@/hooks/useSigner";
 import { signProofChallenge } from "@/features/provider-proof/sign-proof-challenge";
@@ -138,10 +139,11 @@ export function useProviderSetup() {
   // The first agent of the shared list (`GET /agents`), not a one-row read of its own.
   const agentsQuery = useAgentList();
   const chains = useChains();
+  const { terms: chainTerms } = useChainTerms();
   const first = agentsQuery.data?.items?.[0];
   const agentChainId = typeof first?.chainId === "string" ? first.chainId : null;
 
-  const { terms, fromDesign: termsFromDesign } = resolveTerms(state?.terms);
+  const { terms, fromDesign: termsFromDesign } = resolveTerms(state?.terms, chainTerms);
 
   // ── step 1 · account ──────────────────────────────────────────────────
 

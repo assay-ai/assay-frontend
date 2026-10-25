@@ -23,6 +23,7 @@ import { stakeStatus } from "@/features/provider-stake/stake-status";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { WithdrawSheet } from "@/features/provider-stake/withdraw-sheet";
 import { waitingDuration, waitingPeriodOf, withdrawStateOf } from "@/features/provider-stake/withdraw-state";
+import { useChainTerms } from "@/hooks/useChainTerms";
 import { useChains } from "@/hooks/useChains";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import type { ProviderStakeRequirementItem, ToolBindingSummary } from "@/interfaces";
@@ -117,6 +118,8 @@ export default function ProviderStakePage() {
     if (sheetParam) router.replace("/provider/capital");
   };
 
+  const { terms: chainTerms } = useChainTerms();
+  const chainParams = useChainTerms().params;
   if (status.isLoading) return <PageState kind="loading" label="Loading your stake" rows={4} />;
   if (status.isError && !status.stake) {
     return (
@@ -140,7 +143,7 @@ export default function ProviderStakePage() {
   );
   const grace = status.stake?.graceSummary ?? null;
   const hasStake = Boolean(status.staked && status.staked.amount !== "0");
-  const waiting = waitingPeriodOf(withdraw.periodMs, registration.data?.terms);
+  const waiting = waitingPeriodOf(withdraw.periodMs, registration.data?.terms, chainParams?.unbondingPeriodSeconds);
 
   const health = stakeStatus(status);
   let headline: React.ReactNode;
@@ -211,8 +214,8 @@ export default function ProviderStakePage() {
               <div className="flex flex-col gap-0.5">
                 <dt className="text-label-xs text-01">Needed: {formatMoney(status.required)}</dt>
                 <dd>
-                  The most any one paid tool needs, not the sum. Each paid tool needs its price × 1,000 calls (at least
-                  $50.00): enough to cover about 1,000 calls that fail their check.
+                  The most any one paid tool needs, not the sum. Each paid tool needs its price × 1,000 calls (at least{" "}
+                  {chainTerms.minimumStake}): enough to cover about 1,000 calls that fail their check.
                 </dd>
               </div>
               {status.recommended ? (

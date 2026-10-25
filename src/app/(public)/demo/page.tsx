@@ -20,6 +20,8 @@ import {
   runDemo,
 } from "@/services/demo.service";
 import { formatMoney } from "@/utils/money";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import { compoundDurationText } from "@/libs/chain-terms";
 
 /**
  * Live demo — desktop and mobile designs,
@@ -80,6 +82,7 @@ interface ColumnState {
 const EMPTY: ColumnState = { running: false, run: null, verdict: null, error: null };
 
 export default function DemoPage() {
+  const chainParams = useChainTerms().params;
   const router = useRouter();
   const [configured, setConfigured] = React.useState<boolean | null>(null);
   // The deployment says the demo is off: the address is a dead end, so go to How it works.
@@ -239,7 +242,8 @@ export default function DemoPage() {
           </h2>
           <p className="mt-2 max-w-[820px] text-body-13 text-02">
             This is a real penalty that was already executed on chain — not the call you just ran. A
-            penalty needs a violated service window, a signed attestation and a 72-hour timelock,
+            penalty needs a violated service window, a signed attestation and a{" "}
+            {compoundDurationText(chainParams?.effectiveSlashDelaySeconds)} timelock,
             so it cannot be about a call from a moment ago. The provider lost{" "}
             {formatMoney(money(compensation.appliedAmount, compensation), { decimals: 2 })} from the
             stake they put up; the agent who was served the bad result received the share below, and

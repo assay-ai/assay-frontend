@@ -1,4 +1,5 @@
 import type { ProviderTermsSummary } from "@/interfaces";
+import { type ChainTerms, UNKNOWN_TERMS } from "@/libs/chain-terms";
 
 /**
  * The provider terms as the design prints them, used ONLY while the server's
@@ -25,45 +26,53 @@ import type { ProviderTermsSummary } from "@/interfaces";
  * shows that refusal — nobody is recorded as having accepted a version they
  * were not shown.
  *
- * `stakeRequired` mirrors the wire ("$50.00 minimum"); the setup screen reads
- * the published value, never a literal.
+ * Every on-chain number in it (the fee, the report window, the minimum stake,
+ * the split, the unbonding period) is the chain's own, from `GET /chains`
+ * (`ChainTerms`), and reads "—" until that answered — never a literal.
  */
-export const DESIGN_TERMS: ProviderTermsSummary = {
-  providerAgreementVersion: "v1.0",
-  payoutTermsVersion: "v1.0",
-  slashPolicyVersion: "v1.0",
-  acceptanceLine:
-    "I accept the provider agreement v1.0, the payout terms v1.0 and the slash policy v1.0",
-  commercialTerms: [
-    { key: "takeRate", label: "Take rate", value: "10%", caption: "flat, no per-call fee floor" },
-    { key: "payouts", label: "Payouts", value: "as each call settles", caption: "on chain; final 1 hour after each call" },
-    {
-      key: "reserveHeld",
-      label: "Standing reserve",
-      value: "$0.00",
-      caption: "No standing reserve: each paid call is held for 1 hour for buyer reports",
-    },
-    { key: "clawback", label: "Clawback", value: "never", caption: "a paid payout stays paid" },
-    {
-      key: "stakeRequired",
-      label: "Stake required",
-      value: "$50.00 minimum",
-      caption: "before paid traffic — the free path needs none",
-    },
-    {
-      key: "slashedWhen",
-      label: "Slashed when",
-      value: "failed data checks only",
-      caption: "never for upstream failure or a bad request from the agent",
-    },
-    {
-      key: "penaltySplit",
-      label: "Where a penalty goes",
-      value: "60 / 30 / 10",
-      caption: "60% to the agent served the bad result, 30% platform, 10% stays yours",
-    },
-  ],
-};
+export function designTerms(chain: ChainTerms): ProviderTermsSummary {
+  return {
+    providerAgreementVersion: "v1.0",
+    payoutTermsVersion: "v1.0",
+    slashPolicyVersion: "v1.0",
+    acceptanceLine: "I accept the provider agreement v1.0, the payout terms v1.0 and the slash policy v1.0",
+    commercialTerms: [
+      { key: "takeRate", label: "Take rate", value: chain.feePercent, caption: "flat, no per-call fee floor" },
+      {
+        key: "payouts",
+        label: "Payouts",
+        value: "as each call settles",
+        caption: `on chain; final ${chain.holdWindow} after each call`,
+      },
+      {
+        key: "reserveHeld",
+        label: "Standing reserve",
+        value: "$0.00",
+        caption: `No standing reserve: each paid call is held for ${chain.holdWindow} for buyer reports`,
+      },
+      { key: "clawback", label: "Clawback", value: "never", caption: "a paid payout stays paid" },
+      {
+        key: "stakeRequired",
+        label: "Stake required",
+        value: `${chain.minimumStake} minimum`,
+        caption: "before paid traffic — the free path needs none",
+      },
+      {
+        key: "slashedWhen",
+        label: "Slashed when",
+        value: "failed data checks only",
+        caption: "never for upstream failure or a bad request from the agent",
+      },
+      {
+        key: "penaltySplit",
+        label: "Where a penalty goes",
+        value: [chain.agentShare, chain.platformShare, chain.providerShare].map((share) => share.replace(/%$/, "")).join(" / "),
+        caption: `${chain.agentShare} to the agent served the bad result, ${chain.platformShare} platform, ${chain.providerShare} stays yours`,
+      },
+      { key: "unbondingPeriod", label: "Unbonding", value: chain.unbonding, caption: "a stake withdrawal waits this long on chain before it can be claimed" },
+    ],
+  };
+}
 
 /**
  * A term's value for display. The slash trigger is published as an enum name,
@@ -73,13 +82,16 @@ export function termValue(term: { value: string }): string {
   return term.value === "DATA_FAIL only" ? "failed data checks only" : term.value;
 }
 
-/** The server's published terms whenever there are any; the design's otherwise. */
-export function resolveTerms(terms: ProviderTermsSummary | undefined): {
+/** The server's published terms whenever there are any; the design's otherwise, with the chain's numbers. */
+export function resolveTerms(
+  terms: ProviderTermsSummary | undefined,
+  chain: ChainTerms = UNKNOWN_TERMS,
+): {
   terms: ProviderTermsSummary;
   /** True when nothing on the wire published these — the fallback is showing. */
   fromDesign: boolean;
 } {
-  return terms ? { terms, fromDesign: false } : { terms: DESIGN_TERMS, fromDesign: true };
+  return terms ? { terms, fromDesign: false } : { terms: designTerms(chain), fromDesign: true };
 }
 
 /**

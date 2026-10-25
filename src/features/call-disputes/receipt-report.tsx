@@ -16,6 +16,7 @@ import { listCallDisputes, type CallDispute } from "@/services/call-disputes.ser
 
 import { buyerStatus, disputeReasonLabel, fullDateTime, reportUntilText, reportWindow } from "./model";
 import { callDisputeKeys, DisputeChip, ReportSheet, useNow } from "./ui";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 /** The reports filed on this call; one query, shared by the page, the headline and the report box. */
 export function useCallReports(intentId: string) {
@@ -56,14 +57,15 @@ export function RefundableNow({ receipt, toolName, now: nowProp }: { receipt: Re
   const now = nowProp ?? ticking;
   const [open, setOpen] = React.useState(false);
   const reports = useCallReports(receipt.intentId);
-  const hold = reportWindow(receipt, now);
+  const { terms } = useChainTerms();
+  const hold = reportWindow(receipt, now, terms.holdCompound);
   if (!hold.guaranteed) return null;
   if ((reports.data?.items?.length ?? 0) > 0) return null;
   const until = refundableUntil(receipt, now);
   const line =
     hold.holdEndsAt && until
       ? `${until} · ${formatRemaining(Date.parse(hold.holdEndsAt) - now)} left to report it for a full refund.`
-      : "Refundable: the 1-hour hold starts when the payment is collected.";
+      : `Refundable: the ${terms.holdCompound} hold starts when the payment is collected.`;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-1.5" data-testid="receipt-refundable">
       <p className="text-body-13 text-02">{line}</p>
@@ -101,7 +103,8 @@ export function ReceiptReport({
   const [open, setOpen] = React.useState(false);
   const reports = useCallReports(receipt.intentId);
   const latest = [...(reports.data?.items ?? [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0] ?? null;
-  const hold = reportWindow(receipt, now);
+  const { terms } = useChainTerms();
+  const hold = reportWindow(receipt, now, terms.holdCompound);
   const openReport = latest && latest.state === "OPEN" ? latest : null;
 
   // The API says when a call can't be reported at all (not settled, free, your own): no button then.

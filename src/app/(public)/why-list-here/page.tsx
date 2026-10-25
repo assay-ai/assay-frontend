@@ -12,16 +12,17 @@ import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitle
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import {
   coverTimeText,
-  DAILY_CAP_PERCENT,
   economics,
-  FEE_RATE,
+  economicsTerms,
   parseCalls,
   parsePrice,
   setupHref,
   type ListingMode,
 } from "@/features/explorer/provider-economics";
 import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
-import { GLOSSARY, REPORT_WINDOW } from "@/libs/glossary";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import type { ChainTerms } from "@/libs/chain-terms";
+import { definitionOf } from "@/libs/glossary";
 
 /**
  * For providers — route `/why-list-here`, with the earnings calculator
@@ -42,7 +43,9 @@ import { GLOSSARY, REPORT_WINDOW } from "@/libs/glossary";
  */
 
 /** Never clawed back vs the stake, in the glossary's words: when a payment is final, then the stake rule. */
-const STAKE_RECONCILE = `Payouts are never clawed back. ${GLOSSARY["payout-final"].definition} ${GLOSSARY["stake-rule"].definition}`;
+function stakeReconcile(terms: ChainTerms): string {
+  return `Payouts are never clawed back. ${definitionOf("payout-final", terms)} ${definitionOf("stake-rule", terms)}`;
+}
 
 /** The setup steps (`/provider/setup`) and the listing steps (the listing wizard), in their own words. */
 const STEPS: ReadonlyArray<{ group: string; when: string; steps: ReadonlyArray<{ title: string; detail: string }> }> = [
@@ -101,8 +104,9 @@ function Calculator({
 }) {
   const parsedPrice = parsePrice(price);
   const parsedCalls = parseCalls(calls);
-  const result = economics(mode, parsedPrice.value, parsedCalls.value);
-  const feePercent = `${FEE_RATE.mul(100).toFixed(0)}%`;
+  const { chain, params, terms } = useChainTerms();
+  const result = economics(mode, parsedPrice.value, parsedCalls.value, economicsTerms(params, chain?.decimals ?? 6));
+  const feePercent = terms.feePercent;
 
   return (
     <Panel id="calculator" className="scroll-mt-20">
@@ -192,7 +196,7 @@ function Calculator({
                 <Figure
                   label="Most penalties can take in 24 hours"
                   value={result.worstPer24h ?? "—"}
-                  sub={`${DAILY_CAP_PERCENT}% of your stake, enforced on chain; only if you fail more than you promised`}
+                  sub={`${terms.dailyCapPercent} of your stake, enforced on chain; only if you fail more than you promised`}
                 />
               </div>
             ) : (
@@ -219,6 +223,7 @@ function Calculator({
 
 /** The whole path, before anyone signs in: account setup once, then each listing, then the stake for paid calls. */
 function StepsToList() {
+  const { terms } = useChainTerms();
   return (
     <Panel id="steps" className="scroll-mt-20">
       <PanelHeader>
@@ -254,10 +259,10 @@ function StepsToList() {
           <CircleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-500" />
           <p className="text-body-13 text-02">
             <span className="text-label-sm text-01">Stake, for paid calls. </span>
-            Free listings need none. To charge per call, add a <Term k="stake">stake</Term> that covers $50 or 1,000
-            calls at your price, whichever is more; you get it back when you stop, after a waiting period. Once a
-            call&apos;s {REPORT_WINDOW} report window has closed, the stake is the only money at risk.{" "}
-            {GLOSSARY["stake-rule"].definition}
+            Free listings need none. To charge per call, add a <Term k="stake">stake</Term> that covers{" "}
+            {terms.minimumStake} or 1,000 calls at your price, whichever is more; you get it back when you stop, after
+            a waiting period. Once a call&apos;s {terms.holdWindow} report window has closed, the stake is the only
+            money at risk. {definitionOf("stake-rule", terms)}
           </p>
         </div>
       </PanelBody>
@@ -269,6 +274,7 @@ export default function WhyListHerePage() {
   const [mode, setMode] = React.useState<ListingMode>("PAID");
   const [price, setPrice] = React.useState("0.001");
   const [calls, setCalls] = React.useState("100000");
+  const { terms } = useChainTerms();
 
   // A direct load of `/why-list-here#calculator` lands on the calculator. The browser's own jump runs before
   // this client page has laid out, so it is repeated once it has.
@@ -292,7 +298,7 @@ export default function WhyListHerePage() {
         </p>
         <p className="flex max-w-[760px] items-start gap-2 text-left text-body-13 text-01" data-testid="stake-reconcile">
           <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success-500" />
-          <span>{STAKE_RECONCILE}</span>
+          <span>{stakeReconcile(terms)}</span>
         </p>
         <div className="flex flex-wrap justify-center gap-2.5 pt-1">
           <Button asChild>
@@ -309,7 +315,7 @@ export default function WhyListHerePage() {
 
       <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col gap-4 px-4 pb-7 tablet:px-7">
         <div className="grid w-full grid-cols-2 gap-3 desktop:grid-cols-4">
-          {FACTS.map((fact) => (
+          {facts(terms).map((fact) => (
             <div key={fact.key} className="flex flex-col gap-1 rounded-lg border border-01 bg-01 p-4 tablet:p-5">
               <p className="font-mono text-mono-xl text-01">{fact.value}</p>
               <p className="text-label-13 text-01">{fact.key}</p>
@@ -330,7 +336,7 @@ export default function WhyListHerePage() {
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="px-4 pb-[18px] pt-2 tablet:px-5">
-            {TERMS.map((term) => {
+            {agreement(terms).map((term) => {
               const Icon = term.tone === "alert" ? CircleAlert : CircleCheck;
               return (
                 <div key={term.title} className="flex w-full items-start gap-3 border-t border-01 py-3 first:border-t-0">
@@ -364,15 +370,18 @@ export default function WhyListHerePage() {
   );
 }
 
-const FACTS: ReadonlyArray<{ value: string; key: string; sub: string }> = [
-  { value: "Per call", key: "paid on chain", sub: "to your own wallet" },
-  { value: "0%", key: "standing reserve", sub: `No standing reserve: each paid call is held for ${REPORT_WINDOW} for buyer reports` },
-  { value: "Never", key: "clawed back", sub: "a payout stays paid" },
-  { value: `${DAILY_CAP_PERCENT}%`, key: "most taken per 24 h", sub: "of your stake, enforced on chain" },
-];
+function facts(terms: ChainTerms): ReadonlyArray<{ value: string; key: string; sub: string }> {
+  return [
+    { value: "Per call", key: "paid on chain", sub: "to your own wallet" },
+    { value: "0%", key: "standing reserve", sub: `No standing reserve: each paid call is held for ${terms.holdWindow} for buyer reports` },
+    { value: "Never", key: "clawed back", sub: "a payout stays paid" },
+    { value: terms.dailyCapPercent, key: "most taken per 24 h", sub: "of your stake, enforced on chain" },
+  ];
+}
 
 /** The things that can cost you money come first, then the protections. */
-const TERMS: ReadonlyArray<{ tone: "alert" | "check"; title: string; detail: React.ReactNode }> = [
+function agreement(terms: ChainTerms): ReadonlyArray<{ tone: "alert" | "check"; title: string; detail: React.ReactNode }> {
+  return [
   {
     tone: "alert",
     title: "Paid listings need a stake",
@@ -389,8 +398,8 @@ const TERMS: ReadonlyArray<{ tone: "alert" | "check"; title: string; detail: Rea
     detail: (
       <>
         Only after at least {MIN_CHECKED_CALLS} checked calls in a <Term k="window">window</Term>, and only when you
-        fail more often than you promised. The chain never lets penalties take more than {DAILY_CAP_PERCENT}% of your
-        stake in any 24 hours, and each penalty is limited to a maximum set on chain.
+        fail more often than you promised. The chain never lets penalties take more than {terms.dailyCapPercent} of
+        your stake in any 24 hours, and each penalty is limited to a maximum set on chain.
       </>
     ),
   },
@@ -409,10 +418,11 @@ const TERMS: ReadonlyArray<{ tone: "alert" | "check"; title: string; detail: Rea
     title: "You can dispute a penalty, on chain",
     detail: (
       <>
-        A penalty waits 72 hours before it can be taken. During that time you can{" "}
+        A penalty waits {terms.slashDelay} before it can be taken. During that time you can{" "}
         <Term k="dispute">dispute</Term> it on chain: Assay&apos;s <Term k="arbiter">arbiter</Term>, a person, rules on
         it on chain, and if nobody rules in time it expires and nothing is taken.
       </>
     ),
   },
 ];
+}

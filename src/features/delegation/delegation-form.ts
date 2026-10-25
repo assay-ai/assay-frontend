@@ -48,24 +48,27 @@ export interface DelegationFormInput {
 }
 
 /**
- * `REDEEM_GRACE_SECONDS` on chain: a voucher stays redeemable this long after it
- * expires, and the backend refuses a delegate voucher whose grant ends inside
- * that window (D1-P05). A kept expiry closer than this could cover no payment.
- */
-export const REDEEM_GRACE_SECONDS = 1_800;
-
-/**
  * The nearest expiry the backend builds a grant for (assay-evm D-21): at least
- * `TIGHTEN_DELAY_SECONDS` (10,800 since D-24) after the signed request's `deadline`,
- * which is the chain's clock plus 300 s — so 11,100 s out — plus a margin for the time the
- * person takes to sign and for clock drift. Closer, it is refused
- * `SETTLEMENT_DELEGATION_INVALID`.
+ * the chain's `TIGHTEN_DELAY_SECONDS` (served on `GET /chains` and on
+ * `/escrow/delegates`) after the signed request's `deadline`, which is the
+ * chain's clock plus {@link SIGNED_REQUEST_DEADLINE_SECONDS} — plus a margin for
+ * the time the person takes to sign and for clock drift. Closer, it is refused
+ * `SETTLEMENT_DELEGATION_INVALID`. `null` while the tighten delay is unknown:
+ * the backend still refuses, so the form does not guess.
  */
-export const MIN_VALID_UNTIL_LEAD_SECONDS = 11_100 + 120;
+export function minValidUntilLeadSeconds(tightenDelaySeconds: number | null | undefined): number | null {
+  if (tightenDelaySeconds === null || tightenDelaySeconds === undefined || !Number.isFinite(tightenDelaySeconds)) return null;
+  return tightenDelaySeconds + SIGNED_REQUEST_DEADLINE_SECONDS + SIGNING_MARGIN_SECONDS;
+}
 
-/** {@link MIN_VALID_UNTIL_LEAD_SECONDS} in words, rounded up to whole minutes ("3 hours 7 minutes"). */
-export function minValidUntilLeadText(): string {
-  const total = Math.ceil(MIN_VALID_UNTIL_LEAD_SECONDS / 60);
+/** The backend signs relayed requests with a deadline this far past the chain's clock (backend policy, not a chain value). */
+export const SIGNED_REQUEST_DEADLINE_SECONDS = 300;
+/** Time to sign, and clock drift. A UI margin. */
+const SIGNING_MARGIN_SECONDS = 120;
+
+/** {@link minValidUntilLeadSeconds} in words, rounded up to whole minutes ("3 hours 7 minutes"). */
+export function minValidUntilLeadText(leadSeconds: number): string {
+  const total = Math.ceil(leadSeconds / 60);
   const h = Math.floor(total / 60);
   const m = total % 60;
   const parts: string[] = [];
@@ -144,7 +147,10 @@ export function parseDelegationForm(
   nowSeconds: number,
   /** The standing grant's `validUntil`, unix seconds — what `keepExpiry` signs. */
   currentValidUntil?: number,
+  /** The chain's tighten delay (`GET /chains`), for the nearest expiry the backend accepts. */
+  tightenDelaySeconds: number | null = null,
 ): ParsedDelegationForm {
+  const lead = minValidUntilLeadSeconds(tightenDelaySeconds);
   const errors: DelegationFormErrors = {};
   const decimals =
     escrow.maxVoucherAmount?.decimals ?? escrow.maxPerWindow?.decimals ?? 6;
@@ -180,9 +186,9 @@ export function parseDelegationForm(
   const days = input.validDays.trim();
   const keep = input.keepExpiry === true && currentValidUntil !== undefined;
   if (keep) {
-    if (currentValidUntil < Math.floor(nowSeconds) + MIN_VALID_UNTIL_LEAD_SECONDS) {
+    if (lead !== null && currentValidUntil < Math.floor(nowSeconds) + lead) {
       errors.validDays =
-        `The current expiry is less than about ${minValidUntilLeadText()} away — choose a number of days instead.`;
+        `The current expiry is less than about ${minValidUntilLeadText(lead)} away — choose a number of days instead.`;
     }
   } else if (
     !/^\d+$/.test(days) ||
@@ -334,22 +340,25 @@ export function errorsAfterEdit(
  * own expiry KEPT exactly (BUG-J-POST-01) — a cap edit no longer moves
  * `validUntil` to "N whole days from now". `validDays` is pre-filled with the
  * days it has left (at least 1) for a person who chooses a new expiry. A grant
- * whose expiry is closer than {@link MIN_VALID_UNTIL_LEAD_SECONDS} starts on
+ * whose expiry is closer than {@link minValidUntilLeadSeconds} starts on
  * days, since the backend no longer builds a grant ending that soon (D-21). Every rule of
  * {@link parseDelegationForm} applies — the escrow's CURRENT limits included.
  */
 export function editDelegationForm(
   delegation: Pick<EscrowDelegate, "maxVoucherAmount" | "maxPerWindow" | "validUntil">,
   nowSeconds: number,
+  /** The chain's tighten delay (`GET /chains`); while unknown, a kept expiry is offered and the backend decides. */
+  tightenDelaySeconds: number | null = null,
 ): DelegationFormInput {
   const validUntil = validUntilSeconds(delegation.validUntil);
+  const lead = minValidUntilLeadSeconds(tightenDelaySeconds) ?? 0;
   const left = Math.ceil((validUntil - nowSeconds) / SECONDS_PER_DAY);
   return {
     maxVoucherAmount: toDecimal(delegation.maxVoucherAmount).toString(),
     maxPerWindow: toDecimal(delegation.maxPerWindow).toString(),
     validDays: String(Math.min(MAX_DELEGATION_DAYS, Math.max(1, Number.isFinite(left) ? left : 1))),
     keepExpiry:
-      Number.isFinite(validUntil) && validUntil >= nowSeconds + MIN_VALID_UNTIL_LEAD_SECONDS,
+      Number.isFinite(validUntil) && validUntil >= nowSeconds + lead,
   };
 }
 
@@ -389,14 +398,15 @@ export function capsAboveEscrow(
  * The backend names the contract's reason (`DelegateValidUntilInvalid`, …) in
  * its message; the person needs what to change instead.
  */
-export function delegationInvalidText(error: unknown): string | null {
+export function delegationInvalidText(error: unknown, tightenDelaySeconds: number | null = null): string | null {
   if (!(error instanceof ApiError) || error.code !== DELEGATION_INVALID_CODE) return null;
   const reason = `${String(error.context?.reason ?? "")} ${error.message}`;
   if (/ValidUntil/i.test(reason)) {
-    return (
-      "The expiry is too soon. An agent’s authorisation must last at least about " +
-      `${minValidUntilLeadText()} from now (and at most ${MAX_DELEGATION_DAYS} days). Choose a later expiry and sign again.`
-    );
+    const lead = minValidUntilLeadSeconds(tightenDelaySeconds);
+    return lead !== null
+      ? "The expiry is too soon. An agent’s authorisation must last at least about " +
+          `${minValidUntilLeadText(lead)} from now (and at most ${MAX_DELEGATION_DAYS} days). Choose a later expiry and sign again.`
+      : `The expiry is too soon (an authorisation lasts at most ${MAX_DELEGATION_DAYS} days). Choose a later expiry and sign again.`;
   }
   return (
     "Your escrow would refuse these caps. Both must be above zero and within your escrow’s " +

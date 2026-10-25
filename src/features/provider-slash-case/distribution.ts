@@ -1,6 +1,7 @@
 import Decimal from "decimal.js";
 
 import type { Money } from "@/interfaces";
+import type { ChainParams } from "@/interfaces/chain";
 
 /**
  * Where a penalty goes — and the design is wrong about a third of it.
@@ -29,18 +30,14 @@ import type { Money } from "@/interfaces";
  * a fund that does not exist, when what actually happened is that a tenth of
  * the judgement was never taken from them at all.
  *
- * ## The percentages are not on the wire
+ * ## The percentages are the chain's
  *
- * They are `Config.slash_agent_bps` / `slash_platform_bps` on chain, set by
- * `initialize_config` and changeable by `update_config`. **No API this app
- * can reach publishes them** — not
- * `GET /providers/me/slash-proposals/:id`, not the stake endpoints, nothing. So
- * they are transcribed here from the program's own documented split, and the
- * screen labels the line as the protocol's split rather than as a figure the
- * case returned. If the on-chain parameters are ever tuned, this file is the
- * one place that has to move, and the right fix is for the case DTO to carry
- * them. `distribution.test.ts` pins these values against an excerpt of the
- * program's `state.rs`.
+ * They are `params().slashAgentBps` / `slashPlatformBps` on chain, served on
+ * `GET /chains` (`Chain.params`), and changeable by `updateConfig`. So they are
+ * passed in ({@link SlashSplit}), never typed here. An executed record carries
+ * the split the chain actually applied (`SlashExecuted.agentAmount` /
+ * `platformAmount` / `providerAmount`), and that is shown as recorded
+ * ({@link recordedSplit}), never recomputed from today's terms.
  *
  * ## What it splits, and what it does not
  *
@@ -52,32 +49,24 @@ import type { Money } from "@/interfaces";
  * penalty, and the screen says so.
  */
 
-/** `Config.slash_agent_bps` — the harmed agent's share. */
-export const SLASH_AGENT_BPS = 6000;
-/** `Config.slash_platform_bps` — the treasury's share. */
-export const SLASH_PLATFORM_BPS = 3000;
+/** The chain's split of a penalty, in bps: what the agents and the platform get; the provider keeps the rest. */
+export interface SlashSplit {
+  agentBps: number;
+  platformBps: number;
+}
 
-/**
- * Where these numbers came from, and the fact that nothing keeps them current.
- *
- * Exported rather than left in a comment so that the screen can print it. A
- * provider being told how their stake was split deserves to know the split is
- * the platform's published figure at a date, not a value read from the chain
- * a moment ago — those are different claims and only one of them is true.
- */
-export const SLASH_SPLIT_SOURCE = {
-  file: "assay-solana: programs/x402-payment/src/state.rs",
-  readAt: "2026-09-03",
-  /** No endpoint publishes `slash_agent_bps` / `slash_platform_bps` yet. */
-  publishedByApi: false,
-} as const;
+/** The split from the chain's params (`GET /chains`), or `null` while unknown. */
+export function splitOfParams(params: ChainParams | null | undefined): SlashSplit | null {
+  if (!params || params.slashAgentBps === null || params.slashPlatformBps === null) return null;
+  return { agentBps: params.slashAgentBps, platformBps: params.slashPlatformBps };
+}
 
 const BPS_DENOMINATOR = 10_000;
 
 export interface SlashDistribution {
-  /** 60% — paid to the harmed agent. */
+  /** `slashAgentBps` — paid to the harmed agent. */
   agent: Money;
-  /** 30% — paid to the platform treasury. */
+  /** `slashPlatformBps` — paid to the platform treasury. */
   platform: Money;
   /**
    * The remainder. **Not a payment**: it is the part of the judgement that is
@@ -101,10 +90,11 @@ export interface SlashDistribution {
  * All arithmetic is on minor units through `decimal.js`; nothing becomes a
  * float on the way.
  */
-export function splitPenalty(penalty: Money): SlashDistribution {
+export function splitPenalty(penalty: Money, split: SlashSplit | null): SlashDistribution | null {
+  if (!split) return null;
   const total = new Decimal(penalty.amount || "0");
-  const agent = total.mul(SLASH_AGENT_BPS).div(BPS_DENOMINATOR).floor();
-  const platform = total.mul(SLASH_PLATFORM_BPS).div(BPS_DENOMINATOR).floor();
+  const agent = total.mul(split.agentBps).div(BPS_DENOMINATOR).floor();
+  const platform = total.mul(split.platformBps).div(BPS_DENOMINATOR).floor();
   const neverTaken = total.minus(agent).minus(platform);
 
   const like = (value: Decimal): Money => ({
@@ -118,5 +108,24 @@ export function splitPenalty(penalty: Money): SlashDistribution {
     platform: like(platform),
     neverTaken: like(neverTaken),
     taken: like(agent.plus(platform)),
+  };
+}
+
+/**
+ * An executed penalty as the chain recorded it (`SlashExecuted`): the agents'
+ * and the platform's amounts, and the provider's share that was never taken.
+ */
+export function recordedSplit(
+  recorded: { agentAmount: string; platformAmount: string; providerAmount: string },
+  like: { asset: string; decimals: number },
+): SlashDistribution {
+  const money = (amount: string): Money => ({ amount, asset: like.asset, decimals: like.decimals });
+  const agent = new Decimal(recorded.agentAmount || "0");
+  const platform = new Decimal(recorded.platformAmount || "0");
+  return {
+    agent: money(agent.toFixed(0)),
+    platform: money(platform.toFixed(0)),
+    neverTaken: money(new Decimal(recorded.providerAmount || "0").toFixed(0)),
+    taken: money(agent.plus(platform).toFixed(0)),
   };
 }

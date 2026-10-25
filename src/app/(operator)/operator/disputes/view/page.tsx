@@ -22,6 +22,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { decideOperatorCallDispute, getOperatorCallDispute, type OperatorCallDisputeDetail } from "@/services/operator-call-disputes.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 /**
  * One call dispute — `/operator/disputes/view?id=` (S-14): the SLA marks,
@@ -38,6 +39,7 @@ const INTENT_STATUS: Readonly<Record<string, string>> = {
 };
 
 function DisputeScreen() {
+  const { terms: chainTerms } = useChainTerms();
   const id = useSearchParam("id");
   const me = useOperatorSession();
   const now = useNow(30_000);
@@ -98,7 +100,7 @@ function DisputeScreen() {
 
       <section aria-label="Timeline" className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-4 py-4">
         <DisputeTimeline dispute={d} side="operator" now={now} onElapsed={() => void detail.refetch()} />
-        <p className="text-body-xs text-03">{d.refundGuaranteed ? "Filed inside the 1-hour hold: the payment is held; upholding refunds it in full." : "Filed after the hold: the payment was already collected. Upholding counts against quality; a refund is not guaranteed."} Times are in UTC.</p>
+        <p className="text-body-xs text-03">{d.refundGuaranteed ? `Filed inside the ${chainTerms.holdCompound} hold: the payment is held; upholding refunds it in full.` : "Filed after the hold: the payment was already collected. Upholding counts against quality; a refund is not guaranteed."} Times are in UTC.</p>
       </section>
 
       <div className="grid w-full grid-cols-1 gap-4 desktop:grid-cols-2">

@@ -41,6 +41,7 @@ import { routes } from "@/libs/routes";
 import { SUPPORT_URL } from "@/libs/support";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
 import { formatMoney } from "@/utils/money";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 /**
  * Activity › Not charged (route `/guarantee`) — "prove the guarantee works for me".
@@ -140,6 +141,7 @@ function DecompositionRow({
 }
 
 export default function GuaranteePage() {
+  const { terms: chainTerms } = useChainTerms();
   // Anchored once per mount: a `new Date()` read during render would make the
   // month window a new object on every re-render and refetch forever.
   const anchor = useMemo(() => new Date(), []);
@@ -473,8 +475,8 @@ export default function GuaranteePage() {
           <div className="flex flex-col gap-1.5">
             <h3 className="text-label-13 text-01">How to report a bad result</h3>
             <p className="text-body-13 text-02">
-              Open the call and choose Report a bad result. On chains with the 1-hour hold, a charge is refundable
-              for 1 hour if your report is accepted; the call&apos;s receipt says whether this one still is. Otherwise
+              Open the call and choose Report a bad result. On chains with the {chainTerms.holdCompound} hold, a charge
+              is refundable for {chainTerms.holdWindow} if your report is accepted; the call&apos;s receipt says whether this one still is. Otherwise
               there is no refund, but your report counts against the provider&apos;s quality and can lead to a
               penalty on their stake.
             </p>

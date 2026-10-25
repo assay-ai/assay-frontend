@@ -14,6 +14,7 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
+import { useChainTerms } from "@/hooks/useChainTerms";
 import type {
   CatalogueSettlementAsset,
   CatalogueTool,
@@ -244,6 +245,7 @@ export function LiveStage({
   const [stakeOpen, setStakeOpen] = React.useState(false);
 
   const stake = useStakeStatus();
+  const { params: chainParams } = useChainTerms();
   const names = useProviderToolNames();
   const check = useQuery({
     queryKey: ["provider", "tool-binding", binding.id, "publish-check"],
@@ -283,8 +285,8 @@ export function LiveStage({
   }, [bodyKey]);
 
   // The arithmetic for the summary.
-  const take = takeRateOf(terms);
-  const rule = stakeRuleOf(stake.stake);
+  const take = takeRateOf(terms, chainParams);
+  const rule = stakeRuleOf(stake.stake, chainParams, parsed.price?.decimals ?? 6);
   const needed = stakeNeededFor(parsed.price, mode, rule);
   const totalNeeded = totalStakeWith(needed, stake.stake, binding.id);
   const have = stake.staked;
@@ -315,7 +317,7 @@ export function LiveStage({
           largestToolName: largestOther ? (names.tool(largestOther.toolId)?.name ?? null) : null,
         })
       : null;
-  const penaltyExample = penaltyExampleOf(parsed.price, mode, parsed.failureRate);
+  const penaltyExample = penaltyExampleOf(parsed.price, mode, parsed.failureRate, chainParams);
 
   const unmet = (check.data?.requirements ?? []).filter((requirement) => !requirement.met);
   const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");

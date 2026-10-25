@@ -26,6 +26,8 @@ vi.mock("@/features/provider-stake/use-stake-status", () => ({
   useStakeStatus: () => ({ stake: STAKE, staked: usd("80000000"), isLoading: false }),
 }));
 
+import { TEST_PARAMS, WithChains } from "@/test/chain-fixture";
+
 import { resumeFacts, ResumeSheet } from "./resume-sheet";
 
 const PAUSED = {
@@ -43,7 +45,9 @@ function mount(onConfirm: () => Promise<unknown>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ResumeSheet open onOpenChange={() => undefined} binding={PAUSED} toolName="Market quote" onConfirm={onConfirm} />
+      <WithChains>
+        <ResumeSheet open onOpenChange={() => undefined} binding={PAUSED} toolName="Market quote" onConfirm={onConfirm} />
+      </WithChains>
     </QueryClientProvider>,
   );
 }
@@ -81,7 +85,9 @@ describe("resumeFacts", () => {
   });
 
   it("names a shortfall when the stake does not cover the listing", () => {
-    const facts = resumeFacts(PAUSED, STAKE, usd("20000000"));
+    const facts = resumeFacts(PAUSED, STAKE, usd("20000000"), TEST_PARAMS);
     expect(facts.shortfall?.amount).toBe("80000000");
+    // No stake rule on the wire and no chain params yet: no figure is guessed.
+    expect(resumeFacts(PAUSED, STAKE, usd("20000000")).shortfall).toBeNull();
   });
 });

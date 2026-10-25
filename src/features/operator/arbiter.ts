@@ -409,11 +409,13 @@ export function rulingOutcome(input: {
   kind: ArbiterRuling;
   total: Money | null;
   agentBps: number | null;
+  /** `slashPlatformBps`, from the chain's terms; null while unknown. */
+  platformBps?: number | null;
   count: number;
   signer: string;
 }): { icon: "money" | "undo" | "final" | "sign"; text: string }[] {
   const { kind, total, agentBps, count, signer } = input;
-  const split = total && agentBps !== null ? penaltySplit(total, agentBps) : null;
+  const split = total && agentBps !== null ? penaltySplit(total, agentBps, input.platformBps ?? null) : null;
   const it = count === 1 ? "it" : "they";
   if (kind === "UPHOLD") {
     // Rounded so the three parts add up to the penalty shown (largest remainder).

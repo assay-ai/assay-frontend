@@ -29,6 +29,7 @@ import { formatDecimal, parseAmountInput, toDecimal } from "@/utils/money";
 
 import { GasHelpNote } from "./gas-help-note";
 import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-money";
+import { chainTerms } from "@/libs/chain-terms";
 
 /**
  * Add funds, in a drawer opened from anywhere (funding hero, Get started,
@@ -307,14 +308,14 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
         </p>
       ) : null}
 
-      {/* Money truths stay visible: a deposit is final, and getting it back takes about an hour. */}
+      {/* Money truths stay visible: a deposit is final, and getting it back takes the chain's withdrawal delay. */}
       <ul className="flex list-disc flex-col gap-1 rounded-lg border border-01 bg-02 py-2 pl-7 pr-3 text-body-xs text-02" data-testid="deposit-truths">
         <li>
           You deposit {symbol}, a dollar token on {chainName ?? "this chain"}, spent on this chain only.
           {evm ? " Two wallet prompts: one allows the transfer, one makes it." : ""}
         </li>
         <li>Deposits settle on chain and are final: there is no card and no chargeback.</li>
-        <li>You can withdraw what you have not spent at any time; it takes about three hours.</li>
+        <li>You can withdraw what you have not spent at any time; it takes about {chainTerms(chain).withdrawDelay}.</li>
       </ul>
     </WalletActionSheet>
   );

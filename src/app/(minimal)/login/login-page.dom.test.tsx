@@ -12,13 +12,19 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/components/patterns/testnet-chip", () => ({ TestnetChip: () => null }));
 
-import { GLOSSARY } from "@/libs/glossary";
+import { chainTerms } from "@/libs/chain-terms";
+import { definitionOf } from "@/libs/glossary";
+import { TEST_CHAIN, WithChains } from "@/test/chain-fixture";
 
 import LoginPage from "./page";
 
 function render(query: string) {
   search.value = query;
-  const html = renderToStaticMarkup(<LoginPage />);
+  const html = renderToStaticMarkup(
+    <WithChains>
+      <LoginPage />
+    </WithChains>,
+  );
   const aside = html.slice(html.indexOf("<aside"), html.indexOf("</aside>"));
   return { html, aside, text: html.replace(/<[^>]+>/g, "") };
 }
@@ -35,9 +41,9 @@ describe("login, sent from a provider page", () => {
     expect(aside).toContain("Paid per call, on chain");
     expect(aside).toContain("Payouts are never clawed back");
     const plain = aside.replace(/&#x27;/g, "'");
-    expect(plain).toContain(GLOSSARY["payout-final"].definition);
+    expect(plain).toContain(definitionOf("payout-final", chainTerms(TEST_CHAIN)));
     expect(plain).toContain("What your stake risks");
-    expect(plain).toContain(GLOSSARY["stake-rule"].definition);
+    expect(plain).toContain(definitionOf("stake-rule", chainTerms(TEST_CHAIN)));
     expect(aside).not.toContain("Only your stake is at risk");
     expect(aside).not.toContain("You don&#x27;t pay for results you can&#x27;t use");
     expect(aside).not.toContain("We hold, not charge");

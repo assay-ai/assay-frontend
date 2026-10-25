@@ -25,7 +25,12 @@ vi.mock("./use-buyer-money", () => ({
       withdrawAvailableAt: null,
       withdrawalsFrozen: money.frozen,
     },
-    chain: { chainId: "eip155:46630", displayName: "Robinhood Chain testnet" },
+    chain: {
+      chainId: "eip155:46630",
+      displayName: "Robinhood Chain testnet",
+      decimals: 6,
+      params: { withdrawDelaySeconds: 10_800, tightenDelaySeconds: 10_800 },
+    },
     chainId: "eip155:46630",
     chainName: "Robinhood Chain testnet",
     decimals: 6,
@@ -69,7 +74,8 @@ describe("Withdraw: the pause is stated and acknowledged", () => {
     enter("5");
     const warning = screen.getByTestId("withdraw-pause-warning");
     expect(warning.textContent).toBe(
-      "While this request is open (about 1 h), every agent's paid calls on Robinhood Chain testnet stop, even for a partial amount. Free calls keep working.",
+      // The chain's withdrawal delay (3 h), not the old "about 1 h" (M4).
+      "While this request is open (about 3 hours), every agent's paid calls on Robinhood Chain testnet stop, even for a partial amount. Free calls keep working.",
     );
     const button = screen.getByRole("button", { name: /Request \$5\.00 \(free\)/ });
     // The warning comes before the button in reading order.

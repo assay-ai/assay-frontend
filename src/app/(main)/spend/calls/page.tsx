@@ -36,6 +36,8 @@ import { listCalls, type CallsSource } from "@/features/buyer/calls-list";
 import { isFreeToolCall, type FreeToolCall } from "@/services/tool-calls.service";
 import { cn } from "@/utils";
 import { formatMoney, notCharged, toDecimal } from "@/utils/money";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import { fillTerms } from "@/libs/chain-terms";
 
 /**
  * Activity › Calls — every call, newest first, by tool name. Status chips
@@ -54,6 +56,7 @@ import { formatMoney, notCharged, toDecimal } from "@/utils/money";
 const PAGE = 50;
 
 function CallsList() {
+  const { terms: chainTerms } = useChainTerms();
   const params = useSearchParams();
   const router = useRouter();
   // `?status=refused` and `?call={id}` (the link a refused call's error carries) are the refused calls.
@@ -204,7 +207,7 @@ function CallsList() {
             }
             description={
               filter === "refundable"
-                ? REFUNDABLE_ROW.empty
+                ? fillTerms(REFUNDABLE_ROW.empty, chainTerms)
                 : filter === "owed"
                 ? query.hasNextPage
                   ? "None of the calls loaded so far is owed. Older calls may be: load more to look further back."
@@ -264,7 +267,7 @@ function CallsList() {
                               {REFUNDABLE_ROW.beforeTime} <UtcTime value={call.refundableIfReportedUntil} midSentence /> {REFUNDABLE_ROW.afterTime}
                             </>
                           ) : (
-                            REFUNDABLE_ROW.noEnd
+                            fillTerms(REFUNDABLE_ROW.noEnd, chainTerms)
                           )}
                         </span>
                       ) : null}

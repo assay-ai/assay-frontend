@@ -48,6 +48,7 @@ import { EscrowReconciliation, RefundableNowLine, WithdrawalsList } from "./fund
 import { PendingTxList } from "./pending-tx-list";
 import { useBuyerMoney } from "./use-buyer-money";
 import { ClaimSheet, WithdrawSheet } from "./withdraw-sheets";
+import { chainTerms } from "@/libs/chain-terms";
 
 /**
  * Money › Funding: how much the agents can spend, where it sits, and the four
@@ -448,7 +449,7 @@ function EscrowCard({
               { id: "request", label: "Requested", state: "done" },
               {
                 id: "wait",
-                label: matured ? "Ready" : "Wait ~1 hour",
+                label: matured ? "Ready" : `Wait ~${chainTerms(money.chain).withdrawDelay}`,
                 state: matured ? "done" : "current",
                 date: escrow.withdrawAvailableAt,
                 countdown: !matured,

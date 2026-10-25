@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { coverTimeText, economics, parseCalls, parsePrice, setupHref } from "./provider-economics";
+import type { ChainParams } from "@/interfaces/chain";
+
+import { coverTimeText, economics, economicsTerms, parseCalls, parsePrice, setupHref } from "./provider-economics";
+
+const PARAMS = { takeRateBps: 1000, minimumStake: "50000000", slashCapBps: 1000 } as ChainParams;
+const TERMS = economicsTerms(PARAMS, 6);
 
 describe("calculator inputs", () => {
   it("refuses garbage in words instead of turning it into $0", () => {
@@ -21,13 +26,13 @@ describe("calculator inputs", () => {
 
 describe("economics", () => {
   it("free: no revenue, no stake, no risk", () => {
-    const e = economics("FREE", null, null)!;
+    const e = economics("FREE", null, null, null)!;
     expect(e.netPerMonth).toBe("$0.00");
     expect(e.stake).toBe("$0.00");
     expect(e.worstPer24h).toBeNull();
   });
   it("paid: fee, net, stake and caps", () => {
-    const e = economics("PAID", parsePrice("0.001").value, parseCalls("1000000").value)!;
+    const e = economics("PAID", parsePrice("0.001").value, parseCalls("1000000").value, TERMS)!;
     expect(e.perCall).toEqual({ price: "$0.001", fee: "$0.0001", youGet: "$0.0009" });
     expect(e.netPerMonth).toBe("$900.00");
     expect(e.stake).toBe("$50.00");
@@ -36,7 +41,18 @@ describe("economics", () => {
     expect(e.daysToCoverStake).toBe("1.7");
   });
   it("needs valid numbers for a paid listing", () => {
-    expect(economics("PAID", null, null)).toBeNull();
+    expect(economics("PAID", null, null, TERMS)).toBeNull();
+  });
+  it("shows nothing for a paid listing until the chain terms are known", () => {
+    expect(economics("PAID", parsePrice("0.001").value, parseCalls("1000").value, null)).toBeNull();
+    expect(economicsTerms({ ...PARAMS, takeRateBps: null }, 6)).toBeNull();
+  });
+  it("follows the chain's fee, minimum stake and daily cap", () => {
+    const terms = economicsTerms({ takeRateBps: 2000, minimumStake: "100000000", slashCapBps: 500 } as ChainParams, 6);
+    const e = economics("PAID", parsePrice("0.001").value, parseCalls("1000000").value, terms)!;
+    expect(e.perCall).toEqual({ price: "$0.001", fee: "$0.0002", youGet: "$0.0008" });
+    expect(e.stake).toBe("$100.00");
+    expect(e.worstPer24h).toBe("$5.00");
   });
   it("carries the numbers into setup", () => {
     expect(setupHref("PAID", "0.001", "1,000")).toBe("/provider/setup?mode=paid&price=0.001&calls=1000");

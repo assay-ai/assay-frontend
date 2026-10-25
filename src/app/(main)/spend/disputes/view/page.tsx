@@ -15,6 +15,8 @@ import { ApiError } from "@/libs/ApiClient";
 import { getCallDispute, withdrawCallDispute, type CallDisputeDetail } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import { fillTerms } from "@/libs/chain-terms";
 
 /**
  * One report — `/spend/disputes/view?id=`: where it stands and when the next
@@ -24,6 +26,7 @@ import { toast } from "@/utils/toast";
  * decision because its provider was blocked — and the evidence captured.
  */
 function ReportContent() {
+  const { terms: chainTerms } = useChainTerms();
   const id = useSearchParams().get("id") ?? "";
   const queryClient = useQueryClient();
   const names = useEntityNames({ kinds: ["tool", "provider"] });
@@ -91,7 +94,7 @@ function ReportContent() {
       <section aria-label="Status" className="flex w-full flex-col gap-2 rounded-xl border border-01 bg-01 px-5 py-4" data-testid="report-timeline">
         <DisputeTimeline dispute={d} side="buyer" now={now} onElapsed={() => void report.refetch()} />
         <p className="text-body-xs text-03">
-          Times are in UTC.{d.state === "OPEN" && d.refundGuaranteed && d.holdEndsAt ? ` ${BUYER_COPY.safetyNet}` : ""}
+          Times are in UTC.{d.state === "OPEN" && d.refundGuaranteed && d.holdEndsAt ? ` ${fillTerms(BUYER_COPY.safetyNet, chainTerms)}` : ""}
         </p>
       </section>
 

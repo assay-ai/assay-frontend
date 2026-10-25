@@ -9,11 +9,17 @@ vi.mock("@/features/explorer/use-public-explorer", () => ({
 
 vi.mock("@/components/explorer/buyer-costs", () => ({ BuyerCosts: () => null }));
 
+import { WithChains } from "@/test/chain-fixture";
+
 import HowItWorksPage from "./page";
 
 /* A#2 (2026-10-18): nothing above the fold said what Assay is, and the page spoke only to buyers. */
 describe("How it works", () => {
-  const html = renderToStaticMarkup(<HowItWorksPage />);
+  const html = renderToStaticMarkup(
+    <WithChains>
+      <HowItWorksPage />
+    </WithChains>,
+  );
   const text = html.replace(/<[^>]+>/g, "");
 
   it("says what Assay is in one line under the headline", () => {

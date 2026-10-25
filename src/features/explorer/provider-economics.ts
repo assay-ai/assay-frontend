@@ -1,18 +1,21 @@
 import Decimal from "decimal.js";
 
+import type { ChainParams } from "@/interfaces/chain";
 import { formatDecimal } from "@/utils/money";
 
 /**
  * The provider landing's earnings calculator (`/why-list-here`), pure.
  *
- * Illustrative published terms; the live values are configurable on chain:
- *  - platform fee: 10% of each paid call (`PLATFORM_FEE_BPS`);
- *  - stake per paid listing: max($50, 1000 × price);
- *  - most taken per 24 h: 10% of the stake. This is the one limit on what a
- *    penalty takes that the chain enforces (`slashCapBps`, a rolling 24 h
- *    window in AssayStake), next to a fixed maximum per penalty
- *    (`penaltyAmount`). No per-window cap such as max($5, 100 × price) is
- *    enforced anywhere, so none is shown (provider review 2026-10-16b, P0).
+ * The terms are the chain's, read from `GET /chains` (`Chain.params`) and
+ * passed in as {@link EconomicsTerms}; nothing here keeps a copy:
+ *  - platform fee: `takeRateBps` of each paid call;
+ *  - stake per paid listing: max(`minimumStake`, 1000 × price) — the 1000×
+ *    multiple is platform policy, not a chain value;
+ *  - most taken per 24 h: `slashCapBps` of the stake. This is the one limit on
+ *    what a penalty takes that the chain enforces (a rolling 24 h window in
+ *    AssayStake), next to a fixed maximum per penalty (`penaltyAmount`). No
+ *    per-window cap such as max($5, 100 × price) is enforced anywhere, so
+ *    none is shown (provider review 2026-10-16b, P0).
  * A free listing earns nothing, posts no stake and cannot be penalised.
  * Paid calls are served only by staked listings (owner decision), so there is
  * one column, not an "unverified" path.
@@ -20,13 +23,30 @@ import { formatDecimal } from "@/utils/money";
 
 export type ListingMode = "FREE" | "FREEMIUM" | "PAID";
 
-export const FEE_RATE = new Decimal("0.10");
-const STAKE_FLOOR = new Decimal("50");
+/** Platform policy (`PROVIDER_MINIMUM_STAKE_MULTIPLE`), not a chain value. */
 const STAKE_PRICE_MULTIPLE = new Decimal("1000");
-/** The share of stake the chain lets penalties take per rolling 24 hours, in these illustrative terms. */
-export const DAILY_CAP_PERCENT = 10;
-const DAILY_CAP_SHARE = new Decimal(DAILY_CAP_PERCENT).div(100);
 const DAYS_PER_MONTH = new Decimal("30");
+
+/** The chain's numbers the calculator needs, all known. */
+export interface EconomicsTerms {
+  /** `takeRateBps` as a share, `0.1`. */
+  feeRate: Decimal;
+  /** `minimumStake` in dollars, `50`. */
+  stakeFloor: Decimal;
+  /** `slashCapBps` as a share, `0.1`. */
+  dailyCapShare: Decimal;
+}
+
+/** {@link EconomicsTerms} from the chain's params, or `null` while any of them is unknown. */
+export function economicsTerms(params: ChainParams | null | undefined, decimals: number): EconomicsTerms | null {
+  if (!params || params.takeRateBps === null || params.slashCapBps === null) return null;
+  if (params.minimumStake === null || !/^\d+$/.test(params.minimumStake)) return null;
+  return {
+    feeRate: new Decimal(params.takeRateBps).div(10_000),
+    stakeFloor: new Decimal(params.minimumStake).div(new Decimal(10).pow(decimals)),
+    dailyCapShare: new Decimal(params.slashCapBps).div(10_000),
+  };
+}
 
 /** Bounds that keep the inputs sane: a price over $100 per call or a billion calls a month is a typo. */
 export const MAX_PRICE = "100";
@@ -71,7 +91,13 @@ function perCallUsd(value: Decimal): string {
   return usd(value, 6).replace(/(\.\d\d)(\d*?)0+$/, "$1$2");
 }
 
-export function economics(mode: ListingMode, price: Decimal | null, calls: Decimal | null): Economics | null {
+/** `null` for a paid listing until the chain's terms are known (`terms`). */
+export function economics(
+  mode: ListingMode,
+  price: Decimal | null,
+  calls: Decimal | null,
+  terms: EconomicsTerms | null,
+): Economics | null {
   if (mode === "FREE") {
     return {
       mode,
@@ -82,18 +108,18 @@ export function economics(mode: ListingMode, price: Decimal | null, calls: Decim
       daysToCoverStake: null,
     };
   }
-  if (!price || !calls) return null;
-  const fee = price.mul(FEE_RATE);
+  if (!price || !calls || !terms) return null;
+  const fee = price.mul(terms.feeRate);
   const youGet = price.minus(fee);
   const net = youGet.mul(calls);
-  const stake = Decimal.max(STAKE_FLOOR, STAKE_PRICE_MULTIPLE.mul(price));
+  const stake = Decimal.max(terms.stakeFloor, STAKE_PRICE_MULTIPLE.mul(price));
   const perDay = net.div(DAYS_PER_MONTH);
   return {
     mode,
     perCall: { price: perCallUsd(price), fee: perCallUsd(fee), youGet: perCallUsd(youGet) },
     netPerMonth: usd(net),
     stake: usd(stake),
-    worstPer24h: usd(stake.mul(DAILY_CAP_SHARE)),
+    worstPer24h: usd(stake.mul(terms.dailyCapShare)),
     daysToCoverStake: perDay.gt(0) ? stake.div(perDay).toDecimalPlaces(1, Decimal.ROUND_UP).toString() : null,
   };
 }

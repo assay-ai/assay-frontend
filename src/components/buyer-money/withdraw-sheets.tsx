@@ -28,6 +28,7 @@ import { createEscrowClaimIntent, createEscrowWithdrawIntent } from "@/services/
 import { formatMoney, parseAmountInput, toDecimal } from "@/utils/money";
 
 import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-money";
+import { chainTerms, UNKNOWN } from "@/libs/chain-terms";
 
 /**
  * Getting unspent money out: Request (free) → Wait ~1 h → Claim (you pay gas).
@@ -47,8 +48,8 @@ import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-mone
  */
 
 /** The pause a withdrawal request causes, in one sentence. Per chain, never account-wide. */
-export function withdrawPauseWarning(chainName: string | null): string {
-  return `While this request is open (about 1 h), every agent's paid calls on ${chainName ?? "this chain"} stop, even for a partial amount. Free calls keep working.`;
+export function withdrawPauseWarning(chainName: string | null, withdrawDelay: string = UNKNOWN): string {
+  return `While this request is open (about ${withdrawDelay}), every agent's paid calls on ${chainName ?? "this chain"} stop, even for a partial amount. Free calls keep working.`;
 }
 
 /**
@@ -115,6 +116,7 @@ export function WithdrawSheet({
   const queryClient = useQueryClient();
   const readOnly = useAccountReadOnly();
   const money = useBuyerMoney();
+  const delay = chainTerms(money.chain).withdrawDelay;
   const [amount, setAmount] = React.useState("");
   // "Use all" is preselected once per opening (B7); the buyer can still change it.
   const [seeded, setSeeded] = React.useState(false);
@@ -198,7 +200,7 @@ export function WithdrawSheet({
           : undefined,
       promptDescription: cancelling
         ? "Your whole balance stays in your escrow. Free, no gas."
-        : "Nothing moves yet: you claim it to your wallet after about an hour. Free, no gas.",
+        : `Nothing moves yet: you claim it to your wallet after about ${delay}. Free, no gas.`,
       run: async ({ report, prompt }) => {
         const signer = requireSigner(money.signerState, money.ownerShort, prompt);
         report({ stage: "preparing" });
@@ -230,7 +232,7 @@ export function WithdrawSheet({
       description={
         cancelling
           ? "Nothing leaves your escrow. Your agents can pay for calls again straight away."
-          : "Takes about three hours: ask now (free), then claim it to your wallet."
+          : `Takes about ${delay}: ask now (free), then claim it to your wallet.`
       }
       steps={steps}
       label={label}
@@ -249,7 +251,7 @@ export function WithdrawSheet({
             paused until then; free calls keep working.
           </>
         ) : (
-          `Next: claim it on the Funding page in about three hours. Paid calls on ${chainName ?? "this chain"} are paused until then; free calls keep working.`
+          `Next: claim it on the Funding page in about ${delay}. Paid calls on ${chainName ?? "this chain"} are paused until then; free calls keep working.`
         )
       }
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
@@ -262,7 +264,7 @@ export function WithdrawSheet({
             orientation="auto"
             steps={[
               { id: "request", label: "Request (free)", state: "current" },
-              { id: "wait", label: "Wait ~3 hours", state: "upcoming" },
+              { id: "wait", label: `Wait ~${delay}`, state: "upcoming" },
               { id: "claim", label: "Claim (you pay gas)", state: "upcoming" },
             ]}
           />
@@ -289,7 +291,7 @@ export function WithdrawSheet({
           {standing ? (
             <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700">
               You already asked for {formatLimit(standing)}. A new request replaces it (it does not add to it) and starts the
-              hour again.
+              {" "}{chainTerms(money.chain).withdrawDelay} wait again.
             </p>
           ) : null}
           {heldNote ? (
@@ -307,7 +309,7 @@ export function WithdrawSheet({
             data-testid="withdraw-pause-warning"
             className="rounded-lg border border-warning-20 bg-warning-10 px-3 py-2.5 text-body-13 text-warning-700"
           >
-            {withdrawPauseWarning(chainName)}
+            {withdrawPauseWarning(chainName, delay)}
           </p>
         </>
       )}
@@ -335,7 +337,7 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
     : !requested || BigInt(requested.amount || "0") === 0n
     ? "There is no withdrawal to claim. Request one first."
     : !matured
-      ? "Not ready yet: the hour after your request has not passed."
+      ? `Not ready yet: the ${chainTerms(money.chain).withdrawDelay} after your request have not passed.`
       : null;
 
   const steps: WalletStep[] = [

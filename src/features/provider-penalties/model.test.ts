@@ -4,7 +4,7 @@ import type { AssayCaseIndex } from "@/features/chain-slashes/assay-match";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import { slashRecordStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 
-import { countByTab, lossOf, openPenaltyHold, openPenaltyPhrase, penaltyRowOf, penaltyTimeline, penaltyTitle, sortPenalties } from "./model";
+import { countByTab, distributionOf, lossOf, openPenaltyHold, openPenaltyPhrase, penaltyRowOf, penaltyTimeline, penaltyTitle, sortPenalties } from "./model";
 import { failureSentence } from "./sentences";
 
 const NOW = 1_800_000_000;
@@ -34,11 +34,12 @@ function chainRow(code: number, patch: Partial<ChainSlashRow> = {}, everDisputed
   } as ChainSlashRow;
 }
 
+const SPLIT = { agentBps: 6000, platformBps: 3000 };
 const index: AssayCaseIndex = { status: "checked", known: new Map([["0xabc", { proposalId: "p1" }]]) };
 
 describe("penaltyRowOf", () => {
   it("puts a pending record in Needs action with Dispute before its deadline", () => {
-    const row = penaltyRowOf(chainRow(1), ASSET, index, NOW);
+    const row = penaltyRowOf(chainRow(1), ASSET, index, NOW, SPLIT);
     expect(row.tab).toBe("needs-action");
     expect(row.canDispute).toBe(true);
     expect(row.proposalId).toBe("p1");
@@ -125,9 +126,28 @@ describe("openPenaltyHold", () => {
 
 describe("lossOf", () => {
   it("counts from what the chain reserved, and is nothing for a cancelled record", () => {
-    const capped = penaltyRowOf(chainRow(1, { reserved: BigInt(10_000_000) }), ASSET, index, NOW);
+    const capped = penaltyRowOf(chainRow(1, { reserved: BigInt(10_000_000) }), ASSET, index, NOW, SPLIT);
     expect(lossOf(capped)?.amount).toBe("9000000");
     expect(lossOf({ ...capped, closedAs: "cancelled" })).toBeNull();
+  });
+
+  it("is unknown, not guessed, while the chain's split is not loaded", () => {
+    expect(lossOf(penaltyRowOf(chainRow(1), ASSET, index, NOW))).toBeNull();
+  });
+
+  it("shows an executed record's loss as SlashExecuted recorded it, whatever today's split", () => {
+    const executed = penaltyRowOf(
+      chainRow(2, {
+        applied: BigInt(10_000_000),
+        executedSplit: { agentAmount: BigInt(7_000_000), platformAmount: BigInt(2_000_000), providerAmount: BigInt(1_000_000) },
+      }),
+      ASSET,
+      index,
+      NOW,
+      { agentBps: 5000, platformBps: 1000 },
+    );
+    expect(lossOf(executed)?.amount).toBe("9000000");
+    expect(distributionOf(executed)?.agent.amount).toBe("7000000");
   });
 });
 
