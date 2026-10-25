@@ -26,6 +26,7 @@ const MARK: Record<PipelineStatus, string> = {
 
 const WARNING_TITLE: Record<BindingTestReport["warnings"][number]["code"], string> = {
   ACCEPTS_UNSIGNED: "Signature not enforced",
+  ACCEPTS_FOREIGN_PROVIDER: "Provider id not checked",
   ACCEPTS_WITHOUT_CREDENTIALS: "API key not enforced",
   NO_AUTHENTICATION: "No authentication",
 };
