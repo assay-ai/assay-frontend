@@ -7,8 +7,7 @@ import * as React from "react";
 import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { Term } from "@/components/patterns/term";
 import { MoneyPair } from "@/components/ui/money-pair";
-import { useChainTerms } from "@/hooks/useChainTerms";
-import { definitionOf } from "@/libs/glossary";
+import { StakeRuleText } from "@/components/explorer/stake-rule-text";
 import { pageMetadata } from "@/libs/page-metadata";
 import {
   Panel,
@@ -190,7 +189,6 @@ function Fork({ id, showHeading = false }: { id: string; showHeading?: boolean }
 }
 
 export default function HowItWorksPage() {
-  const { terms } = useChainTerms();
   return (
     <>
       {/* Hero */}
@@ -320,7 +318,7 @@ export default function HowItWorksPage() {
                 <Info aria-hidden="true" className="h-[15px] w-[15px] shrink-0 text-03" />
                 <p className="min-w-0 flex-1 text-body-13 text-02">
                   Providers put up a <Term k="stake">stake</Term>, and a <Term k="slash">penalty</Term> can take
-                  part of it. {definitionOf("stake-rule", terms)}
+                  part of it. <StakeRuleText />
                 </p>
               </div>
             </PanelBody>
