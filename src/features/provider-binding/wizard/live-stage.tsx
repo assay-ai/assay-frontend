@@ -60,6 +60,7 @@ export const REQUIREMENT_SENTENCE: Record<PublishRequirement, string> = {
   PAYOUT_ACCOUNT: "Add a payout wallet so you can be paid.",
   API_KEY_CREDENTIALS: "Add your API key headers for this address under Authentication.",
   STAKE_AT_MINIMUM_ON_EVERY_CHAIN: "Add stake to cover paid calls.",
+  SIGNATURE_PROVIDER_CHECKED: "Set your provider id in your signature check, then test again.",
 };
 
 export interface LiveForm {
