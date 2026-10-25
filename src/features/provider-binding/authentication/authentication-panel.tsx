@@ -7,6 +7,7 @@ import { Banner } from "@/components/ui/banner";
 import { Button } from "@/components/ui/button";
 import { CodeBlock } from "@/components/ui/code-block";
 import { Radio } from "@/components/ui/radio";
+import { providerQueries } from "@/features/provider-home/queries";
 import type { BindingAuthMode, CredentialHeaderInput, CredentialSetSummary } from "@/interfaces/provider-bindings";
 import { ApiError } from "@/libs/ApiClient";
 import { plainApiError, plainError } from "@/libs/plain-language";
@@ -147,6 +148,8 @@ export function AuthenticationPanel({
   const [removing, setRemoving] = React.useState<string | null>(null);
   const [removeError, setRemoveError] = React.useState<string | null>(null);
   const keysUrl = React.useMemo(() => requestKeysUrl(process.env.NEXT_PUBLIC_API_BASE_URL), []);
+  // The audience every signature to this provider is made for; the snippet pins it.
+  const providerId = useQuery(providerQueries.registration()).data?.registration.providerId ?? null;
 
   // Headers moved out of the address open the form, prefilled, once there is an address to store them for.
   const canEdit = !readOnly && bindingId !== null && origin !== null && !moved;
@@ -228,10 +231,20 @@ export function AuthenticationPanel({
               ) : null}
               .
             </li>
+            <li>
+              Check it was made for you: set your provider id
+              {providerId ? (
+                <>
+                  {" "}
+                  <span className="break-all font-mono">{providerId}</span>
+                </>
+              ) : null}{" "}
+              in the verifier, so it refuses calls Assay signed for another provider.
+            </li>
             <li>Refuse a call whose signature is missing, wrong or older than 5 minutes (answer 401).</li>
           </ul>
           {SIGNATURE_PACKAGE_NOTE ? <p className="text-body-xs text-warning-700">{SIGNATURE_PACKAGE_NOTE}</p> : null}
-          <CodeBlock title="Express (Node)" code={signatureSnippet(keysUrl)} />
+          <CodeBlock title="Express (Node)" code={signatureSnippet(keysUrl, providerId)} />
           <a
             href={SIGNATURE_GUIDE_URL}
             target="_blank"

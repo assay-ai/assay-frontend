@@ -472,7 +472,8 @@ export type PublishRequirement =
   | "TESTER_PASSED"
   | "PAYOUT_ACCOUNT"
   | "API_KEY_CREDENTIALS"
-  | "STAKE_AT_MINIMUM_ON_EVERY_CHAIN";
+  | "STAKE_AT_MINIMUM_ON_EVERY_CHAIN"
+  | "SIGNATURE_PROVIDER_CHECKED";
 
 export interface PublishRequirementResult {
   requirement: PublishRequirement;
@@ -650,7 +651,7 @@ export interface BindingTestReport {
   layers: BindingTestLayerResult[];
   /** Non-blocking findings, e.g. the endpoint answered without credentials. */
   warnings: {
-    code: "ACCEPTS_UNSIGNED" | "ACCEPTS_WITHOUT_CREDENTIALS" | "NO_AUTHENTICATION";
+    code: "ACCEPTS_UNSIGNED" | "ACCEPTS_FOREIGN_PROVIDER" | "ACCEPTS_WITHOUT_CREDENTIALS" | "NO_AUTHENTICATION";
     message: string;
   }[];
   /** Header **names** only, never values. */

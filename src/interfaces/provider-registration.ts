@@ -44,6 +44,8 @@ export interface RegisterProviderBody {
  */
 export interface ProviderRegistrationRecord {
   id: string;
+  /** The audience (`aud`) Assay signs every request to this provider for; the verifier's `provider` option. */
+  providerId: string;
   legalName: string;
   technicalContact: ProviderContact;
   ownerContact: ProviderContact;
