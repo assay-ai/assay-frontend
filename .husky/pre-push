@@ -1,1 +1,2 @@
+sh scripts/check-commit-utc.sh push
 pnpm run typecheck
