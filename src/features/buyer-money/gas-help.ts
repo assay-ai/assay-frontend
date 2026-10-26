@@ -43,3 +43,19 @@ export function testTokenHelp(
   const symbol = chain.settlementAssetSymbol || "the test token";
   return `No ${symbol}? On this test network it has no real value: get some from the ${chain.displayName} faucet.`;
 }
+
+/**
+ * What a first deposit takes on a test network, in one line, for a screen
+ * that sends someone to "Add funds" (the public-name claim): the minimum, the
+ * test dollar token and a little ETH for gas, both from the chain's faucet.
+ * `null` on a main network. No faucet URL is served, so none is linked.
+ */
+export function testnetDepositLine(
+  chain: (Pick<Chain, "displayName" | "chainId"> & { settlementAssetSymbol?: string }) | null | undefined,
+  minimumUsd: string,
+): string | null {
+  if (!chain || !isTestnet(chain)) return null;
+  const symbol = chain.settlementAssetSymbol || "the test token";
+  const gas = isEvmChain(chain.chainId) ? " plus a little ETH for gas" : "";
+  return `On ${chain.displayName} that is at least $${minimumUsd} in ${symbol}${gas}. Test tokens have no real value: get them free from the ${chain.displayName} faucet first.`;
+}

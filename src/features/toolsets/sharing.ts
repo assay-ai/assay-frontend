@@ -1,6 +1,7 @@
 import { buildMcpUrl } from "@/features/connect/mcp-url";
 import { mcpHost } from "@/features/connect/mcp-endpoint";
 import { rangeText } from "@/features/contracts/semver";
+import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { formatDate } from "@/libs/utc-time";
 import type { Money } from "@/interfaces";
 import type {
@@ -60,6 +61,15 @@ export interface HandleErrorView {
   suggestions: string[];
   /** A next step that lives elsewhere ("Add funds"). */
   action: { label: string; href: string } | null;
+  /** On a refusal for funding: the least deposit that opens the claim, in whole dollars ("5"). */
+  minimumDepositUsd?: string;
+}
+
+/** The server's minimum when it sent a plain amount, else the deposit drawer's own. */
+function minimumDepositOf(context: Readonly<Record<string, unknown>> | undefined): string {
+  const raw = context?.minimumDepositUsd;
+  const text = typeof raw === "number" && Number.isFinite(raw) && raw > 0 ? String(raw) : typeof raw === "string" ? raw : "";
+  return /^\d{1,6}(\.\d{1,2})?$/.test(text) ? text : DEPOSIT_MINIMUM_USD;
 }
 
 /** A refused claim, as a person reads it: never the code, always what to do next. */
@@ -79,14 +89,22 @@ export function handleErrorView(code: string | null, context: Readonly<Record<st
     }
     case "TOOLSET_HANDLE_LOCKED":
       return { text: "Your public name is in use by a shared tool set, so it can't change here. Ask support to rename it.", ...none };
-    case "TOOLSET_HANDLE_CLAIM_REFUSED":
-      return context?.reason === "CLAIM_LIMIT"
-        ? { text: "You chose public names for 3 teams in the last 30 days. Try again later, or ask support.", ...none }
-        : {
-            text: "Add funds once before you choose a public name. It keeps names from being grabbed in bulk.",
-            suggestions: [],
-            action: { label: "Add funds", href: "/funding?action=deposit" },
-          };
+    case "TOOLSET_HANDLE_CLAIM_REFUSED": {
+      if (context?.reason === "CLAIM_LIMIT") {
+        return { text: "You chose public names for 3 teams in the last 30 days. Try again later, or ask support.", ...none };
+      }
+      // NOT_VERIFIED: funded once opens the claim; a set-up provider's first name is free (onboarding wave 3).
+      const minimumDepositUsd = minimumDepositOf(context);
+      return {
+        text:
+          context?.providerSetUp === true
+            ? `Your free public name is already used. Add at least $${minimumDepositUsd} in funds once to choose another.`
+            : `Add at least $${minimumDepositUsd} in funds once, or finish provider setup, before you choose a public name. It keeps names from being grabbed in bulk.`,
+        suggestions: [],
+        action: { label: "Add funds", href: "/funding?action=deposit" },
+        minimumDepositUsd,
+      };
+    }
     case "TOOLSET_HANDLE_REQUIRED":
       return { text: "Choose a public name before sharing.", ...none };
     default:

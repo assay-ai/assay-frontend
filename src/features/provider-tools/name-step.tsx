@@ -7,11 +7,16 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { toolsetKeys, useOrgHandle } from "@/components/toolsets/use-toolsets";
+import { isTestnet, testnetDepositLine } from "@/features/buyer-money/gas-help";
+import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { STARTER_INPUT, STARTER_OUTPUT } from "@/features/operator/contract-editor";
+import { useProviderEntry } from "@/features/provider-entry/use-provider-entry";
 import { handleErrorView, handleProblem, normaliseHandle, type HandleErrorView } from "@/features/toolsets/sharing";
+import { useChains } from "@/hooks/useChains";
 import { ApiError } from "@/libs/ApiClient";
+import { isEvmChain } from "@/libs/chains/registry";
 import { routes } from "@/libs/routes";
 import { listPublicCategories } from "@/services/public-toolsets.service";
 import { createProviderTool, listProviderTools, updateProviderTool, type ProviderTool } from "@/services/provider-tools.service";
@@ -45,8 +50,17 @@ import { providerToolKeys } from "./queries";
 const CATEGORY_RE = /^[a-z][a-z0-9-]{1,63}$/;
 const SUMMARY_MAX = 200;
 
-export function HandleClaim() {
+/**
+ * Step 1 starts here when the team has no public name yet. Whether this
+ * account claims it free is said before any click (onboarding wave 3): a
+ * provider whose setup is finished gets its first name free; anyone else adds
+ * funds once. `freeClaim` is that guess from the provider setup (`null` while
+ * unknown); the server decides, and a refusal for funding says how to add
+ * them, with the testnet minimum, the token, gas and the faucet.
+ */
+export function HandleClaim({ freeClaim = null }: { freeClaim?: boolean | null }) {
   const queryClient = useQueryClient();
+  const chains = useChains();
   const [name, setName] = React.useState("");
   const [error, setError] = React.useState<HandleErrorView | null>(null);
   const claim = useMutation({
@@ -67,14 +81,31 @@ export function HandleClaim() {
   });
   // Checked as it is typed, by the server's own rule (`handleProblem`), so Claim never sends a name that cannot be had.
   const typedProblem = name.trim() === "" ? null : handleProblem(name);
+  const funding = error?.action ? error : null;
+  const depositChain = chains.chains.find((c) => isEvmChain(c.chainId) && isTestnet(c)) ?? null;
+  const testnetLine = funding ? testnetDepositLine(depositChain, funding.minimumDepositUsd ?? DEPOSIT_MINIMUM_USD) : null;
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 p-3.5" data-testid="handle-claim">
-      <p className="text-label-13 text-01">First, claim your public name</p>
+      <p className="text-label-13 text-01">First, choose your public name</p>
       <p className="text-body-13 text-02">Your tools are named after it, like @acme → acme__search_posts. It never shows an email, a wallet or a real name.</p>
       <p className="text-body-13 text-02">
         It is asked for now because a tool&apos;s name includes it from the first save. The draft itself stays private until you
         choose who can use it.
       </p>
+      {freeClaim === true ? (
+        <p className="flex items-center gap-1.5 text-body-13 text-success-700" data-testid="handle-claim-free">
+          <Check aria-hidden="true" className="size-3.5 shrink-0" />
+          Your provider setup is finished, so your first public name is free: no funds needed.
+        </p>
+      ) : freeClaim === false ? (
+        <p className="text-body-13 text-02" data-testid="handle-claim-cost">
+          It needs funds added once (at least ${DEPOSIT_MINIMUM_USD}), or a finished{" "}
+          <Link href="/provider/setup" className="text-primary-600 hover:underline">
+            provider setup
+          </Link>
+          : then your first public name is free.
+        </p>
+      ) : null}
       <div className="flex flex-col gap-2 tablet:flex-row tablet:items-start">
         <Field
           label="Public name"
@@ -85,7 +116,7 @@ export function HandleClaim() {
           }}
           suffix={name ? `@${normaliseHandle(name)}` : undefined}
           hint="3–24 lowercase letters, digits or “-”, starting with a letter."
-          error={error?.text ?? typedProblem ?? undefined}
+          error={(funding ? undefined : error?.text) ?? typedProblem ?? undefined}
           wrapperClassName="tablet:max-w-[360px]"
           autoComplete="off"
           spellCheck={false}
@@ -94,6 +125,23 @@ export function HandleClaim() {
           Claim
         </Button>
       </div>
+      {funding?.action ? (
+        <div role="alert" className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-01 p-3" data-testid="handle-claim-funding">
+          <p className="text-body-13 text-warning-700">{funding.text}</p>
+          {testnetLine ? <p className="text-body-xs text-03">{testnetLine}</p> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild size="sm">
+              <a href={funding.action.href} target="_blank" rel="noopener noreferrer">
+                {funding.action.label} (new tab)
+              </a>
+            </Button>
+            <Button size="sm" variant="secondary" loading={claim.isPending} onClick={() => claim.mutate(name)}>
+              I&apos;ve done it: try again
+            </Button>
+          </div>
+          <p className="text-body-xs text-03">Everything you typed here stays as it is.</p>
+        </div>
+      ) : null}
       {error?.suggestions.length ? (
         <div className="flex flex-wrap gap-2">
           {error.suggestions.map((s) => (
@@ -187,6 +235,8 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
   const router = useRouter();
   const queryClient = useQueryClient();
   const handle = useOrgHandle();
+  // A finished provider setup claims its first public name free (the server decides; this says it up front).
+  const providerEntry = useProviderEntry({ enabled: !tool });
   const categories = useQuery({ queryKey: ["public-categories"], queryFn: listPublicCategories, retry: 0, staleTime: 5 * 60_000 });
   const [localName, setLocalName] = React.useState("");
   const [category, setCategory] = React.useState(tool?.category ?? "");
@@ -276,8 +326,9 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
   return (
     <section className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 px-4 py-4">
       <h2 className="text-label-md text-01">Name it</h2>
+      {/* The public name comes first, above everything else in step 1 (onboarding wave 3). */}
+      {noHandle ? <HandleClaim freeClaim={providerEntry ? providerEntry.provider && providerEntry.href === "/provider" : null} /> : null}
       <UpFrontChecklist />
-      {noHandle ? <HandleClaim /> : null}
       {owner ? (
         <p className="flex items-center gap-1.5 text-body-13 text-02">
           <Check aria-hidden="true" className="size-3.5 text-success-700" />
