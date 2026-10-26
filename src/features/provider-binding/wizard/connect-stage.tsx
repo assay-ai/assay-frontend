@@ -39,6 +39,8 @@ import { isStaleRun } from "../tester/report-view";
 import { createRunGuard } from "../tester/run-guard";
 
 import { previewRequest } from "./request-preview";
+import { canPickInto, pickInto, sampleAnswer } from "./response-pick";
+import { ResponsePicker } from "./response-picker";
 import { readTestInput, writeTestInput } from "./test-input-store";
 import { argumentsFromText, seedArguments, seedRequestMapping, seedResponseMapping } from "./seeds";
 
@@ -144,6 +146,9 @@ export function ConnectStage({
   const termsBlocked = versioned ? termsProblem(terms, choices) : null;
 
   const fields = React.useMemo(() => schemaFields(tool.inputSchema), [tool.inputSchema]);
+  const outputFields = React.useMemo(() => schemaFields(tool.outputSchema), [tool.outputSchema]);
+  // Bumped by a click in the answer, so the Advanced editor re-opens on the picked mapping.
+  const [picks, setPicks] = React.useState(0);
   // Prefilled from the contract's own example (the current version's), so the first test can run at once.
   // The last test input kept with this draft wins; otherwise the contract's example.
   const [args, setArgs] = React.useState<Record<string, string>>(() => {
@@ -310,6 +315,13 @@ export function ConnectStage({
   const passed = gate ? gate.passed : testPassedBefore && !dirty;
   const multi = versioned && (runs?.length ?? terms.majors.length) > 1;
   const preview = previewRequest(endpoint, mappings.request, args);
+  // The real answer of the latest test call, for clicking values into output fields.
+  const answer = sampleAnswer(report);
+  const pickResponse = (field: string, path: string) => {
+    setMappings((current) => ({ ...current, response: pickInto(current.response, field, path) }));
+    setBlocked((current) => ({ ...current, response: null }));
+    setPicks((n) => n + 1);
+  };
 
   return (
     <section aria-labelledby="connect-stage-title" className="flex w-full flex-col gap-5">
@@ -393,8 +405,8 @@ export function ConnectStage({
             </div>
           ) : null}
           <p className="text-body-xs text-03">
-            We filled this in from the tool&apos;s fields. If your API uses other names or paths, change them under Advanced mapping. Most
-            people do not need to.
+            We filled this in from the tool&apos;s fields. If your API answers with other names, run the test below and click the
+            values in its answer. Advanced mapping is there for anything else.
           </p>
         </div>
         <button
@@ -429,7 +441,7 @@ export function ConnectStage({
             />
             <h4 className="pt-2 text-label-sm text-01">How your answer becomes the result</h4>
             <MappingEditor
-              key={`response:${tool.id}`}
+              key={`response:${tool.id}:${picks}`}
               direction="RESPONSE"
               toolId={tool.id}
               mapping={mappings.response}
@@ -547,6 +559,16 @@ export function ConnectStage({
           </div>
         ) : testPassedBefore && !dirty ? (
           <p className="text-body-13 text-success-700">Your last test passed. Run it again any time.</p>
+        ) : null}
+
+        {answer !== null && canPickInto(mappings.response) ? (
+          <ResponsePicker
+            answer={answer}
+            fields={outputFields}
+            mapping={mappings.response}
+            disabled={readOnly || phase !== "idle"}
+            onPick={pickResponse}
+          />
         ) : null}
       </div>
 

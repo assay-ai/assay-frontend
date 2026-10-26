@@ -98,6 +98,8 @@ describe("each endpoint is requested once when a heavy page mounts", { timeout: 
       "GET /catalogue/providers",
       "GET /catalogue/tools",
       "GET /tool-calls",
+      // The provider entry ("List your API" / "Provider console"), onboarding wave 2.
+      "GET /providers/me/registration",
     ]);
   });
 

@@ -5,6 +5,7 @@ import { Wallet } from "lucide-react";
 import * as React from "react";
 
 import { Button } from "@/components/ui/button";
+import { useWalletChainType } from "@/hooks/useWalletChainType";
 
 /**
  * "Connect wallet" as a button, for the moment a sign button is disabled only
@@ -13,6 +14,8 @@ import { Button } from "@/components/ui/button";
  */
 export function ConnectWalletButton({ label = "Connect wallet", className }: { label?: string; className?: string }) {
   const { connectWallet } = useConnectWallet();
+  // From the served chains: no Solana wallet offered while only EVM chains are served.
+  const walletChainType = useWalletChainType();
   return (
     <Button
       type="button"
@@ -20,7 +23,7 @@ export function ConnectWalletButton({ label = "Connect wallet", className }: { l
       variant="secondary"
       icon={<Wallet aria-hidden="true" />}
       className={className}
-      onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
+      onClick={() => connectWallet({ walletChainType })}
     >
       {label}
     </Button>

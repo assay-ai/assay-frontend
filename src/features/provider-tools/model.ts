@@ -274,6 +274,8 @@ function gateRow(row: GateRequirement, tool: Pick<ProviderTool, "id" | "binding"
       return { ...base, label: "Your stake is at the minimum", todo: "Add stake on every chain you are paid on.", fix: { kind: "link", label: "Add stake", href: routes.stake("stake") } };
     case "SIGNATURE_PROVIDER_CHECKED":
       return { ...base, label: "Your signature check pins your provider id", todo: "Set your provider id in your verifier (provider-verify 0.2 or later), then test again.", fix: { kind: "link", label: "Run a test", href: connectHref(tool) } };
+    case "SECOND_CONTACT":
+      return { ...base, label: "A second contact is set", todo: "Add a second contact: paid tools need someone we can reach when you are away.", fix: { kind: "link", label: "Add a second contact", href: "/provider/setup?step=you" } };
     case "SCHEMA_SCREEN":
       return { ...base, label: "The text passes the safety screen", todo: "Fix the findings listed below, then publish again.", fix: { kind: "step", label: "Edit inputs & outputs", step: "contract" } };
     case "EXAMPLES_MATCH_SCHEMA":

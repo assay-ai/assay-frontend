@@ -54,12 +54,34 @@ export function ToolStage({
     <section aria-labelledby="tool-stage-title" className="flex w-full flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h2 id="tool-stage-title" className="text-label-md text-01">
-          Which tool does your API provide?
+          How do you want to list your API?
         </h2>
         <p className="text-body-13 text-02">
-          Agents call tools by what they do. Pick the one your API answers; next you connect it and run a test.
+          Agents call tools by what they do. Two equal ways in: answer a tool agents already call, or publish your API as a new tool.
         </p>
       </div>
+
+      {/* Two equal choices, always offered — not only when the catalogue is empty (onboarding wave 2, item 2). */}
+      <div className="grid w-full grid-cols-1 gap-3 tablet:grid-cols-2" data-testid="listing-choice">
+        <div className="flex flex-col gap-1 rounded-lg border border-primary-500 bg-primary-5 p-4">
+          <span className="text-label-sm text-01">Pick a tool from the catalogue</span>
+          <p className="text-body-13 text-02">Your API answers a tool that is already listed. Pick it below; next you connect your API and run a test.</p>
+        </div>
+        <div className="flex flex-col gap-2 rounded-lg border border-01 bg-01 p-4">
+          <span className="text-label-sm text-01">Publish your own API as a new tool</span>
+          <p className="text-body-13 text-02">Your own name, description and fields. Nobody has to add it to the catalogue first.</p>
+          <div className="mt-auto pt-1">
+            <Button size="sm" variant="secondary" asChild>
+              <Link href="/provider/apis/new">
+                Publish your API
+                <ArrowRight aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <h3 className="text-label-13 text-01">Pick a tool from the catalogue</h3>
 
       <label className="flex w-full items-center gap-2 rounded-md border border-02 bg-01 px-3 py-2.5 focus-within:border-primary-500 tablet:max-w-[420px]">
         <SearchIcon aria-hidden="true" className="size-4 shrink-0 text-03" />

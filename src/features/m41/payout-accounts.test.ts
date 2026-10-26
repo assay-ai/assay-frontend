@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ProviderPayoutAccount } from "@/interfaces";
 
 import { justProvedAccountId, payoutStepIsDone, provedChainIsNew } from "./payout-accounts";
+import { payoutCandidates } from "./use-setup";
 
 /**
  * per-chain enrolment — the payout address is per chain, and the enrolment's status is
@@ -105,5 +106,20 @@ describe("provedChainIsNew", () => {
     expect(provedChainIsNew([], `${SOLANA}:7xKX`)).toBe(true);
     expect(provedChainIsNew([account(SOLANA, "7xKX", "SUSPENDED")], `${SOLANA}:9zQq`)).toBe(false);
     expect(provedChainIsNew([account(CHAIN_4663, "0xabc", "ACTIVE")], `${SOLANA}:7xKX`)).toBe(true);
+  });
+});
+
+
+describe("payoutCandidates", () => {
+  const evm = "0x1111111111111111111111111111111111111111";
+  const solana = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+
+  it("keeps only wallets of a served namespace", () => {
+    expect(payoutCandidates([solana, evm], [{ chainId: "eip155:46630", namespace: "eip155" }])).toEqual([evm]);
+    expect(payoutCandidates([solana, evm], [{ chainId: "solana:devnet", namespace: "solana" }])).toEqual([solana]);
+  });
+
+  it("keeps every known wallet while the chain list is unknown", () => {
+    expect(payoutCandidates([solana, evm, "nope"], [])).toEqual([solana, evm]);
   });
 });

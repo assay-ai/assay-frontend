@@ -30,7 +30,12 @@ import type {
 export interface RegisterProviderBody {
   legalName: string;
   technicalContact: ProviderContactInput;
-  ownerContact: ProviderContactInput;
+  /**
+   * The second contact, for escalations. Optional at registration: required
+   * before a PAID listing is published (`SECOND_CONTACT`), and added later
+   * with `PATCH /providers/me/registration`.
+   */
+  ownerContact?: ProviderContactInput | null;
   /** An IANA zone name. Every deadline the platform quotes is counted here. */
   timezone: string;
   acceptedTerms: AcceptedTermsInput;
@@ -48,7 +53,8 @@ export interface ProviderRegistrationRecord {
   providerId: string;
   legalName: string;
   technicalContact: ProviderContact;
-  ownerContact: ProviderContact;
+  /** The second contact; `null` until added. Required before a PAID listing is published. */
+  ownerContact: ProviderContact | null;
   timezone: string;
   acceptedTerms: AcceptedTerms;
   /** Always `ACTIVE` on a freshly registered row — there is no `PENDING`. */

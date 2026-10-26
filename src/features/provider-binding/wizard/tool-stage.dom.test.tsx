@@ -23,3 +23,19 @@ describe("ToolStage on an empty catalogue", () => {
     expect(html).toMatch(/<a[^>]*href="\/provider\/apis\/new"[^>]*>Publish your API<\/a>/);
   });
 });
+
+/* Onboarding wave 2 item 2: publishing your own API is an equal choice, also beside a full catalogue. */
+describe("ToolStage with tools listed", () => {
+  it("still offers publishing your own API as a new tool", () => {
+    const tool = { id: "t1", name: "get_usd_eur_rate", description: "USD to EUR rate" } as unknown as import("@/interfaces").CatalogueTool;
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={new QueryClient()}>
+        <ToolStage tools={[tool]} isLoading={false} error={false} onRetry={() => undefined} boundByTool={new Map()} selectedId={null} onPick={() => undefined} />
+      </QueryClientProvider>,
+    );
+    expect(html).toContain("get_usd_eur_rate");
+    expect(html).toContain("Pick a tool from the catalogue");
+    expect(html).toContain("Publish your own API as a new tool");
+    expect(html).toMatch(/<a[^>]*href="\/provider\/apis\/new"[^>]*>Publish your API/);
+  });
+});

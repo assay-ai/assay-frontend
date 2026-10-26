@@ -42,6 +42,7 @@ import { callPaymentNote, heldCallsText } from "@/features/buyer-debt/debt-copy"
 import { OwedRowAction } from "@/features/buyer-debt/owed-row-action";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { isWalletNotLinked } from "@/features/auth/wallet-link";
+import { ProviderEntryCard } from "@/features/provider-entry/entry-card";
 import { attentionRows } from "@/features/buyer/alert-model";
 import { callOutcome } from "@/features/buyer/call-outcome";
 import { absentBalanceTile, overviewBalance, singleBalanceSub } from "@/features/buyer/overview-balance";
@@ -235,6 +236,8 @@ export default function OverviewPage() {
       {/* Get started (until the first paid call is possible) and each agent's health: owned by buyer-money. */}
       <GetStarted placement="overview" />
       <AgentHealthList />
+      {/* The way to the provider side: "List your API", or "Provider console" for a provider. */}
+      <ProviderEntryCard />
 
       {/* A brand-new account's first requests fail for one specific, temporary
           reason — Privy records the wallet after issuing the token — and that

@@ -66,6 +66,7 @@ describe("listingProgress", () => {
 describe("listingProgress, the tool step", () => {
   it("offers publishing your own API next to listing a catalogue tool", () => {
     const tool = listingProgress({ registration: registered, bindings: [], draftTestPassed: undefined, stakeEnough: null }).steps.find((s) => s.id === "tool");
-    expect(tool?.secondary).toEqual({ label: "Publish your API", href: "/provider/apis/new" });
+    expect(tool?.actionLabel).toBe("Pick a tool from the catalogue");
+    expect(tool?.secondary).toEqual({ label: "Publish your own API as a new tool", href: "/provider/apis/new" });
   });
 });

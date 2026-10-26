@@ -473,7 +473,9 @@ export type PublishRequirement =
   | "PAYOUT_ACCOUNT"
   | "API_KEY_CREDENTIALS"
   | "STAKE_AT_MINIMUM_ON_EVERY_CHAIN"
-  | "SIGNATURE_PROVIDER_CHECKED";
+  | "SIGNATURE_PROVIDER_CHECKED"
+  /** A PAID binding's provider has a second contact (`PROVIDER_SECOND_CONTACT_REQUIRED`). */
+  | "SECOND_CONTACT";
 
 export interface PublishRequirementResult {
   requirement: PublishRequirement;

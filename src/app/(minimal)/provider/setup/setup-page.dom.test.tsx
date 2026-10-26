@@ -12,7 +12,13 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams({ step }),
 }));
 vi.mock("@privy-io/react-auth", () => ({ useConnectWallet: () => ({ connectWallet: () => undefined }), usePrivy: () => ({ ready: false, authenticated: false }) }));
-vi.mock("@/hooks/useSigner", () => ({ useConnectedAddresses: () => [] }));
+const wallets = vi.hoisted(() => ({ connected: [] as string[] }));
+vi.mock("@/hooks/useSigner", () => ({ useConnectedAddresses: () => wallets.connected }));
+const served = vi.hoisted(() => ({ chains: [] as { chainId: string; namespace: string; displayName: string }[] }));
+vi.mock("@/hooks/useChains", async (original) => ({
+  ...(await original<object>()),
+  useChains: () => ({ status: "ready", chains: served.chains }),
+}));
 
 const refused = new ApiError("ENDPOINT_REFUSED", "This address cannot be used: it resolves to a private network.", 422);
 const setup = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
@@ -69,6 +75,14 @@ describe("provider setup", () => {
     expect(nav.textContent).not.toContain("not started");
   });
 
+  it("says up front that the second person is optional until a paid listing (wave 2 item 5)", () => {
+    step = "you";
+    allDone();
+    mount();
+    expect(screen.getByText("A second person (optional for now)")).toBeTruthy();
+    expect(screen.getByText(/we ask for it before you charge for a tool/)).toBeTruthy();
+  });
+
   it("says a refused address once after Finish setup", async () => {
     step = "api";
     allDone({
@@ -90,5 +104,72 @@ describe("provider setup", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /Finish setup/ }).getAttribute("aria-busy")).toBeNull());
     await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
     expect(screen.getAllByText(/resolves to a private network/)).toHaveLength(1);
+  });
+
+  /* Onboarding wave 2 item 6: the blur's reachability check must not swallow the first click on Finish setup. */
+  it("finishes on one click even while the blur's check is running", async () => {
+    step = "api";
+    const declareAsync = vi.fn(async () => ({ outcome: "REACHABLE", endpoint: "https://api.frankfurter.app" }));
+    const apiTodo = {
+      steps: [
+        { key: "account", status: "DONE" },
+        { key: "payoutWallet", status: "DONE" },
+        { key: "endpoint", status: "TODO" },
+      ],
+      savedEndpoint: null,
+      endpoint: "https://api.frankfurter.app",
+      declareAsync,
+    };
+    allDone({ ...apiTodo, checking: true });
+    const tree = () => (
+      <QueryClientProvider client={new QueryClient()}>
+        <ProviderSetupPage />
+      </QueryClientProvider>
+    );
+    const view = render(tree());
+    fireEvent.click(screen.getByRole("button", { name: /Finish setup/ }));
+    expect(declareAsync).not.toHaveBeenCalled();
+    allDone({ ...apiTodo, checking: false });
+    view.rerender(tree());
+    await waitFor(() => expect(declareAsync).toHaveBeenCalledWith("https://api.frankfurter.app"));
+  });
+
+  /* Onboarding wave 2 item 6: a provider with no paid listing gets one line about penalties, the rest folded. */
+  it("keeps the penalty text short for a free-only provider", async () => {
+    step = "";
+    allDone();
+    mount();
+    expect(await screen.findByText(/no penalties: penalties only ever come out of stake/)).toBeTruthy();
+    const folded = screen.getByTestId("paid-terms");
+    expect(folded.tagName).toBe("DETAILS");
+    expect(folded.hasAttribute("open")).toBe(false);
+    expect(folded.textContent).toContain("Penalty");
+  });
+
+  /* Onboarding wave 2 item 4: only wallets a served chain can pay, picked for you when one fits. */
+  it("hides a Solana wallet when only EVM chains are served, and names the one payout address", () => {
+    step = "wallet";
+    const evm = "0x1111111111111111111111111111111111111111";
+    const solana = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+    wallets.connected = [solana, evm];
+    served.chains = [{ chainId: "eip155:46630", namespace: "eip155", displayName: "Robinhood Chain testnet" }];
+    allDone({
+      steps: [
+        { key: "account", status: "DONE" },
+        { key: "payoutWallet", status: "TODO" },
+        { key: "endpoint", status: "TODO" },
+      ],
+      address: evm,
+      setAddress: () => undefined,
+      chainId: "eip155:46630",
+      walletBlockedBy: null,
+      prove: async () => undefined,
+    });
+    mount();
+    expect(screen.queryByText(solana)).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Wallet to be paid in" })).toBeNull();
+    expect(screen.getByTestId("payout-wallet-line").textContent).toBe(`Payouts go to ${evm} on Robinhood Chain testnet.`);
+    wallets.connected = [];
+    served.chains = [];
   });
 });
