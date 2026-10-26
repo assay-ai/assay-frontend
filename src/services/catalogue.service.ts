@@ -1,4 +1,4 @@
-import type { CatalogueToolVersionFields, ToolVersionList } from "@/interfaces/contracts";
+import type { CatalogueToolVersionFields, ToolChecks, ToolVersionList } from "@/interfaces/contracts";
 import { api } from "./api";
 import type { ToolTier } from "./tools.service";
 
@@ -144,6 +144,8 @@ export interface CatalogueTool extends CatalogueToolVersionFields {
   name: string;
   description: string;
   tier: ToolTier;
+  /** Whether quality rules decide the charge; missing is `NONE`. */
+  checks?: ToolChecks;
   providerCount: number;
   /** The market floor — cheapest ACTIVE binding across every provider. */
   fromPrice: CatalogueMoney | null;

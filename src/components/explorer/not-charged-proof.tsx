@@ -169,7 +169,7 @@ export function NotChargedProof({
               ? "Recently not charged on this tool"
               : scope === "provider"
                 ? "Recently not charged on their tools"
-                : "You don't pay for results you can't use"}
+                : "Recently not charged"}
           </h2>
           <p className="text-body-13 text-02">
             {scope === "tool"

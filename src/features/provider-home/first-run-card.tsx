@@ -67,7 +67,7 @@ export function FirstRunCard({
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h2 className="text-label-md text-01">{toolName} is live</h2>
           <p className="text-body-13 text-02">
-            Buyers&apos; agents can call it now. Each call is checked by Assay; you are paid for every call that passes.
+            Buyers&apos; agents can call it now. Assay checks the response shape of each paid call; you are paid for every paid call that passes.
           </p>
         </div>
       </div>

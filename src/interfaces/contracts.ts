@@ -85,6 +85,13 @@ export interface ToolVersionList {
   providers: ToolVersionProvider[];
 }
 
+/**
+ * Whether a tool's quality rules decide the charge: `ACTIVE` (switched on),
+ * `SHADOW` (in trial, the charge does not depend on them) or `NONE`. Not sent
+ * by older servers; a missing value is read as `NONE`.
+ */
+export type ToolChecks = "ACTIVE" | "SHADOW" | "NONE";
+
 /** The contract-version half of a catalogue tool card (T3). */
 export interface CatalogueToolVersionFields {
   /** The current version's one-line summary (at most 200 characters). */

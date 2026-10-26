@@ -26,6 +26,7 @@ import {
   routingNotes,
   offerLine,
   costSentence,
+  toolChecks,
   stakeSummary,
 } from "@/features/explorer/explorer-text";
 import {
@@ -164,7 +165,7 @@ function ToolPage() {
             </p>
           ))}
           <p className="text-body-13 text-02">
-            {costSentence({ mode: tool.pricingMode, price: held, range, freeCallsPerDay: freeAllowance })}
+            {costSentence({ mode: tool.pricingMode, price: held, range, freeCallsPerDay: freeAllowance, checks: tool.checks })}
           </p>
           {settles.length > 0 ? (
             <p className="text-body-xs text-03">
@@ -178,7 +179,7 @@ function ToolPage() {
         <section className="flex flex-col gap-3 rounded-xl border border-01 bg-01 p-4 tablet:p-5">
           <h2 className="text-label-md text-01">What is checked</h2>
           <ul className="flex flex-col gap-2">
-            {checkSentences(tool.tier).map((line) => (
+            {checkSentences(tool.tier, tool.checks).map((line) => (
               <li key={line} className="flex items-start gap-2 text-body-13 text-01">
                 <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success-500" />
                 {line}
@@ -186,7 +187,9 @@ function ToolPage() {
             ))}
             <li className="flex items-start gap-2 text-body-13 text-01">
               <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success-500" />
-              If the result fails, the held amount goes straight back. You never have to ask for a refund.
+              {toolChecks(tool.checks) === "ACTIVE"
+                ? "If the result fails, the held amount goes straight back. You never have to ask for a refund."
+                : "If the response is in the wrong shape, the held amount goes straight back. You never have to ask for a refund."}
             </li>
           </ul>
         </section>

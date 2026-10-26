@@ -494,9 +494,9 @@ export default function GuaranteePage() {
       <section className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-5">
         <h2 className="text-label-md text-01">How this works</h2>
         <p className="text-body-sm leading-[1.65] text-02">
-          Every call is checked for its response shape and the tool&apos;s quality rules — empty results, dead links,
-          stale data, missing fields — at every price. Some tools also check relevance on a sample of calls, backed by
-          the provider&apos;s <Term k="stake">stake</Term>.
+          The response shape is checked on every paid call. Quality rules — empty results, dead links, stale data,
+          missing fields — run on tools where they are switched on, and some of those also check relevance on a sample
+          of calls, backed by the provider&apos;s <Term k="stake">stake</Term>.
         </p>
         <div className="flex flex-wrap items-center gap-2.5">
           <Button variant="secondary" icon={<ArrowRight />} asChild>

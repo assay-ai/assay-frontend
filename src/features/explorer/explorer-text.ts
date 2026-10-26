@@ -1,4 +1,5 @@
 import type { Money } from "@/interfaces";
+import type { ToolChecks } from "@/interfaces/contracts";
 import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import { toDecimal, formatDecimal } from "@/utils/money";
 
@@ -51,6 +52,24 @@ export function smallestFreeAllowance(values: readonly (number | null | undefine
   return offered.length > 0 ? Math.min(...offered) : null;
 }
 
+/**
+ * Whether a tool's quality rules decide the charge: `ACTIVE` (they do),
+ * `SHADOW` (in trial, they do not yet) or `NONE`. A missing or unknown value
+ * is `NONE`, so no page ever claims a check the server did not say runs.
+ */
+export function toolChecks(value: string | null | undefined): ToolChecks {
+  const upper = (value ?? "").toUpperCase();
+  return upper === "ACTIVE" || upper === "SHADOW" ? upper : "NONE";
+}
+
+/**
+ * The platform's checks in one sentence, for pages about Assay as a whole:
+ * the shape check runs on every paid call; quality rules only where they are
+ * switched on.
+ */
+export const PLATFORM_CHECKS_SENTENCE =
+  "The response shape is checked on every paid call; quality rules run on tools where they are switched on.";
+
 /** One sentence on what a call costs and when. */
 export function priceSentence(input: {
   mode: string | null | undefined;
@@ -62,21 +81,25 @@ export function priceSentence(input: {
    * rather than naming the dearest as if it were the one price.
    */
   from?: Money | null;
+  /** The tool's `checks`; missing is `NONE`. */
+  checks?: string | null;
 }): string {
   const m = normalisedMode(input.mode);
-  if (m === "FREE") return "Free to call. Results are still checked.";
+  if (m === "FREE") return "Free to call.";
   if (!input.price) return "Not available to call right now — no provider is serving it.";
   const price = formatCallPrice(input.price);
+  const active = toolChecks(input.checks) === "ACTIVE";
+  const when = active ? "you pay only if the result passes the check" : "you are not charged if the response is in the wrong shape";
   if (m === "FREEMIUM") {
     const free = input.freeCallsPerDay && input.freeCallsPerDay > 0
       ? `The first ${input.freeCallsPerDay.toLocaleString("en-US")} calls each day are free for each agent`
       : "Some calls each day are free for each agent";
     if (input.from && !toDecimal(input.from).eq(toDecimal(input.price))) {
-      return `${free}, even when other providers charge for it. After that, a call costs the price of the provider that serves it, from ${formatCallPrice(input.from)} to ${price}, and you pay only if the result passes the check.`;
+      return `${free}, even when other providers charge for it. After that, a call costs the price of the provider that serves it, from ${formatCallPrice(input.from)} to ${price}, and ${when}.`;
     }
-    return `${free}, even when other providers charge for it; after that ${price} per call, and you pay only if the result passes the check.`;
+    return `${free}, even when other providers charge for it; after that ${price} per call, and ${when}.`;
   }
-  return `${price} per call. You pay only if the result passes the check.`;
+  return `${price} per call. ${when.charAt(0).toUpperCase()}${when.slice(1)}.`;
 }
 
 /** How far back the public failure rate looks: the backend's `PUBLIC_QUALITY_WINDOW_DAYS` (D5). */
@@ -375,8 +398,14 @@ export function offerLine(input: {
 export function offerSubLine(
   mode: string | null | undefined,
   range: { from: Money; held: Money; differs: boolean } | null | undefined,
+  /** The tool's `checks`; missing is `NONE`. */
+  checks?: string | null,
 ): string {
   if (!range || normalisedMode(mode) === "FREE") return "";
+  if (toolChecks(checks) !== "ACTIVE") {
+    if (range.differs) return `held at most ${formatCallPrice(range.held)}, not charged if the shape is wrong`;
+    return normalisedMode(mode) === "FREEMIUM" ? "after the free calls; not charged if the shape is wrong" : "not charged if the shape is wrong";
+  }
   if (range.differs) return `held at most ${formatCallPrice(range.held)}, paid only if it passes`;
   return normalisedMode(mode) === "FREEMIUM" ? "after the free calls, only if it passes" : "paid only if it passes";
 }
@@ -390,23 +419,30 @@ export function costSentence(input: {
   price: Money | null | undefined;
   range: { from: Money; held: Money; differs: boolean } | null | undefined;
   freeCallsPerDay?: number | null;
+  /** The tool's `checks`; missing is `NONE`. */
+  checks?: string | null;
 }): string {
-  const rangeLine = input.range ? heldPriceSentence(input.range) : null;
+  const rangeLine = input.range ? heldPriceSentence(input.range, input.checks) : null;
   if (normalisedMode(input.mode) === "FREEMIUM") {
     // The range is said inside the free-first sentence; only the hold is added.
     const from = input.range?.differs ? input.range.from : null;
-    const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay, from });
+    const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay, from, checks: input.checks });
     const held = input.range?.differs ? `You are held at most ${formatCallPrice(input.range.held)} per call.` : null;
     return [base, held].filter(Boolean).join(" ");
   }
-  const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay });
+  const base = priceSentence({ mode: input.mode, price: input.price, freeCallsPerDay: input.freeCallsPerDay, checks: input.checks });
   return rangeLine ?? base;
 }
 
 /** The sentence under a "from $X" price. */
-export function heldPriceSentence(range: { from: Money; held: Money; differs: boolean }): string | null {
+export function heldPriceSentence(
+  range: { from: Money; held: Money; differs: boolean },
+  /** The tool's `checks`; missing is `NONE`. */
+  checks?: string | null,
+): string | null {
   if (!range.differs) return null;
-  return `Providers charge from ${formatCallPrice(range.from)} to ${formatCallPrice(range.held)}. You are held at most ${formatCallPrice(range.held)}; you pay the price of the provider that served the call, and only if the result passes.`;
+  const when = toolChecks(checks) === "ACTIVE" ? "and only if the result passes" : "unless the response is in the wrong shape";
+  return `Providers charge from ${formatCallPrice(range.from)} to ${formatCallPrice(range.held)}. You are held at most ${formatCallPrice(range.held)}; you pay the price of the provider that served the call, ${when}.`;
 }
 
 /**
@@ -426,9 +462,20 @@ export function stakeSummary(
     .join(" · ");
 }
 
-/** What a tool's results are checked for, as sentences. */
-export function checkSentences(tier: string | null | undefined): string[] {
-  const base = "Every result is checked against the tool's required shape and quality rules before anyone is charged.";
+const SHAPE_CHECKED = "The response's shape is checked on every paid call; a result in the wrong shape is not charged.";
+
+/**
+ * What a tool's results are checked for, as sentences. Quality rules and
+ * relevance are claimed only when the tool's checks are `ACTIVE`; a missing
+ * `checks` is `NONE`.
+ */
+export function checkSentences(tier: string | null | undefined, checks?: string | null): string[] {
+  const state = toolChecks(checks);
+  if (state === "NONE") return [`${SHAPE_CHECKED} Quality rules are not switched on for this tool yet.`];
+  if (state === "SHADOW") {
+    return [`${SHAPE_CHECKED} Quality rules are being trialled on real calls and do not affect the charge yet.`];
+  }
+  const base = "Every paid result is checked against the tool's required shape and quality rules before anyone is charged.";
   switch ((tier ?? "").toUpperCase()) {
     case "GUARANTEED":
       return [base, "Every call also gets a relevance check: does the answer fit the question?"];

@@ -156,7 +156,7 @@ function ToolDetail({
       : [],
   );
   // Free first, then paid: a FREEMIUM tool says its free calls before any range.
-  const costLine = costSentence({ mode: tool.pricingMode, price: held, range, freeCallsPerDay: freeAllowance });
+  const costLine = costSentence({ mode: tool.pricingMode, price: held, range, freeCallsPerDay: freeAllowance, checks: tool.checks });
   // The provider is named only when exactly one eligible listing serves that chain (`listings`).
   const lines = chainPriceLines(chainPrices, { chainName, nameOf });
 
@@ -191,7 +191,7 @@ function ToolDetail({
         <div className="flex flex-col gap-1.5">
           <h3 className="text-label-13 text-01">What is checked</h3>
           <ul className="flex flex-col gap-1">
-            {checkSentences(tool.tier).map((line) => (
+            {checkSentences(tool.tier, tool.checks).map((line) => (
               <li key={line} className="flex items-start gap-1.5 text-body-13 text-02">
                 <Check aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-success-500" />
                 {line}
@@ -408,7 +408,7 @@ function ToolsList() {
             // One price line, free first — the same line the public Explorer shows.
             const offer = offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance });
             // A tool on several chains says which chain the row's price is for.
-            const sub = [offerSubLine(tool.pricingMode, range), (tool.prices?.length ?? 0) > 1 && lead ? `on ${chainName(lead.chainId)}` : ""]
+            const sub = [offerSubLine(tool.pricingMode, range, tool.checks), (tool.prices?.length ?? 0) > 1 && lead ? `on ${chainName(lead.chainId)}` : ""]
               .filter(Boolean)
               .join(" · ");
             return (
@@ -490,7 +490,7 @@ export function ToolsView() {
       <ExploreNav />
       <PageHeader title="Tools" />
       <p className="-mt-2 text-body-13 text-03">
-        Every tool your agents can call through Assay. You pay only for results that pass the check; allow or block
+        Every tool your agents can call through Assay. Each tool says what is checked before you pay; allow or block
         each one for your agents. <Term k="free-tier">Free tier</Term>
         {" "}calls need no funds, and come first: a tool with a free tier serves your agent&apos;s free calls each day before any call is charged.
       </p>
