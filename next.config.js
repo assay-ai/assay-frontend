@@ -96,7 +96,18 @@ const SECURITY_HEADERS = [
     : []),
 ];
 
+/**
+ * The kitchen sink (`src/app/kitchen-sink/page.dev.tsx`, a gallery of every
+ * component) is a development aid, not a product page. Its page file only
+ * counts as a page where `dev.tsx` is a page extension: in `next dev`, or in
+ * a build with `NEXT_PUBLIC_SHOW_KITCHEN_SINK=1`. Any other production build
+ * has no such route, so `/kitchen-sink` is a real 404 there, not the
+ * not-found page served with 200.
+ */
+const SHOW_KITCHEN_SINK = process.env.NEXT_PUBLIC_SHOW_KITCHEN_SINK === "1" || process.env.NODE_ENV !== "production";
+
 module.exports = {
+  pageExtensions: [...(SHOW_KITCHEN_SINK ? ["dev.tsx"] : []), "tsx", "ts", "jsx", "js"],
   // A static export: `next build` writes plain HTML/JS/CSS to `out/`, served
   // as-is from Cloudflare Pages (see .github/workflows/deploy.yml). Nothing
   // renders on a server, so there is no `next start`.
