@@ -529,6 +529,8 @@ export function disputeErrorText(error: unknown): string {
       return "The time to report this call has passed.";
     case "DISPUTE_ALREADY_OPEN":
       return "You already reported this call. Its status is below.";
+    case "DISPUTE_ALREADY_DECIDED":
+      return "This call's report was already decided, so it can't be reported again.";
     case "DISPUTE_RATE_LIMITED":
       return `${DISPUTE_COPY.limit} That limit is reached; try again later.`;
     case "DISPUTE_ALREADY_RESPONDED":
