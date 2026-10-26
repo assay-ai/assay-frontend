@@ -2,7 +2,7 @@
 
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "@tanstack/react-query";
-import { Inbox as InboxIcon, UserRound } from "lucide-react";
+import { ArrowLeftRight, Inbox as InboxIcon, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import * as React from "react";
@@ -11,7 +11,7 @@ import { Toaster } from "sonner";
 import { AlertFill, CheckCircle } from "@/components/icons";
 import { consoleShellReady, SHELL_GATE_TIMEOUT_MS } from "@/components/layout/console-gate";
 import { MobileTopBar } from "@/components/layout/mobile-top-bar";
-import { PROVIDER_EXPLAINER, providerSectionFor, providerTitleFor } from "@/components/layout/provider-nav-config";
+import { PROVIDER_BUYER_APP, PROVIDER_EXPLAINER, providerSectionFor, providerTitleFor } from "@/components/layout/provider-nav-config";
 import { ProviderTabBar } from "@/components/layout/provider-tab-bar";
 import { Sidebar, type SidebarBindingItem } from "@/components/layout/sidebar";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
@@ -198,6 +198,9 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
               <PhoneIconLink href="/provider/account" label="Account" active={section === "account"}>
                 <UserRound aria-hidden="true" className="size-4" />
               </PhoneIconLink>
+              <PhoneIconLink href={PROVIDER_BUYER_APP.href} label={PROVIDER_BUYER_APP.label}>
+                <ArrowLeftRight aria-hidden="true" className="size-4" />
+              </PhoneIconLink>
             </div>
           }
         />
@@ -212,6 +215,15 @@ export default function ConsoleLayout({ children }: { children: React.ReactNode 
         linkAs={Link}
         footer={
           <div className="flex flex-col items-center gap-2 desktop:items-start">
+            {/* The mirror of the buyer app's "Provider console" entry (onboarding wave 3). */}
+            <Link
+              href={PROVIDER_BUYER_APP.href}
+              data-testid="console-buyer-app"
+              className="inline-flex min-h-10 items-center gap-1.5 text-body-13 text-02 underline-offset-2 hover:text-01 hover:underline"
+            >
+              <ArrowLeftRight aria-hidden="true" className="size-4 shrink-0" />
+              <span className="sr-only desktop:not-sr-only">{PROVIDER_BUYER_APP.label}</span>
+            </Link>
             <Link
               href={PROVIDER_EXPLAINER.href}
               className="hidden text-body-xs text-02 underline-offset-2 hover:text-01 hover:underline desktop:inline"

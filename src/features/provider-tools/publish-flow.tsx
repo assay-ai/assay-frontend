@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { PageState } from "@/components/patterns/page-state";
+import { useOrgHandle } from "@/components/toolsets/use-toolsets";
 import { Stepper } from "@/components/patterns/stepper";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -45,6 +46,8 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
   const params = useSearchParams();
   const toolQuery = useProviderTool(toolId);
   const tool = toolQuery.data ?? null;
+  // A team without a public name is told before step 1 that it comes first (onboarding wave 3).
+  const orgHandle = useOrgHandle(!toolId);
   const gateQuery = useProviderToolGate(toolId, Boolean(tool && tool.currentVersion !== null));
   const gate = gateQuery.data ?? null;
 
@@ -113,6 +116,11 @@ export function PublishApiFlow({ toolId }: { toolId: string | null }) {
           <>
             <h1 className="text-heading-sm text-01 tablet:text-heading-md">Publish your API</h1>
             <p className="text-body-13 text-03">Four steps. Your progress is saved after the first one, and only your team sees it until step 4.</p>
+            {orgHandle.data?.handle ? null : (
+              <p className="text-body-13 text-03" data-testid="public-name-first">
+                Step 1 starts with your public name, chosen once for all your tools. A finished provider setup gets the first one free; otherwise it needs funds added once.
+              </p>
+            )}
           </>
         )}
       </header>

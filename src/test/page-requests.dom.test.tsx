@@ -298,6 +298,10 @@ describe("provider console pages, each endpoint once on mount", { timeout: 60_00
         .map((r) => `${String(r.params.from)}..${String(r.params.to)}`),
     );
     expect(windows.size).toBe(2);
+    // Onboarding wave 3: the console links back to the buyer app, on the phone bar and the rail.
+    const back = screen.getAllByRole("link", { name: "Back to buyer app" });
+    expect(back.length).toBe(2);
+    for (const link of back) expect(link.getAttribute("href")).toBe("/");
   });
 
   it("Money: no call export until the download is asked for", async () => {

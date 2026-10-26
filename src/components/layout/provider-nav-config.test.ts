@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   allProviderNavHrefs,
+  PROVIDER_ADD_FUNDS,
+  PROVIDER_BUYER_APP,
   PROVIDER_EXPLAINER,
   PROVIDER_NAV_ITEMS,
   PROVIDER_TOOLS_TABS,
@@ -88,5 +90,12 @@ describe("provider navigation", () => {
 
   it("links the business explainer to an existing route", () => {
     expect(routesUnder(APP_DIR)).toContain(PROVIDER_EXPLAINER.href);
+  });
+
+  /* Onboarding wave 3: buyer app → console exists ("Provider console"); the console links back, and to Add funds. */
+  it("links back to the buyer app and to the deposit flow", () => {
+    expect(PROVIDER_BUYER_APP).toEqual({ label: "Back to buyer app", href: "/" });
+    expect(PROVIDER_ADD_FUNDS).toEqual({ label: "Add funds", href: "/funding?action=deposit" });
+    expect(allProviderNavHrefs()).toEqual(expect.arrayContaining(["/", "/funding"]));
   });
 });

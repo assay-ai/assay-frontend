@@ -3,6 +3,7 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import { toolsetKeys } from "@/components/toolsets/use-toolsets";
 import type { ProviderTool, ProviderToolGate } from "@/services/provider-tools.service";
 
 import { NameStep } from "./name-step";
@@ -151,3 +152,15 @@ describe("a taken-down tool", () => {
   });
 });
 
+/* Onboarding wave 3: the wizard says before step 1 that a public name comes first, and what it costs. */
+describe("Publish your API, new", () => {
+  it("says up front that step 1 starts with the public name", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(toolsetKeys.handle, { handle: null, status: null, lockedAt: null, canChange: true });
+    const words = text(renderToStaticMarkup(<QueryClientProvider client={client}><PublishApiFlow toolId={null} /></QueryClientProvider>));
+    expect(words).toContain("Step 1 starts with your public name");
+    expect(words).toContain("A finished provider setup gets the first one free");
+    client.setQueryData(toolsetKeys.handle, { handle: "acme", status: "ACTIVE", lockedAt: null, canChange: true });
+    expect(text(renderToStaticMarkup(<QueryClientProvider client={client}><PublishApiFlow toolId={null} /></QueryClientProvider>))).not.toContain("Step 1 starts with your public name");
+  });
+});

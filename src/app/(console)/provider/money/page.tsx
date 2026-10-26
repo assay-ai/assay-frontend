@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Download, ExternalLink, HelpCircle, Info, TriangleAlert } from "lucide-react";
+import { ChevronRight, Download, ExternalLink, HelpCircle, Info, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -10,6 +10,7 @@ import { CopyChip } from "@/components/patterns/copy-chip";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { MoneySplit, type MoneySplitSegment } from "@/components/patterns/money-flow";
 import { PageState } from "@/components/patterns/page-state";
+import { PROVIDER_ADD_FUNDS } from "@/components/layout/provider-nav-config";
 import { Button } from "@/components/ui/button";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -175,7 +176,16 @@ export default function ProviderMoneyPage() {
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Money</h1>
           <p className="text-body-13 text-03">Paid to your wallet, on chain, as each call settles. Nothing to withdraw.</p>
+          <p className="text-body-13 text-03" data-testid="money-add-funds-line">
+            Add funds tops up your balance for paid calls and a public name; it is not stake and not earnings.
+          </p>
         </div>
+        <Button asChild variant="secondary">
+          <Link href={PROVIDER_ADD_FUNDS.href} data-testid="money-add-funds">
+            <Wallet aria-hidden="true" />
+            {PROVIDER_ADD_FUNDS.label}
+          </Link>
+        </Button>
         <Button
           variant="secondary"
           icon={<Download />}
