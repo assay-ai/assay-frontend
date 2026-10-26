@@ -89,6 +89,8 @@ export type PageStateProps = BaseProps &
         description?: React.ReactNode;
         /** The one next step. */
         action?: PageStateAction;
+        /** A second way forward, drawn as the secondary button beside it. */
+        secondaryAction?: PageStateAction;
         icon?: React.ReactNode;
       }
     | {
@@ -156,8 +158,9 @@ export function PageState(props: PageStateProps) {
         <StateTitle as={props.titleAsH1}>{props.title}</StateTitle>
         {props.description ? <p className="max-w-[520px] text-body-13 text-02">{props.description}</p> : null}
         {props.action ? (
-          <div className="pt-1.5">
+          <div className="flex flex-wrap gap-2 pt-1.5">
             <ActionButton action={props.action} />
+            {props.secondaryAction ? <ActionButton action={props.secondaryAction} variant="secondary" /> : null}
           </div>
         ) : null}
       </div>

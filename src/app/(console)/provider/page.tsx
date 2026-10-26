@@ -118,9 +118,16 @@ export default function ProviderHomePage() {
     blockedReason: step.blockedReason,
     content:
       step.state === "done" || step.state === "blocked" ? undefined : step.href ? (
-        <Button asChild size="sm">
-          <Link href={step.href}>{step.actionLabel}</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm">
+            <Link href={step.href}>{step.actionLabel}</Link>
+          </Button>
+          {step.secondary ? (
+            <Button asChild size="sm" variant="secondary">
+              <Link href={step.secondary.href}>{step.secondary.label}</Link>
+            </Button>
+          ) : null}
+        </div>
       ) : (
         <Button size="sm" onClick={() => setStakeOpen(true)}>
           {step.actionLabel}

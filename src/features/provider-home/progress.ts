@@ -26,6 +26,8 @@ export interface ListingStep {
   /** Where to do it. Absent for the stake step, which opens the Stake sheet in place. */
   href?: string;
   actionLabel: string;
+  /** A second way to do it, e.g. publishing your own API when no listed tool fits. */
+  secondary?: { label: string; href: string };
 }
 
 export interface ListingProgressInput {
@@ -90,9 +92,10 @@ export function listingProgress(input: ListingProgressInput): ListingProgress {
     {
       id: "tool",
       title: "List your first tool",
-      description: "Pick the tool your API answers and give us your API's URL.",
+      description: "Pick the tool your API answers and give us your API's URL. None fits, or the catalogue is empty? Publish your API as a tool of its own.",
       href: routes.bindingWizard(),
       actionLabel: "List a tool",
+      secondary: { label: "Publish your API", href: "/provider/apis/new" },
     },
     {
       id: "test",
