@@ -69,21 +69,14 @@ const EMPTY_ACCOUNT: AccountForm = {
   technicalEmail: "",
   ownerName: "",
   ownerEmail: "",
-  timezone: "",
+  // UTC, as the console shows every time; the provider changes it if they want deadline emails in their own zone.
+  // Never read from the browser: the zone is personal data (onboarding wave item 4).
+  timezone: "UTC",
 };
 
 /** A trimmed email that at least has a local part, an `@` and a dot-bearing host. */
 function looksLikeEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+$/.test(value.trim());
-}
-
-/** The browser's IANA zone ("Europe/London"), or "" when it cannot tell. */
-export function detectTimezone(): string {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
-  } catch {
-    return "";
-  }
 }
 
 /** The chain family an address belongs to: "eip155" for 0x…, "solana" for base58. */
@@ -149,13 +142,6 @@ export function useProviderSetup() {
 
   const [account, setAccount] = React.useState<AccountForm>(EMPTY_ACCOUNT);
   const [seeded, setSeeded] = React.useState(false);
-
-  // A new account starts with the browser's own zone; nobody should have to type an IANA name.
-  React.useEffect(() => {
-    if (seeded || state) return;
-    const detected = detectTimezone();
-    if (detected) setAccount((previous) => (previous.timezone ? previous : { ...previous, timezone: detected }));
-  }, [seeded, state]);
 
   React.useEffect(() => {
     if (seeded || !state) return;
