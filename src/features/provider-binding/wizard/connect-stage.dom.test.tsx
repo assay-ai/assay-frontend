@@ -96,13 +96,14 @@ describe("ConnectStage run gate", () => {
 describe("ConnectStage new listing", () => {
   const addressInput = () => screen.getByLabelText(/Your API's address/) as HTMLInputElement;
 
-  it("saves nothing until an authentication choice is made (D10)", async () => {
-    const onSave = vi.fn();
+  it("starts a new listing on the Assay signature, and sends it explicitly (onboarding run 3)", async () => {
+    const onSave = vi.fn().mockResolvedValue(bindingWith("SIGNATURE"));
+    service.testToolBinding.mockReturnValue(new Promise(() => undefined));
     mount(null, onSave);
+    expect((screen.getByRole("radio", { name: /^Assay signature/ }) as HTMLInputElement).checked).toBe(true);
     await waitFor(() => expect(runButton().disabled).toBe(false));
     fireEvent.click(runButton());
-    expect(await screen.findByText("Choose how your API knows a call is from Assay, under Authentication.")).toBeTruthy();
-    expect(onSave).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ authMode: "SIGNATURE" })));
   });
 
   it("sends the chosen mode with the draft", async () => {
@@ -149,12 +150,58 @@ describe("ConnectStage new listing", () => {
   it("Save draft and exit saves, then goes to the listings", async () => {
     const onSave = vi.fn().mockResolvedValue(bindingWith("NONE"));
     mount(null, onSave);
-    fireEvent.click(screen.getByRole("radio", { name: /^Neither/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^No check/ }));
     await waitFor(() => expect((screen.getByRole("button", { name: "Save draft and exit" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Save draft and exit" }));
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/provider/bindings"));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ authMode: "NONE", endpoint: "https://p.test/v1" }));
     expect(service.testToolBinding).not.toHaveBeenCalled();
+  });
+});
+
+/* Onboarding run 3: the curl `https://api.frankfurter.app/latest?from=GBP&to=JPY` was tried at
+   `https://api.frankfurter.app/latest`, but the connect step started from the setup's base address. */
+describe("ConnectStage endpoint path", () => {
+  const TRIED = "https://api.frankfurter.app/latest";
+  const addressInput = () => screen.getByLabelText(/Your API's address/) as HTMLInputElement;
+  const mountTried = (initialEndpoint: string, testedEndpoint: string | null, source: "setup" | "try") => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ConnectStage
+          tool={TOOL}
+          binding={null}
+          initialEndpoint={initialEndpoint}
+          initialEndpointSource={source}
+          testedEndpoint={testedEndpoint}
+          readOnly={false}
+          testPassedBefore={false}
+          onSave={() => Promise.reject(new Error("not used"))}
+          onContinue={() => undefined}
+        />
+      </QueryClientProvider>,
+    );
+  };
+
+  it("starts from the tried address, path included, and says so", () => {
+    mountTried(TRIED, TRIED, "try");
+    expect(addressInput().value).toBe(TRIED);
+    expect(screen.getByText(/Filled in from the call you tried for this tool, path included/)).toBeTruthy();
+    expect(screen.getByText("GET https://api.frankfurter.app/latest")).toBeTruthy();
+    expect(screen.queryByTestId("endpoint-path-warning")).toBeNull();
+  });
+
+  it("warns when the address drops the path the tool was tried at", () => {
+    mountTried(TRIED, TRIED, "try");
+    fireEvent.change(addressInput(), { target: { value: "https://api.frankfurter.app" } });
+    expect(screen.getByTestId("endpoint-path-warning").textContent).toMatch(/You tried this tool at https:\/\/api\.frankfurter\.app\/latest/);
+  });
+
+  it("warns that a base address with no path is called as it is", () => {
+    mountTried("https://api.frankfurter.app", null, "setup");
+    expect(screen.getByTestId("endpoint-path-warning").textContent).toMatch(/This address has no path/);
+    fireEvent.change(addressInput(), { target: { value: "https://api.frankfurter.app/latest" } });
+    expect(screen.queryByTestId("endpoint-path-warning")).toBeNull();
   });
 });
 

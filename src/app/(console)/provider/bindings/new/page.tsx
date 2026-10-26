@@ -42,6 +42,7 @@ import {
 import { chainIdOfAsset } from "@/utils/chain";
 import { toast } from "@/utils/toast";
 import { providerQueries } from "@/features/provider-home/queries";
+import { triedEndpointFor } from "@/features/provider-tools/tried-endpoint";
 
 /**
  * List a tool — one wizard, one URL, three stages:
@@ -133,6 +134,9 @@ function WizardContent() {
     }
     return map;
   }, [existing.data, bindingId]);
+
+  // Your own API, tried with a curl when it was described: start from that address, path included.
+  const testedEndpoint = triedEndpointFor(toolId);
 
   const testPassed = (check.data?.requirements ?? []).some((r) => r.requirement === "TESTER_PASSED" && r.met);
 
@@ -235,7 +239,8 @@ function WizardContent() {
     try {
       const published = await publishToolBinding(binding.id);
       await applyPublished(queryClient, published, binding);
-      toast.success(`${tool?.name ?? "Your tool"} is live`);
+      // Your own API stays with your team until its "Who can use it" step: say so, not just "live".
+      toast.success(back ? `${tool?.name ?? "Your tool"} is live for your team` : `${tool?.name ?? "Your tool"} is live`);
     } catch (error) {
       if (!isAlreadyLive(error)) throw error instanceof ApiError ? new Error(plainApiError(error)) : error;
       void queryClient.invalidateQueries({ queryKey: bindingQueryKey(binding.id) });
@@ -337,7 +342,9 @@ function WizardContent() {
           key={`connect:${tool.id}`}
           tool={tool}
           binding={binding}
-          initialEndpoint={endpointParam || registration.data?.registration.endpoint || ""}
+          initialEndpoint={testedEndpoint || endpointParam || registration.data?.registration.endpoint || ""}
+          initialEndpointSource={testedEndpoint ? "try" : "setup"}
+          testedEndpoint={testedEndpoint}
           readOnly={readOnly}
           testPassedBefore={testPassed}
           onSave={saveConnection}

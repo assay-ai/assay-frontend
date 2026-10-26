@@ -26,7 +26,7 @@ export interface AuthenticationPanelProps {
   savedEndpoint: string | null;
   /** The endpoint the live revision calls; null before the first publish. */
   publishedEndpoint: string | null;
-  /** null until the provider picks one: there is no default (D10). */
+  /** null when nothing is chosen; a new listing starts on SIGNATURE (the connect stage's default). */
   mode: BindingAuthMode | null;
   onModeChange: (mode: BindingAuthMode) => void;
   readOnly: boolean;
@@ -58,8 +58,9 @@ const MODES: { value: BindingAuthMode; label: string; explain: string }[] = [
   },
   {
     value: "NONE",
-    label: "Neither",
-    explain: "Your API accepts any call. Anyone who learns its address can use it without paying.",
+    label: "No check (public API)",
+    explain:
+      "Your API answers any call, like a public API does. Fine for free public data; if you charge, anyone who learns its address can call it directly without paying.",
   },
 ];
 
@@ -184,6 +185,11 @@ export function AuthenticationPanel({
       <fieldset className="flex flex-col gap-2" disabled={readOnly}>
         <legend className="mb-2 text-label-13 text-01">How does your API know a request is from Assay?</legend>
         {mode === null ? <p className="text-body-xs text-03">Choose one. There is no default.</p> : null}
+        {mode === "SIGNATURE" && bindingId === null ? (
+          <p className="text-body-xs text-03" data-testid="auth-default-note">
+            Chosen for you: every call is signed, so your API can tell it is from Assay. An API that does not check the signature still answers.
+          </p>
+        ) : null}
         <div className="flex flex-col gap-2">
           {MODES.map((item) => (
             <Radio
@@ -208,7 +214,10 @@ export function AuthenticationPanel({
       </fieldset>
 
       {mode === "NONE" ? (
-        <Banner tone="warning" title="Anyone who learns your endpoint URL can call it directly, without paying." />
+        <Banner
+          tone="warning"
+          title="Anyone who learns your endpoint URL can call it directly, without going through Assay. Fine for free public data; to charge for calls, choose the Assay signature or an API key."
+        />
       ) : null}
 
       {mode === "SIGNATURE" || mode === "BOTH" ? (

@@ -17,7 +17,7 @@ import { ACCOUNT_MENU_LINKS } from "@/components/layout/nav-config";
 import { BalanceRows, WalletChainRows } from "@/components/layout/wallet-menu-rows";
 import { Avatar } from "@/components/ui/avatar";
 import type { FullBalance } from "@/features/g30/balance";
-import { useProviderEntry } from "@/features/provider-entry/use-provider-entry";
+import { useProviderEntryState } from "@/features/provider-entry/use-provider-entry";
 import { useChains } from "@/hooks/useChains";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { clearSessionToken } from "@/libs/ApiClient";
@@ -120,7 +120,9 @@ export function WalletMenu({ className }: { className?: string }) {
   // A chain that serves free calls only takes no deposit: no "Add funds" there.
   const freeOnly = useFreeOnlyChain({ enabled: open && (demoEnabled() || (ready && authenticated)) });
   // "List your API" for a buyer, "Provider console" for a provider (onboarding wave 2, item 1).
-  const providerEntry = useProviderEntry({ enabled: open });
+  // Read as soon as the person is signed in, not on opening: the item is there when the menu opens
+  // (onboarding run 3 opened it before the read came back). One shared request: Overview reads the same key.
+  const { entry: providerEntry, pending: providerEntryPending } = useProviderEntryState();
 
 
   /*
@@ -282,6 +284,8 @@ export function WalletMenu({ className }: { className?: string }) {
                 <span className="flex-1">{providerEntry.label}</span>
               </Link>
             </DropdownMenuPrimitive.Item>
+          ) : providerEntryPending ? (
+            <SkeletonRows rows={1} className="px-2.5 py-1.5" />
           ) : null}
           {ACCOUNT_MENU_LINKS.map((link) => (
             <DropdownMenuPrimitive.Item key={link.id} asChild className={ITEM_CLASS}>

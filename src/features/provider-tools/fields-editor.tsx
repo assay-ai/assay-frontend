@@ -104,6 +104,8 @@ export interface TryOutcome {
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown> | null;
   examples: Record<string, unknown>[];
+  /** Where the try called, origin and path (the server's suggestion); the connect step starts from it. */
+  endpoint: string | null;
 }
 
 /** "Paste a curl or OpenAPI and try it": one real call; nothing is stored. */
@@ -189,7 +191,7 @@ export function TryPanel({ onUse, disabled = false, compact = false }: { onUse: 
               className="self-start"
               disabled={disabled}
               onClick={() => {
-                onUse({ inputSchema: result.inferred.inputSchema, outputSchema: result.inferred.outputSchema, examples: result.inferred.examples });
+                onUse({ inputSchema: result.inferred.inputSchema, outputSchema: result.inferred.outputSchema, examples: result.inferred.examples, endpoint: result.inferred.endpoint || null });
                 // A pasted credential is not kept on the page once its test is done.
                 const cleared = looksLikeCredential(text) || headers !== "";
                 if (cleared) {

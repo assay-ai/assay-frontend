@@ -97,6 +97,20 @@ export function topicChoices(categories: readonly string[], current: string): { 
   return { options, neutral: NEUTRAL_TOPICS.find((t) => options.includes(t)) ?? null };
 }
 
+/**
+ * The topics from the server's own list (`GET /provider/tools/topics`), in its
+ * order, with its neutral one as the default. Null when the list is not there
+ * (an older API, or a read that failed): then {@link topicChoices} from the catalogue.
+ */
+export function serverTopicChoices(data: { topics?: unknown; neutral?: unknown } | null | undefined, current: string): { options: string[]; neutral: string | null } | null {
+  const listed = Array.isArray(data?.topics) ? data.topics.filter((t): t is string => typeof t === "string" && t.trim() !== "") : [];
+  if (listed.length === 0) return null;
+  const options = [...new Set(listed)];
+  if (current && !options.includes(current)) options.unshift(current);
+  const named = typeof data?.neutral === "string" && options.includes(data.neutral) ? data.neutral : null;
+  return { options, neutral: named ?? NEUTRAL_TOPICS.find((t) => options.includes(t)) ?? null };
+}
+
 /** "posts, Social" → ["posts", "social"]; with what is wrong, if anything. */
 export function parseTags(text: string): { tags: string[]; problem: string | null } {
   const tags = [...new Set(text.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))];
@@ -196,9 +210,9 @@ export function providerToolState(tool: Pick<ProviderToolSummary, "status" | "vi
     return { id: "DRAFT", label: "Draft", tone: "neutral", detail: "Not published yet. Only your team can see it." };
   }
   if (tool.visibility === "UNLISTED") {
-    return { id: "UNLISTED", label: VISIBILITY_LABEL.UNLISTED, tone: "primary", detail: "Reachable through your own link-only tool sets. It shows “Not reviewed” until Assay reviews it." };
+    return { id: "UNLISTED", label: VISIBILITY_LABEL.UNLISTED, tone: "primary", detail: "Anyone with the link to one of your link-only tool sets can call it. No one at Assay reviewed it, so it shows “Not reviewed”." };
   }
-  return { id: "PRIVATE", label: VISIBILITY_LABEL.PRIVATE, tone: "neutral", detail: "Your own agents can call it through your private tool sets." };
+  return { id: "PRIVATE", label: VISIBILITY_LABEL.PRIVATE, tone: "neutral", detail: "Live for your team only: your own agents can call it through your private tool sets. No one else can until you share it." };
 }
 
 /** Whether the "Not reviewed" badge is shown: reachable by others, never approved. */
@@ -255,9 +269,20 @@ export interface GateRow {
   label: string;
   /** What to do when it is not met, in one sentence. */
   todo: string;
-  /** The server's own detail, when it sent one. */
+  /** The server's own detail, when it sent one in plain words (never an API route). */
   detail: string | null;
   fix: GateFix | null;
+  /** Met only because the tool is free: shown as not needed, not as done. */
+  notNeeded: boolean;
+}
+
+/** Checks a free tool passes without anything done: a second contact and stake are for paid tools. */
+const PAID_ONLY_REQUIREMENTS = new Set(["SECOND_CONTACT", "STAKE_AT_MINIMUM_ON_EVERY_CHAIN"]);
+
+/** The server's detail, unless it is an API how-to ("… (POST /providers/me/tool-bindings)"): the row's own words say what to do. */
+export function plainGateDetail(detail: string | null): string | null {
+  if (!detail) return null;
+  return /\b(GET|POST|PUT|PATCH|DELETE)\s+\/[\w/{}:.-]*/.test(detail) ? null : detail;
 }
 
 /** The wizard that connects and tests the endpoint of this provider tool, and returns here after. */
@@ -267,13 +292,17 @@ export function connectHref(tool: Pick<ProviderTool, "id" | "binding">, stage: "
   return `${routes.bindingWizard(undefined, "connect")}&tool=${encodeURIComponent(tool.id)}&${back}`;
 }
 
-export function gateRows(gate: ProviderToolGate, tool: Pick<ProviderTool, "id" | "binding">): GateRow[] {
+/** `free`: the tool's listing is free (null while unknown), so paid-only checks read "not needed". */
+export function gateRows(gate: ProviderToolGate, tool: Pick<ProviderTool, "id" | "binding">, options: { free?: boolean | null } = {}): GateRow[] {
   const ran = gate.requirements.find((r) => r.requirement === "TESTER_RUN")?.met ?? true;
-  return gate.requirements.map((row) => gateRow(row, tool, ran));
+  return gate.requirements.map((row) => {
+    const view = gateRow(row, tool, ran);
+    return { ...view, notNeeded: options.free === true && row.met && PAID_ONLY_REQUIREMENTS.has(row.requirement) };
+  });
 }
 
-function gateRow(row: GateRequirement, tool: Pick<ProviderTool, "id" | "binding">, ran = true): GateRow {
-  const base = { requirement: row.requirement, met: row.met, detail: row.detail };
+function gateRow(row: GateRequirement, tool: Pick<ProviderTool, "id" | "binding">, ran = true): Omit<GateRow, "notNeeded"> {
+  const base = { requirement: row.requirement, met: row.met, detail: plainGateDetail(row.detail) };
   switch (row.requirement) {
     case "PROVIDER_ACTIVE":
       return { ...base, label: "Your provider account is active", todo: "Finish setting up your provider account.", fix: { kind: "link", label: "Finish setup", href: "/provider/setup" } };
@@ -296,6 +325,8 @@ function gateRow(row: GateRequirement, tool: Pick<ProviderTool, "id" | "binding"
       return { ...base, label: "Your stake is at the minimum", todo: "Add stake on every chain you are paid on.", fix: { kind: "link", label: "Add stake", href: routes.stake("stake") } };
     case "SIGNATURE_PROVIDER_CHECKED":
       return { ...base, label: "Your signature check pins your provider id", todo: "Set your provider id in your verifier (provider-verify 0.2 or later), then test again.", fix: { kind: "link", label: "Run a test", href: connectHref(tool) } };
+    case "API_KEY_CREDENTIALS":
+      return { ...base, label: "Your API key is stored for your endpoint", todo: "Add your API key under Authentication in the listing, or choose another way to authenticate.", fix: { kind: "link", label: "Add your API key", href: connectHref(tool) } };
     case "SECOND_CONTACT":
       return { ...base, label: "A second contact is set", todo: "Add a second contact: paid tools need someone we can reach when you are away.", fix: { kind: "link", label: "Add a second contact", href: "/provider/setup?step=you" } };
     case "SCHEMA_SCREEN":
@@ -303,7 +334,8 @@ function gateRow(row: GateRequirement, tool: Pick<ProviderTool, "id" | "binding"
     case "EXAMPLES_MATCH_SCHEMA":
       return { ...base, label: "The examples match the schemas", todo: "Fix the examples so they match the input and output schemas.", fix: { kind: "step", label: "Edit the examples", step: "contract" } };
     default:
-      return { ...base, label: row.requirement, todo: row.detail ?? "Not met yet.", fix: null };
+      // A check this page does not know yet: never its raw code, the server's words when they are plain.
+      return { ...base, label: base.detail ?? "Another check Assay runs before others can use it", todo: base.detail ? "Not met yet." : "Not met yet. Check again in a moment, or contact support.", fix: null };
   }
 }
 

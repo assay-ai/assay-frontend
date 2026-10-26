@@ -103,6 +103,42 @@ describe("the publish gate", () => {
   });
 });
 
+/* Onboarding run 3: "live" next to "Only my team", and "no review queue" next to "Assay reviews it first". */
+describe("who can use it, in one line each", () => {
+  it("says who can call it for each choice, and that only the catalogue is reviewed", () => {
+    const words = text(render(<ShareStep tool={{ ...base, visibility: "PRIVATE" }} gate={null} onStep={() => undefined} />));
+    expect(words).toContain("Who can call it: only your team's agents, through your private tool sets. No review;");
+    expect(words).toContain("Who can call it: anyone with the link to one of your link-only tool sets, as soon as the automatic checks pass. No one at Assay reviews it");
+    expect(words).toContain("Who can call it: anyone, from the catalogue, search and your public page @acme, once Assay reviews and approves it");
+  });
+
+  it("calls a private tool live for the team only", () => {
+    const words = text(render(<PublishApiFlow toolId={null} />));
+    expect(words).not.toContain("no review queue");
+    expect(text(render(<ProviderToolChips tool={{ ...base, visibility: "PRIVATE" }} />))).toContain("Only my team");
+  });
+});
+
+describe("the checklist of a free tool", () => {
+  it("shows a second contact and stake as not needed, not done", () => {
+    const gate: ProviderToolGate = {
+      passed: true,
+      requirements: [
+        { requirement: "SECOND_CONTACT", met: true, code: null, detail: null },
+        { requirement: "STAKE_AT_MINIMUM_ON_EVERY_CHAIN", met: true, code: null, detail: null },
+        { requirement: "TESTER_PASSED", met: true, code: null, detail: null },
+      ],
+      screen: [],
+    };
+    const words = text(render(<GateChecklist gate={gate} tool={base} onStep={() => undefined} free />));
+    expect(words).toContain("A second contact is set : not needed");
+    expect(words).toContain("Your stake is at the minimum : not needed");
+    expect(words).toContain("Not needed while the tool is free");
+    expect(words).toContain("The test passed : done");
+    expect(words).not.toContain("A second contact is set : done");
+  });
+});
+
 describe("versions", () => {
   it("show the one agents get, and the changelog", () => {
     const words = text(render(<VersionHistory tool={base} />));

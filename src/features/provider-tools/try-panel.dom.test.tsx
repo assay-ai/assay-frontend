@@ -62,7 +62,7 @@ describe("TryPanel", () => {
     expect(box.querySelectorAll("li")).toHaveLength(2);
     expect(screen.getByTestId("try-found").textContent).toContain("Found inputs: q · outputs: posts · 0 examples");
     fireEvent.click(screen.getByRole("button", { name: "Use these inputs, outputs and example" }));
-    expect(onUse).toHaveBeenCalledWith({ inputSchema: result.inferred.inputSchema, outputSchema: result.inferred.outputSchema, examples: [] });
+    expect(onUse).toHaveBeenCalledWith({ inputSchema: result.inferred.inputSchema, outputSchema: result.inferred.outputSchema, examples: [], endpoint: "https://a.example/v1/search" });
     expect(screen.getByTestId("try-applied").textContent).not.toContain("cleared");
   });
 

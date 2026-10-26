@@ -24,6 +24,7 @@ import { fieldsFromSchema, optionalFromSchema, optionalNames, schemaExtras, sche
 
 import { contractBody, contractFormFor, providerToolErrorView, rulesTextOf, type PublishStepId } from "./model";
 import { providerToolKeys } from "./queries";
+import { rememberTriedEndpoint } from "./tried-endpoint";
 import { ScreenFindings } from "./ui";
 
 /**
@@ -160,6 +161,7 @@ export function ContractStep({ tool, onStep }: { tool: ProviderTool; onStep: (st
     );
   };
   const applyTried = (outcome: TryOutcome) => {
+    rememberTriedEndpoint(tool.id, outcome.endpoint);
     const input = JSON.stringify(outcome.inputSchema, null, 2);
     const output = outcome.outputSchema ? JSON.stringify(outcome.outputSchema, null, 2) : form.outputSchema;
     setForm((f) => ({
