@@ -29,6 +29,7 @@ import {
   stepStatuses,
   trackerHeadline,
   type StepStatus,
+  type SubmittedOutcome,
   type WalletRunState,
   type WalletStep,
   type WalletStepCost,
@@ -36,6 +37,7 @@ import {
 } from "./wallet-steps";
 
 export type {
+  SubmittedOutcome,
   WalletStep,
   WalletStepContext,
   WalletStepCost,
@@ -107,6 +109,12 @@ export interface SignActionProps {
   doneAction?: { label: string; onClick: () => void };
   /** One sentence for a failure. Default: a generic sentence. */
   describeError?: (error: unknown) => string;
+  /**
+   * For a step that failed after it was submitted: a known outcome to say
+   * instead of the generic "sent, but we could not confirm it" line. Return
+   * `null` to keep that line.
+   */
+  describeSubmittedError?: (error: unknown) => SubmittedOutcome | null;
   /** Override rejection detection. Default handles EIP-1193, viem, Solana adapters, Privy. */
   isRejection?: (error: unknown) => boolean;
   /** Noun for the tracker headline. Default "Signature". */
@@ -207,6 +215,7 @@ export function SignAction({
   explorerLabel = "View on explorer",
   doneAction,
   describeError,
+  describeSubmittedError,
   isRejection = isUserRejection,
   trackerNoun,
   onPhaseChange,
@@ -285,8 +294,13 @@ export function SignAction({
       : "You declined in your wallet. Nothing was sent.";
     messageTone = "warning";
   } else if (state.phase === "failed") {
-    message = state.submitted ? SUBMITTED_FAILURE : (describeError?.(state.error) ?? DEFAULT_FAILURE);
-    messageTone = "danger";
+    const known = state.submitted ? (describeSubmittedError?.(state.error) ?? null) : null;
+    message = known
+      ? known.text
+      : state.submitted
+        ? SUBMITTED_FAILURE
+        : (describeError?.(state.error) ?? DEFAULT_FAILURE);
+    messageTone = known?.tone ?? "danger";
   } else if (state.phase === "idle" && disabled && disabledReason) {
     // Why the button cannot be pressed: in body colour with a mark, so a
     // disabled "Deposit $20.00" never reads as a bug at a glance.

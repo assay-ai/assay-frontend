@@ -1,4 +1,5 @@
 import type { Chain } from "@/interfaces/chain";
+import { DEMO_CHAIN_PARAMS } from "@/libs/chains/demo-chain-params";
 import { demoEnabled } from "@/libs/demo/demo-api";
 
 /**
@@ -18,8 +19,11 @@ import { demoEnabled } from "@/libs/demo/demo-api";
  * names `eip155:46630`, the real route is better than this in every way,
  * because it cannot disagree with what the API will accept.
  *
- * The values are the ones in the EVM deployment record; the
- * token is the USDG the 46630 faucet mints.
+ * The token address is a DEMO PLACEHOLDER, not the live USDG: it has no code
+ * on chain (assay-evm `docs/chain-facts.md`), and the demo fixtures key their
+ * amounts on this same asset id, so it must not be used to send anything. The
+ * on-chain params are the demo's own picture of the live deployment's, so the
+ * demo screens have numbers to show; a real build reads both from the API.
  */
 export const ROBINHOOD_TESTNET: Chain = {
   chainId: "eip155:46630",
@@ -29,6 +33,7 @@ export const ROBINHOOD_TESTNET: Chain = {
   settlementAsset: "eip155:46630/erc20:0x915Ef7c9F9f80a69e3BE47A38EE0Bb47607103ec",
   settlementAssetSymbol: "USDG",
   decimals: 6,
+  params: DEMO_CHAIN_PARAMS,
 };
 
 /**

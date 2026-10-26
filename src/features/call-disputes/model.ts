@@ -5,7 +5,8 @@ import { plainApiError, plainError } from "@/libs/plain-language";
 import type { CallDispute, CallDisputeReason } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { formatClock, formatDate } from "@/libs/utc-time";
-import { DECISION_HOURS, HELD_TIMEOUT_DAYS, PROVIDER_REPLY_HOURS, REPORTS_PER_DAY } from "@/libs/dispute-deadlines";
+import { UNKNOWN } from "@/libs/chain-terms";
+import { DECISION_HOURS, PROVIDER_REPLY_HOURS, REPORTS_PER_DAY } from "@/libs/dispute-deadlines";
 import { refundPromiseLive } from "@/features/g30/refund-promise";
 
 /**
@@ -24,7 +25,7 @@ import { refundPromiseLive } from "@/features/g30/refund-promise";
  * held payment, or from a debt that is voided.
  */
 
-export { DECISION_HOURS, HELD_TIMEOUT_DAYS, PROVIDER_REPLY_HOURS } from "@/libs/dispute-deadlines";
+export { DECISION_HOURS, PROVIDER_REPLY_HOURS } from "@/libs/dispute-deadlines";
 export const NOTE_MAX = 1000;
 export const REPLY_MAX = 1000;
 /** The operator's note, shown to both sides verbatim. */
@@ -71,7 +72,8 @@ export const DISPUTE_COPY = {
   decides: `An operator decides within ${DECISION_HOURS} hours.`,
   held: "The payment stays held until the report is decided.",
   afterHold: "The payment has already been collected. If the report is upheld, it counts against the provider's quality, but a refund is not guaranteed.",
-  safetyNet: `Safety net: if the platform itself never acts, the chain releases a held payment to the provider after ${HELD_TIMEOUT_DAYS} days.`,
+  /** `{{heldTimeout}}` is the chain's `HELD_TIMEOUT` from `GET /chains`: fill it with `fillTerms`. */
+  safetyNet: "Safety net: if the platform itself never acts, the chain releases a held payment to the provider after {{heldTimeout}}.",
   limit: `You can report up to ${REPORTS_PER_DAY} calls in 24 hours.`,
 } as const;
 
@@ -218,7 +220,13 @@ export function providerStatus(dispute: CallDispute, now: number): DisputeStatus
  * The timeline: reported (and held), the provider's reply, a refund before
  * the decision (a blocked provider), the decision, and the refund.
  */
-export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer" | "provider" | "operator" = "buyer"): StatusTimelineStep[] {
+export function disputeTimeline(
+  dispute: CallDispute,
+  now: number,
+  side: "buyer" | "provider" | "operator" = "buyer",
+  /** The chain's hold as an adjective, `1-hour` (`ChainTerms.holdCompound`); "—" until known. */
+  hold: string = UNKNOWN,
+): StatusTimelineStep[] {
   const steps: StatusTimelineStep[] = [];
   const decided = dispute.state === "UPHELD" || dispute.state === "REJECTED";
   const withdrawn = dispute.state === "WITHDRAWN";
@@ -232,8 +240,8 @@ export function disputeTimeline(dispute: CallDispute, now: number, side: "buyer"
     state: "done",
     date: dispute.createdAt,
     description: dispute.refundGuaranteed
-      ? `Inside the 1-hour hold: the payment${amount ? ` of ${amount}` : ""} is held, not paid out.`
-      : "After the 1-hour hold: the payment had already been collected.",
+      ? `Inside the ${hold} hold: the payment${amount ? ` of ${amount}` : ""} is held, not paid out.`
+      : `After the ${hold} hold: the payment had already been collected.`,
   });
 
   const blocked = dispute.refundState === "REFUNDED" && !decided && !withdrawn;
@@ -396,6 +404,8 @@ export function reportWindow(
     chargedPrice: Money;
   },
   now: number,
+  /** The chain's hold as an adjective, `1-hour` (`ChainTerms.holdCompound`); "—" until known. */
+  hold: string = UNKNOWN,
 ): ReportWindowView {
   const closes = receipt.disputeFilingClosesAt ?? null;
   const open = closes !== null && now < Date.parse(closes);
@@ -419,7 +429,7 @@ export function reportWindow(
     return { open, guaranteed, holdEndsAt: null, text: "The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full." };
   }
   if (holdEnds !== null && !inHold) {
-    return { open, guaranteed, holdEndsAt: null, text: `The 1-hour hold has ended, so ${AFTER_HOLD_OUTCOME}` };
+    return { open, guaranteed, holdEndsAt: null, text: `The ${hold} hold has ended, so ${AFTER_HOLD_OUTCOME}` };
   }
   // No guarantee from the backend (no escrow hold on this chain, a released hold, a debt, a forfeit): say only what is certain.
   return { open, guaranteed, holdEndsAt: null, text: "If your report is accepted, it counts against the provider's quality." };
@@ -529,6 +539,8 @@ export function disputeErrorText(error: unknown): string {
       return "The time to report this call has passed.";
     case "DISPUTE_ALREADY_OPEN":
       return "You already reported this call. Its status is below.";
+    case "DISPUTE_ALREADY_DECIDED":
+      return "This call's report was already decided, so it can't be reported again.";
     case "DISPUTE_RATE_LIMITED":
       return `${DISPUTE_COPY.limit} That limit is reached; try again later.`;
     case "DISPUTE_ALREADY_RESPONDED":

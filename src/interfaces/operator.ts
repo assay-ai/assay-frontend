@@ -581,6 +581,8 @@ export interface ArbiterTerms {
   slashDelaySeconds: number;
   /** `params().slashAgentBps`: the beneficiary's share of an executed slash, in basis points. */
   slashAgentBps: number;
+  /** `params().slashPlatformBps`: the treasury's share, in basis points (absent on an older backend). */
+  slashPlatformBps?: number;
 }
 
 /**

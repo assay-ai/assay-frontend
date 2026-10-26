@@ -217,6 +217,15 @@ async function resolveSessionToken(): Promise<string | null> {
 }
 
 /**
+ * Reads the session token now (Privy refreshes it when it is near expiry), so
+ * a flow can have a fresh session before it starts a server-side clock.
+ * Never throws.
+ */
+export async function warmSessionToken(): Promise<void> {
+  await resolveSessionToken();
+}
+
+/**
  * Asks the provider again after a 401. Single-flight: a screen fires many
  * requests in parallel, so their 401s arrive together and must share one
  * refresh rather than each starting its own. `null` when there is no provider

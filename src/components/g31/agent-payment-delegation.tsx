@@ -806,6 +806,7 @@ function AuthorizeSheet({
           addressOfAccount(delegate),
           nowSeconds,
           current ? validUntilSeconds(current.validUntil) : undefined,
+          delay ?? null,
         )
       : null;
   // Editing re-authorises the very key the grant already names, so there is no
@@ -835,7 +836,7 @@ function AuthorizeSheet({
       target === null
         ? null
         : target.current
-          ? editDelegationForm(target.current, nowSeconds)
+          ? editDelegationForm(target.current, nowSeconds, delay ?? null)
           : defaultDelegationForm(escrow ?? null);
     seededForm.current = target?.current ? seeded : null;
     setForm(seeded);
@@ -844,7 +845,7 @@ function AuthorizeSheet({
     setHeld(null);
     setHeldNote(null);
     resetWait();
-  }, [target, escrow, nowSeconds, resetWait]);
+  }, [target, escrow, nowSeconds, resetWait, delay]);
   const atRisk = reasons.length > 0 || settle.refused;
   // Signing waits for the sheet's own read of the grant (BUG-D1-08).
   const readyToSign = !editing || (live.ready && !live.gone);

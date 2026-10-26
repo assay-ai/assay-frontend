@@ -806,6 +806,23 @@ describe("the eip155 branch", () => {
     expect(order).toEqual(["switch:46630", "signed:1"]);
   });
 
+  it("prepare() resolves the wallet's provider without asking it for anything (BUG-PROD-DEPOSIT-01)", async () => {
+    const calls: string[] = [];
+    const embedded = {
+      ...evmEmbedded,
+      getEthereumProvider: async () => {
+        calls.push("provider");
+        return { request: async () => calls.push("request") };
+      },
+    };
+    const state = evmSignerFor({ chainId: EVM_TESTNET, wallets: [embedded] });
+
+    await state.signer!.prepare!();
+
+    expect(calls).toEqual(["provider"]);
+    expect(privyEvm.typedDataCalls).toHaveLength(0);
+  });
+
   it("does not ask the embedded wallet to switch — Privy signs for the chain it is given", async () => {
     const switched: number[] = [];
     const embedded = {

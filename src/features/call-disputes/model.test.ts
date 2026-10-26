@@ -107,8 +107,11 @@ describe("the timeline", () => {
   });
 
   it("filed after the hold, upheld, provider already paid", () => {
-    const steps = disputeTimeline(dispute({ refundGuaranteed: false, state: "UPHELD", resolvedAt: FILED, refundState: "NOT_REFUNDABLE" }), t0 + H);
+    const steps = disputeTimeline(dispute({ refundGuaranteed: false, state: "UPHELD", resolvedAt: FILED, refundState: "NOT_REFUNDABLE" }), t0 + H, "buyer", "1-hour");
     expect(steps[0]!.description).toMatch(/After the 1-hour hold/);
+    // The hold is the chain's: another value reads as another value, and none before it is known.
+    expect(disputeTimeline(dispute({ refundGuaranteed: false }), t0 + H, "buyer", "2-hour")[0]!.description).toMatch(/After the 2-hour hold/);
+    expect(disputeTimeline(dispute({ refundGuaranteed: false }), t0 + H)[0]!.description).toMatch(/After the — hold/);
     expect(steps.at(-1)).toMatchObject({ label: "Not refundable", state: "failed" });
   });
 
@@ -156,7 +159,7 @@ describe("the report window on a receipt", () => {
   it("after the hold: still open, no refund, a quality signal", () => {
     const after = { ...receipt, refundableIfReportedNow: false };
     expect(reportWindow(after, t0 + 2 * H)).toMatchObject({ open: true, guaranteed: false });
-    expect(reportWindow(after, t0 + 2 * H).text).toMatch(/^The 1-hour hold has ended, so there is no refund/);
+    expect(reportWindow(after, t0 + 2 * H, "1-hour").text).toMatch(/^The 1-hour hold has ended, so there is no refund/);
   });
   // B2 review C1: a rail-B voucher not yet redeemed into the hold has no hold fields, and a report filed then IS guaranteed.
   it("before the payment is collected, when the backend guarantees it: a full refund, never 'No refund'", () => {
@@ -186,7 +189,7 @@ describe("the report window on a receipt", () => {
   });
   // W1A review C1: the flag was true when fetched; the page stayed open past the hold.
   it("a stale 'true' after the hold has ended never says 'refunded in full'", () => {
-    const view = reportWindow(receipt, t0 + 2 * H);
+    const view = reportWindow(receipt, t0 + 2 * H, "1-hour");
     expect(view).toMatchObject({ open: true, guaranteed: false, holdEndsAt: null });
     expect(view.text).not.toMatch(/refunded in full/);
     expect(view.text).toMatch(/^The 1-hour hold has ended/);
@@ -217,6 +220,7 @@ describe("errors", () => {
   it("says what happened", () => {
     expect(disputeErrorText(new ApiError("DISPUTE_ALREADY_OPEN", "x", 409))).toMatch(/already reported/);
     expect(disputeErrorText(new ApiError("DISPUTE_RATE_LIMITED", "x", 429))).toMatch(/in 24 hours/);
+    expect(disputeErrorText(new ApiError("DISPUTE_ALREADY_DECIDED", "x", 409))).toBe("This call's report was already decided, so it can't be reported again.");
   });
 });
 

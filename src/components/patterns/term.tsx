@@ -3,7 +3,8 @@
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as React from "react";
 
-import { GLOSSARY, type GlossaryKey } from "@/libs/glossary";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import { definitionOf, GLOSSARY, type GlossaryKey } from "@/libs/glossary";
 import { cn } from "@/utils";
 
 /**
@@ -43,7 +44,8 @@ export function isFocusVisible(element: Element): boolean {
 }
 
 export function Term({ k, inline = false, children, className }: TermProps) {
-  const entry = GLOSSARY[k];
+  const { terms } = useChainTerms();
+  const entry = { term: GLOSSARY[k].term, definition: definitionOf(k, terms) };
   const id = React.useId();
   const [open, setOpen] = React.useState(false);
 

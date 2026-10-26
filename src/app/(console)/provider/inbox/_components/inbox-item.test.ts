@@ -39,7 +39,7 @@ describe("inboxView: stored rows read from event + payload", () => {
         subjectId: "b5c6dab1-fcda-4f85-85bc-fc2174b74654",
         payload: { applied: "40000", requested: "40000", signature: null, proposalId: "b5c6dab1-fcda-4f85-85bc-fc2174b74654" },
       }),
-      names,
+      { ...names, split: { agentBps: 6000, platformBps: 3000 } },
     );
     expect(view.title).toBe("$0.04 penalty was executed");
     expect(view.body).toBe(
@@ -48,6 +48,27 @@ describe("inboxView: stored rows read from event + payload", () => {
     expect(view.target?.href).toBe("/provider/penalties?case=b5c6dab1-fcda-4f85-85bc-fc2174b74654");
     expectReadable(view.title);
     expectReadable(view.body);
+  });
+
+  it("shows the split the chain recorded when the notice carries it, over today's terms", () => {
+    const view = inboxView(
+      row({
+        event: "provider.slash_executed",
+        title: "x",
+        body: "y",
+        payload: { applied: "40000", agentAmount: "28000", platformAmount: "8000", decimals: 6 },
+      }),
+      { ...names, split: { agentBps: 6000, platformBps: 3000 } },
+    );
+    expect(view.body).toBe(
+      "You lost $0.036 of your stake: $0.028 to the buyers whose calls failed and $0.008 to Assay. The other $0.004 is never taken.",
+    );
+  });
+
+  it("names no split it does not know", () => {
+    const view = inboxView(row({ event: "provider.slash_executed", title: "x", body: "y", payload: { applied: "40000", decimals: 6 } }), names);
+    expect(view.title).toBe("$0.04 penalty was executed");
+    expect(view.body).not.toMatch(/\$0\.0[0-9]+ to/);
   });
 
   it("names the tool when the payload carries it", () => {

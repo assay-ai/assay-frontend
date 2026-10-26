@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import type { Money, ProviderStake } from "@/interfaces";
 
+import { TEST_PARAMS } from "@/test/chain-fixture";
+
 import {
   choiceOfMode,
   failureRateFromPercent,
@@ -47,16 +49,20 @@ const stake = {
 } as ProviderStake;
 
 describe("go-live arithmetic", () => {
-  it("reads the stake rule from a derivation line, else uses current terms", () => {
+  it("reads the stake rule from a derivation line, else from the chain, else leaves the floor unknown", () => {
     const rule = stakeRuleOf(stake);
     expect(rule.fromServer).toBe(true);
-    expect(rule.floor.toNumber()).toBe(60);
+    expect(rule.floor?.toNumber()).toBe(60);
     expect(rule.multiplier.toNumber()).toBe(900);
+    expect(stakeRuleOf(null, TEST_PARAMS).floor?.toNumber()).toBe(50);
+    expect(stakeRuleOf(null, { ...TEST_PARAMS, minimumStake: "100000000" }).floor?.toNumber()).toBe(100);
     expect(stakeRuleOf(null).fromServer).toBe(false);
+    expect(stakeRuleOf(null).floor).toBeNull();
+    expect(stakeNeededFor(usd("0.10"), "PAID", stakeRuleOf(null))).toBeNull();
   });
 
   it("needs max(floor, multiplier × price) for paid listings only", () => {
-    const rule = stakeRuleOf(null);
+    const rule = stakeRuleOf(null, TEST_PARAMS);
     expect(stakeNeededFor(usd("0.10"), "PAID", rule)?.amount).toBe(usd("100").amount);
     expect(stakeNeededFor(usd("0.01"), "FREEMIUM", rule)?.amount).toBe(usd("50").amount);
     expect(stakeNeededFor(usd("0.10"), "FREE", rule)).toBeNull();
@@ -69,11 +75,12 @@ describe("go-live arithmetic", () => {
   });
 
   it("pays the provider the price less the take rate", () => {
-    expect(providerShare(usd("0.10"), takeRateOf(null)).amount).toBe(usd("0.09").amount);
+    expect(providerShare(usd("0.10"), takeRateOf(null, TEST_PARAMS))?.amount).toBe(usd("0.09").amount);
+    expect(providerShare(usd("0.10"), takeRateOf(null))).toBeNull();
     const terms = { commercialTerms: [{ key: "takeRate", label: "", value: "5%", caption: "" }] };
     const take = takeRateOf(terms as never);
     expect(take.fromServer).toBe(true);
-    expect(providerShare(usd("1"), take).amount).toBe(usd("0.95").amount);
+    expect(providerShare(usd("1"), take)?.amount).toBe(usd("0.95").amount);
   });
 
   it("parses percentages, free calls and seconds", () => {
@@ -141,7 +148,7 @@ describe("stakeEffectOf", () => {
   const binding = { id: "b1", price: usd("0.05"), pricingMode: "PAID" as const };
 
   it("names the stake needed before and after a price rise, and the shortfall", () => {
-    const effect = stakeEffectOf({ binding, price: usd("0.30"), mode: "PAID", stake: null, staked: usd("100") });
+    const effect = stakeEffectOf({ binding, price: usd("0.30"), mode: "PAID", stake: null, staked: usd("100"), chainParams: TEST_PARAMS });
     expect(effect.before?.amount).toBe(usd("50").amount);
     expect(effect.after?.amount).toBe(usd("300").amount);
     expect(effect.shortfall?.amount).toBe(usd("200").amount);

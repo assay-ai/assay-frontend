@@ -100,7 +100,7 @@ describe("capability is explicit (top fix 2)", () => {
 
 describe("one source of truth for numbers (top fix 3)", () => {
   it("states one split", () => {
-    expect(splitSharesText(6000)).toBe("60% to the agents who paid · 30% to the platform · 10% stays with the provider");
+    expect(splitSharesText(6000, 3000)).toBe("60% to the agents who paid · 30% to the platform · 10% stays with the provider");
   });
 
   it("says where a dispute stands the same way everywhere", () => {

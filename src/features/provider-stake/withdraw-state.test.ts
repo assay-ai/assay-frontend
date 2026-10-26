@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ProviderChainStake } from "@/interfaces";
 
-import { MIN_UNBONDING_MS, availableAfterRequest, periodLabel, toolsPausedAt, waitingDuration, waitingPeriodOf, waitingPeriodPhrase, withdrawPlan, withdrawStateOf } from "./withdraw-state";
+import { availableAfterRequest, periodLabel, toolsPausedAt, waitingDuration, waitingPeriodOf, waitingPeriodPhrase, withdrawPlan, withdrawStateOf } from "./withdraw-state";
 
 const m = (amount: string) => ({ amount, asset: "usdg", decimals: 6 });
 const entry = (patch: Partial<ProviderChainStake>): ProviderChainStake => ({
@@ -77,16 +77,17 @@ describe("withdrawPlan", () => {
 describe("waiting period: one source, one wording", () => {
   const terms = { commercialTerms: [{ key: "unbonding", label: "Unbonding", value: "14 days" }] };
 
-  it("prefers a running clock, then the published terms, then the contract minimum", () => {
+  it("prefers a running clock, then the published terms, then the chain's unbonding period", () => {
     expect(waitingPeriodOf(3 * 86_400_000, terms)).toEqual({ ms: 3 * 86_400_000, exact: true });
     expect(waitingPeriodOf(null, terms)).toEqual({ ms: 14 * 86_400_000, exact: true });
-    expect(waitingPeriodOf(null, null)).toEqual({ ms: MIN_UNBONDING_MS, exact: false });
+    expect(waitingPeriodOf(null, null, 950_400)).toEqual({ ms: 11 * 86_400_000, exact: true });
+    expect(waitingPeriodOf(null, null)).toEqual({ ms: null, exact: false });
   });
 
-  it("says an exact period as a compound and the minimum as 'at least'", () => {
+  it("says an exact period as a compound, and an unknown one as —, never a typed-in minimum", () => {
     expect(waitingPeriodPhrase(waitingPeriodOf(null, terms))).toBe("a 14-day waiting period");
     expect(waitingDuration(waitingPeriodOf(null, terms))).toBe("14 days");
-    expect(waitingPeriodPhrase(waitingPeriodOf(null, null))).toBe("a waiting period of at least 11 days");
-    expect(waitingDuration(waitingPeriodOf(null, null))).toBe("at least 11 days");
+    expect(waitingPeriodPhrase(waitingPeriodOf(null, null))).toBe("a waiting period of —");
+    expect(waitingDuration(waitingPeriodOf(null, null))).toBe("—");
   });
 });

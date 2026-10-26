@@ -8,7 +8,8 @@ import { useEffect, useState } from "react";
 
 import { TestnetChip } from "@/components/patterns/testnet-chip";
 import { Button } from "@/components/ui/button";
-import { GLOSSARY } from "@/libs/glossary";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import { definitionOf } from "@/libs/glossary";
 import { useWalletLink } from "@/features/auth/wallet-link";
 import { isStrictPagePath, loadPage } from "@/features/oauth/strict-pages";
 import { safeNextPath } from "@/libs/login-redirect";
@@ -82,7 +83,9 @@ const PROOF_POINTS = [
  * The provider's pitch, from `/why-list-here`: what you earn, when a payment
  * is final, what the stake risks. The last two are the glossary's sentences.
  */
-const PROVIDER_POINTS = [
+const PROVIDER_POINTS: ReadonlyArray<
+  { icon: typeof Coins; title: string } & ({ detail: string } | { glossary: "payout-final" | "stake-rule" })
+> = [
   {
     icon: Coins,
     title: "Paid per call, on chain",
@@ -91,12 +94,12 @@ const PROVIDER_POINTS = [
   {
     icon: Wallet,
     title: "Payouts are never clawed back",
-    detail: GLOSSARY["payout-final"].definition,
+    glossary: "payout-final",
   },
   {
     icon: ShieldCheck,
     title: "What your stake risks",
-    detail: GLOSSARY["stake-rule"].definition,
+    glossary: "stake-rule",
   },
 ];
 
@@ -180,6 +183,7 @@ function BuyerPitch() {
 
 /** The provider's pitch, from Why list here, and the way to read the whole offer. */
 function ProviderPitch() {
+  const { terms } = useChainTerms();
   return (
     <>
       <div className="flex flex-col gap-3.5">
@@ -201,7 +205,7 @@ function ProviderPitch() {
                 </span>
                 <span className="flex min-w-0 flex-col gap-0.5">
                   <span className="text-label-13 text-01">{point.title}</span>
-                  <span className="text-body-xs text-03">{point.detail}</span>
+                  <span className="text-body-xs text-03">{"glossary" in point ? definitionOf(point.glossary, terms) : point.detail}</span>
                 </span>
               </li>
             );

@@ -7,10 +7,16 @@ import { DepositChainChoice } from "@/components/funding/deposit-chain-choice";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } from "@/features/buyer-money/deposit-flow";
+import {
+  runApproveStep,
+  runDepositStep,
+  warmWallet,
+  type DepositAttempt,
+  type DepositRun,
+} from "@/features/buyer-money/deposit-flow";
 import { DEPOSIT_CREDIT_TEXT } from "@/features/buyer-money/confirming";
 import { testTokenHelp } from "@/features/buyer-money/gas-help";
-import { describeMoneyError } from "@/features/buyer-money/money-errors";
+import { describeMoneyError, describeSubmittedDepositError } from "@/features/buyer-money/money-errors";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { depositChoiceFor } from "@/features/funding/deposit-chain";
 import { depositWalletView, useDepositWallet } from "@/features/funding/deposit-wallet";
@@ -29,6 +35,7 @@ import { formatDecimal, parseAmountInput, toDecimal } from "@/utils/money";
 
 import { GasHelpNote } from "./gas-help-note";
 import { requireSigner, useBuyerMoney, useWalletBlocker } from "./use-buyer-money";
+import { chainTerms } from "@/libs/chain-terms";
 
 /**
  * Add funds, in a drawer opened from anywhere (funding hero, Get started,
@@ -105,6 +112,12 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
     setAmount(PRESELECTED);
     runRef.current = null;
   }, [open]);
+  // Warm the wallet as soon as the drawer is open, so a slow session refresh
+  // is over before the click creates the intent (BUG-PROD-DEPOSIT-01).
+  const readySigner = signerState.status === "ready" ? signerState.signer : null;
+  React.useEffect(() => {
+    if (open && readySigner) void warmWallet(readySigner);
+  }, [open, readySigner]);
   const resetKey = `${amount}|${chainId ?? ""}`;
   const evm = chainId !== null && isEvmChain(chainId);
   // What the depositing wallet holds, before any prompt (pinned token and escrow; EVM only).
@@ -170,6 +183,8 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
             onSubmitted: (hash, depositId) => {
               const explorerUrl = chain ? explorerTxUrl(chain, hash) : undefined;
               report({ stage: "submitted", data: { kind: "hash", hash, depositId } satisfies DepositAttempt, explorerUrl });
+              // The same hash moved to a fresh intent: track that one, not the old.
+              if (trackedId && trackedId !== `deposit:${depositId}`) pending.resolve(trackedId);
               trackedId = `deposit:${depositId}`;
               pending.track({
                 id: trackedId,
@@ -236,6 +251,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
       disabledReason={disabledReason}
       trackerNoun="Step"
       describeError={describeMoneyError}
+      describeSubmittedError={describeSubmittedDepositError}
       successTitle="Deposit confirmed on chain"
       successDescription={
         needsCaps
@@ -307,14 +323,14 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
         </p>
       ) : null}
 
-      {/* Money truths stay visible: a deposit is final, and getting it back takes about an hour. */}
+      {/* Money truths stay visible: a deposit is final, and getting it back takes the chain's withdrawal delay. */}
       <ul className="flex list-disc flex-col gap-1 rounded-lg border border-01 bg-02 py-2 pl-7 pr-3 text-body-xs text-02" data-testid="deposit-truths">
         <li>
           You deposit {symbol}, a dollar token on {chainName ?? "this chain"}, spent on this chain only.
           {evm ? " Two wallet prompts: one allows the transfer, one makes it." : ""}
         </li>
         <li>Deposits settle on chain and are final: there is no card and no chargeback.</li>
-        <li>You can withdraw what you have not spent at any time; it takes about three hours.</li>
+        <li>You can withdraw what you have not spent at any time; it takes about {chainTerms(chain).withdrawDelay}.</li>
       </ul>
     </WalletActionSheet>
   );

@@ -14,7 +14,6 @@ import { Term } from "@/components/patterns/term";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Measurement } from "@/features/provider-slash-case/measurement";
-import { SLASH_AGENT_BPS, SLASH_PLATFORM_BPS, splitPenalty } from "@/features/provider-slash-case/distribution";
 import { formatRemaining, useCountdown } from "@/hooks/useCountdown";
 import type { Money } from "@/interfaces";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
@@ -22,7 +21,7 @@ import { getSlaWindow } from "@/services/provider-sla-windows.service";
 import { cn } from "@/utils";
 
 import { DISPUTE_TIMEOUT_DAYS, describeDisputeError } from "./dispute";
-import { ARBITER_TARGET_SECONDS, lossBasis, lossOf, penaltyTimeline, penaltyTitle, type PenaltyRow } from "./model";
+import { ARBITER_TARGET_SECONDS, distributionOf, lossBasis, lossOf, penaltyTimeline, penaltyTitle, type PenaltyRow } from "./model";
 import { penaltyMoney } from "./money";
 import { failureSentence } from "./sentences";
 
@@ -205,8 +204,23 @@ export function LossSentence({ row }: { row: PenaltyRow }) {
     return <p className="text-body-13 text-02">Nothing was taken from your stake.</p>;
   }
   const basis: Money = lossBasis(row);
-  const split = splitPenalty(basis);
+  const split = distributionOf(row);
   const executed = row.closedAs === "executed";
+  if (!split) {
+    return (
+      <p className="text-body-13 text-01">
+        {executed ? "Of this " : "If it is executed, of this "}
+        {penaltyMoney(basis)} penalty, the share that {executed ? "left" : "leaves"} your stake is shown once the
+        chain&apos;s split has loaded.
+      </p>
+    );
+  }
+  // Executed: the shares the chain recorded. Otherwise: the chain's current split.
+  const bps = (part: Money) =>
+    BigInt(basis.amount || "0") > BigInt(0) ? Number((BigInt(part.amount) * BigInt(10_000)) / BigInt(basis.amount)) : 0;
+  const agentBps = executed && row.recorded ? bps(split.agent) : (row.split?.agentBps ?? 0);
+  const platformBps = executed && row.recorded ? bps(split.platform) : (row.split?.platformBps ?? 0);
+  const keptBps = 10_000 - agentBps - platformBps;
   return (
     <div className="flex flex-col gap-3">
       <p className="text-body-13 text-01">
@@ -217,19 +231,25 @@ export function LossSentence({ row }: { row: PenaltyRow }) {
       </p>
       <MoneySplit
         segments={[
-          { label: "To the buyers whose calls failed", value: SLASH_AGENT_BPS, amount: penaltyMoney(split.agent), tone: "teal" },
-          { label: "To Assay", value: SLASH_PLATFORM_BPS, amount: penaltyMoney(split.platform), tone: "indigo" },
+          { label: "To the buyers whose calls failed", value: agentBps, amount: penaltyMoney(split.agent), tone: "teal" },
+          { label: "To Assay", value: platformBps, amount: penaltyMoney(split.platform), tone: "indigo" },
           {
             label: "Never taken (stays in your stake)",
-            value: 10_000 - SLASH_AGENT_BPS - SLASH_PLATFORM_BPS,
+            value: keptBps,
             amount: penaltyMoney(split.neverTaken),
             tone: "neutral",
           },
         ]}
       />
       <p className="text-body-xs text-03">
-        Split under the current terms ({SLASH_AGENT_BPS / 100}% / {SLASH_PLATFORM_BPS / 100}% /{" "}
-        {(10_000 - SLASH_AGENT_BPS - SLASH_PLATFORM_BPS) / 100}%). The chain applies the terms in force when it executes.
+        {executed && row.recorded ? (
+          <>As the chain recorded it when it executed.</>
+        ) : (
+          <>
+            Split under the current terms ({agentBps / 100}% / {platformBps / 100}% / {keptBps / 100}%). The chain
+            applies the terms in force when it executes.
+          </>
+        )}
       </p>
     </div>
   );
@@ -391,7 +411,7 @@ export function DisputeSheet({
   onDisputed: () => void;
 }) {
   const loss = row ? lossOf(row) : null;
-  const split = row ? splitPenalty(lossBasis(row)) : null;
+  const split = row ? distributionOf(row) : null;
   return (
     <WalletActionSheet
       open={row !== null}

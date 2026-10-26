@@ -1,4 +1,5 @@
 import type { Money, ProviderChainStake } from "@/interfaces";
+import { UNKNOWN } from "@/libs/chain-terms";
 import { toDecimal } from "@/utils/money";
 
 /**
@@ -57,24 +58,17 @@ export function periodLabel(periodMs: number | null): string | null {
 }
 
 /**
- * The contract's minimum unbonding period (`MIN_UNBONDING_PERIOD_SECONDS`,
- * eleven days). The live period is a chain parameter the console cannot read
- * yet; until a withdrawal is running (which shows the real dates), this is
- * the honest lower bound to quote.
- */
-export const MIN_UNBONDING_MS = 11 * 86_400_000;
-
-/**
  * The waiting period, from the best source there is, said one way everywhere
  * (Setup's end screen, the Withdraw sheet, the Stake page):
  *
  *  1. a running withdrawal's own clock (`periodMs`) — exact;
- *  2. the published provider terms ("Unbonding · 14 days") — exact;
- *  3. the contract minimum — a lower bound, so it is always "at least".
+ *  2. the published provider terms ("Unbonding · 11 days") — exact;
+ *  3. the chain's `unbondingPeriodSeconds` from `GET /chains` — exact;
+ *  4. none of them yet: unknown (`ms: null`), shown as "—", never a typed-in number.
  */
 export interface WaitingPeriod {
-  ms: number;
-  /** False when only the contract minimum is known. */
+  ms: number | null;
+  /** False while the period is not known. */
   exact: boolean;
 }
 
@@ -83,23 +77,24 @@ const DAY_MS = 86_400_000;
 export function waitingPeriodOf(
   periodMs: number | null,
   terms?: { commercialTerms: { key: string; label: string; value: string }[] } | null,
+  unbondingPeriodSeconds?: number | null,
 ): WaitingPeriod {
   if (periodMs) return { ms: periodMs, exact: true };
   const term = terms?.commercialTerms.find((entry) => /unbond|waiting/i.test(`${entry.key} ${entry.label}`));
   const days = term ? /(\d+(?:\.\d+)?)\s*day/i.exec(term.value) : null;
   if (days && Number(days[1]) > 0) return { ms: Number(days[1]) * DAY_MS, exact: true };
-  return { ms: MIN_UNBONDING_MS, exact: false };
+  if (unbondingPeriodSeconds && unbondingPeriodSeconds > 0) return { ms: unbondingPeriodSeconds * 1000, exact: true };
+  return { ms: null, exact: false };
 }
 
-/** "14 days", or "at least 11 days" when only the minimum is known. */
+/** "14 days", or "—" while unknown. */
 export function waitingDuration(period: WaitingPeriod): string {
-  const label = periodLabel(period.ms) ?? "";
-  return period.exact ? label : `at least ${label}`;
+  return periodLabel(period.ms) ?? UNKNOWN;
 }
 
-/** "a 14-day waiting period", or "a waiting period of at least 11 days". */
+/** "a 14-day waiting period", or "a waiting period of —" while unknown. */
 export function waitingPeriodPhrase(period: WaitingPeriod): string {
-  if (!period.exact) return `a waiting period of ${waitingDuration(period)}`;
+  if (!period.exact || period.ms === null) return `a waiting period of ${waitingDuration(period)}`;
   const label = periodLabel(period.ms) ?? "";
   return `a ${label.replace(/ (day|hour)s?$/, "-$1")} waiting period`;
 }

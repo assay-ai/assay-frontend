@@ -23,6 +23,8 @@ import { addressOfAccount } from "@/utils/chain";
 
 import { penaltyRowOf, sortPenalties, type PenaltyRow } from "./model";
 import { providerQueries } from "@/features/provider-home/queries";
+import { splitOfParams } from "@/features/provider-slash-case/distribution";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 export const PENALTY_DEPLOYMENT = ROBINHOOD_TESTNET_STAKE;
 
@@ -149,9 +151,14 @@ export function usePenalties(options: { withCases?: "open" | "all" | "none" } = 
   const chainRows = demo ? demoData!.rows : chain.data?.rows;
 
   const { decimals, symbol } = asset;
+  const { params: chainParams } = useChainTerms(PENALTY_DEPLOYMENT.chainId);
+  const chainSplit = React.useMemo(() => splitOfParams(chainParams), [chainParams]);
   const liveRows: PenaltyRow[] = React.useMemo(
-    () => sortPenalties((chainRows ?? []).map((row) => penaltyRowOf(row, { decimals, symbol }, index, nowSeconds))),
-    [chainRows, decimals, symbol, index, nowSeconds],
+    () =>
+      sortPenalties(
+        (chainRows ?? []).map((row) => penaltyRowOf(row, { decimals, symbol }, index, nowSeconds, chainSplit)),
+      ),
+    [chainRows, decimals, symbol, index, nowSeconds, chainSplit],
   );
 
   // Last-known rows while the chain read is still in flight (read after mount,

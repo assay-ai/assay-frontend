@@ -13,7 +13,7 @@ import { Stepper, type StepperStep } from "@/components/patterns/stepper";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
-import { stakeRuleOf } from "@/features/provider-binding/go-live";
+import { stakeFloorText, stakeRuleOf } from "@/features/provider-binding/go-live";
 import { combinedProgress } from "@/features/provider-binding/wizard/stages";
 import { Outcome } from "@/features/m41/outcome";
 import { plainTermsLine, termLabel, termValue } from "@/features/m41/terms";
@@ -24,7 +24,8 @@ import { useChainName } from "@/hooks/useChainName";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { ApiError } from "@/libs/ApiClient";
-import { GLOSSARY } from "@/libs/glossary";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import { definitionOf } from "@/libs/glossary";
 import { knowsError, plainApiError, plainError } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
 import { listToolBindings } from "@/services/provider-tool-bindings.service";
@@ -540,8 +541,13 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
 function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
   const term = (pattern: RegExp) => setup.terms.commercialTerms.find((t) => pattern.test(`${t.key} ${t.label}`))?.value ?? null;
   const takeRate = term(/take.?rate/i);
-  // The same stake rule the wizard uses: `max(floor, multiplier × price)`, its published defaults until a stake is read.
-  const rule = stakeRuleOf(null);
+  // The same stake rule the wizard uses: `max(floor, multiplier × price)`, its floor from the terms the server
+  // built from the chain (`stakeRequired`), else the chain's own `minimumStake`.
+  const { terms: chainTerms } = useChainTerms();
+  const chainParams = useChainTerms().params;
+  const rule = stakeRuleOf(null, chainParams);
+  const stakeRequired = /\$([\d,.]+)/.exec(term(/stake.?required/i) ?? "")?.[1];
+  const floorText = stakeRequired ? `$${stakeRequired.replace(/\.00$/, "")}` : stakeFloorText(rule);
   // With listings already, this screen is the explainer, and its button lists another tool.
   const listings = useQuery({
     queryKey: ["provider", "tool-bindings", "setup-done"],
@@ -556,15 +562,15 @@ function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
     ],
     [
       "Stake",
-      `Free tools need none. To charge, your stake must cover $${rule.floor.toFixed(0)} or ${rule.multiplier.toNumber().toLocaleString("en-US")} calls at your price, whichever is more. You get it back when you stop, after ${waitingPeriodPhrase(waitingPeriodOf(null, setup.terms))}.`,
+      `Free tools need none. To charge, your stake must cover ${floorText} or ${rule.multiplier.toNumber().toLocaleString("en-US")} calls at your price, whichever is more. You get it back when you stop, after ${waitingPeriodPhrase(waitingPeriodOf(null, setup.terms, chainParams?.unbondingPeriodSeconds))}.`,
     ],
     [
       "Promise",
       `You promise a failure rate. Calls are measured in windows (${WINDOW_WORDS}), and you can dispute a penalty before its deadline.`,
     ],
     // The glossary's own words (third person), as their own rows: the same text as /why-list-here.
-    ["Penalty", GLOSSARY["stake-rule"].definition],
-    ["Example", GLOSSARY["penalty-example"].definition],
+    ["Penalty", definitionOf("stake-rule", chainTerms)],
+    ["Example", definitionOf("penalty-example", chainTerms)],
   ];
   return (
     <section className="flex w-full flex-col gap-5 rounded-xl border border-success-20 bg-01 p-5 tablet:p-8">

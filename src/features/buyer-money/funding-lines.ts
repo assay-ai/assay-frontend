@@ -71,9 +71,10 @@ export function refundableLine(summary: RefundableSummary, atLeast = false): str
 export const REFUNDABLE_ROW = {
   beforeTime: "Refunded in full if you report it by",
   afterTime: "and the report is accepted",
-  noEnd: "Refunded in full if you report it and the report is accepted; the 1-hour hold starts when the payment is collected",
+  /** `{{holdCompound}}`: the chain's hold, filled with `fillTerms` where it is shown. */
+  noEnd: "Refunded in full if you report it and the report is accepted; the {{holdCompound}} hold starts when the payment is collected",
   /** The Still refundable chip's empty state. */
-  empty: "No charged call is covered right now: none would be refunded in full by an accepted report. A call stays here for its 1-hour hold, on chains that have one.",
+  empty: "No charged call is covered right now: none would be refunded in full by an accepted report. A call stays here for its {{holdCompound}} hold, on chains that have one.",
   /** The Reports empty state, pointing at the chip. */
   pointer: "Still refundable lists the calls that would be refunded in full if you report them now and the report is accepted.",
 } as const;

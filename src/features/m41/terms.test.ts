@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { DESIGN_TERMS, plainTermsLine, termLabel, termValue } from "./terms";
+import { chainTerms, UNKNOWN } from "@/libs/chain-terms";
+import { TEST_CHAIN } from "@/test/chain-fixture";
+
+import { designTerms, plainTermsLine, termLabel, termValue } from "./terms";
+
+const DESIGN_TERMS = designTerms(chainTerms(TEST_CHAIN));
 
 describe("provider terms copy (BUG-R5-03)", () => {
   it("shows the published slash trigger in words, not as an enum name", () => {
@@ -21,6 +26,17 @@ describe("provider terms copy (BUG-R5-03)", () => {
     const reserve = DESIGN_TERMS.commercialTerms.find((term) => term.key === "reserveHeld");
     expect(reserve?.caption).toBe("No standing reserve: each paid call is held for 1 hour for buyer reports");
     expect(reserve?.caption).not.toMatch(/nothing back/);
+  });
+
+  it("prints the chain's numbers, and none of its own before the chain answered", () => {
+    const row = (key: string) => DESIGN_TERMS.commercialTerms.find((term) => term.key === key)?.value;
+    expect(row("takeRate")).toBe("10%");
+    expect(row("stakeRequired")).toBe("$50.00 minimum");
+    expect(row("penaltySplit")).toBe("60 / 30 / 10");
+    expect(row("unbondingPeriod")).toBe("11 days");
+    const unknown = designTerms(chainTerms(null)).commercialTerms;
+    expect(unknown.find((term) => term.key === "takeRate")?.value).toBe(UNKNOWN);
+    expect(JSON.stringify(unknown)).not.toMatch(/\$50|10%|1 hour|60 \/ 30/);
   });
 
   it("names the policy the console's way", () => {

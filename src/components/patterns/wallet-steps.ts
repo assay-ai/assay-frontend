@@ -103,6 +103,15 @@ export interface WalletStep {
   run: (context: WalletStepContext) => Promise<WalletStepResult | void>;
 }
 
+/**
+ * What a step that failed after it was submitted says instead of the generic
+ * "sent, but we could not confirm it" line, when its caller knows the outcome.
+ */
+export interface SubmittedOutcome {
+  text: string;
+  tone: "warning" | "danger";
+}
+
 export type StepStatus = "upcoming" | "active" | "done" | "declined" | "failed";
 
 export type WalletRunState =

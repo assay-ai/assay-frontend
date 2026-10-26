@@ -3,7 +3,6 @@
 import * as React from "react";
 
 import { MoneySplit } from "@/components/patterns/money-flow";
-import { SLASH_PLATFORM_BPS } from "@/features/provider-slash-case/distribution";
 import type { Money } from "@/interfaces/api";
 import { formatDateTime } from "@/libs/utc-time";
 import { formatMoney, splitForDisplay, toDecimal } from "@/utils/money";
@@ -12,10 +11,10 @@ import type { CaseStage } from "./case-flow";
 
 /**
  * Where a penalty's money goes — ONE split for the whole console. The agents'
- * share is read off the chain's current terms (`slashAgentBps`); the
- * platform's share is the contracts' `slashPlatformBps`, which no endpoint
- * serves yet, so it is the published figure; the rest is never taken from the
- * provider's stake at all (the stake goes down by agents + platform only).
+ * share is read off the chain's current terms (`slashAgentBps`), and so is the
+ * platform's (`slashPlatformBps`, served with the arbiter terms); the rest is
+ * never taken from the provider's stake at all (the stake goes down by agents
+ * + platform only). While either share is unknown, no split is drawn.
  * The penalty page, its measurement and the Arbiter strip all read this, so a
  * ruling arbiter never sees two different splits.
  */
@@ -26,8 +25,8 @@ export interface PenaltySplit {
   neverTaken: Money;
 }
 
-export function penaltySplit(penalty: Money, agentBps: number, platformBps: number = SLASH_PLATFORM_BPS): PenaltySplit | null {
-  if (!/^\d+$/.test(penalty.amount)) return null;
+export function penaltySplit(penalty: Money, agentBps: number, platformBps: number | null): PenaltySplit | null {
+  if (platformBps === null || !/^\d+$/.test(penalty.amount)) return null;
   if (!Number.isInteger(agentBps) || !Number.isInteger(platformBps) || agentBps < 0 || platformBps < 0 || agentBps + platformBps > 10_000) return null;
   const total = BigInt(penalty.amount);
   const agents = (total * BigInt(agentBps)) / BigInt(10_000);
@@ -45,13 +44,15 @@ function pct(bps: number): string {
 }
 
 /** "60% to the agents who paid · 30% to the platform · 10% stays with the provider". */
-export function splitSharesText(agentBps: number, platformBps: number = SLASH_PLATFORM_BPS): string {
+export function splitSharesText(agentBps: number, platformBps: number | null): string {
+  if (platformBps === null) return `${pct(agentBps)} to the agents who paid · — to the platform · — stays with the provider`;
   const kept = Math.max(0, 10_000 - agentBps - platformBps);
   return `${pct(agentBps)} to the agents who paid · ${pct(platformBps)} to the platform · ${pct(kept)} stays with the provider`;
 }
 
 /** "10%": the share of a penalty that stays with the provider, never taken from its stake. */
-export function keptShareText(agentBps: number, platformBps: number = SLASH_PLATFORM_BPS): string {
+export function keptShareText(agentBps: number, platformBps: number | null): string {
+  if (platformBps === null) return "—";
   return pct(Math.max(0, 10_000 - agentBps - platformBps));
 }
 
@@ -61,8 +62,8 @@ export function lastReadNote(lastKnownAt: number): string {
 }
 
 /** The side panel's "Taken from the stake" hint, labelled when the split is the last read. */
-export function reductionHint(agentBps: number, lastKnownAt: number | null = null): string {
-  const base = `The agents' and the platform's shares. The provider's ${keptShareText(agentBps)} is never taken.`;
+export function reductionHint(agentBps: number, platformBps: number | null, lastKnownAt: number | null = null): string {
+  const base = `The agents' and the platform's shares. The provider's ${keptShareText(agentBps, platformBps)} is never taken.`;
   return lastKnownAt ? `${base} ${lastReadNote(lastKnownAt)}` : base;
 }
 
@@ -72,14 +73,15 @@ export function reductionHint(agentBps: number, lastKnownAt: number | null = nul
  * cent, adding up to the total), so the fact and the card agree. Null while the
  * split is unknown.
  */
-export function stakeReduction(penalty: Money, agentBps: number | null, display = false): Money | null {
-  const split = agentBps === null ? null : display ? displaySplit(penalty, agentBps) : penaltySplit(penalty, agentBps);
+export function stakeReduction(penalty: Money, agentBps: number | null, platformBps: number | null, display = false): Money | null {
+  const split =
+    agentBps === null ? null : display ? displaySplit(penalty, agentBps, platformBps) : penaltySplit(penalty, agentBps, platformBps);
   return split ? { ...penalty, amount: (BigInt(split.agents.amount) + BigInt(split.platform.amount)).toString() } : null;
 }
 
 /** The split as drawn: each part to the cent, the three adding up to the total shown. Null while unknown. */
-export function displaySplit(penalty: Money, agentBps: number): PenaltySplit | null {
-  const split = penaltySplit(penalty, agentBps);
+export function displaySplit(penalty: Money, agentBps: number, platformBps: number | null): PenaltySplit | null {
+  const split = penaltySplit(penalty, agentBps, platformBps);
   if (!split) return null;
   const [agents, platform, neverTaken] = splitForDisplay([split.agents, split.platform, split.neverTaken]);
   return { agents: agents!, platform: platform!, neverTaken: neverTaken! };
@@ -112,16 +114,19 @@ export function PenaltyMoney({
   penalty,
   stage,
   agentBps,
+  platformBps,
   lastKnownAt = null,
 }: {
   penalty: Money;
   stage: CaseStage;
   /** From the chain's terms; null while unknown (the split is then not drawn). */
   agentBps: number | null;
+  /** The treasury's share, from the chain's terms; null while unknown. */
+  platformBps: number | null;
   /** Set when the chain can't be read now and `agentBps` is the last read: when it was read. */
   lastKnownAt?: number | null;
 }) {
-  const split = agentBps === null ? null : displaySplit(penalty, agentBps);
+  const split = agentBps === null ? null : displaySplit(penalty, agentBps, platformBps);
   const total = formatMoney(penalty);
   const heading = moneyHeading(stage, total);
   return (

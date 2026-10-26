@@ -418,7 +418,7 @@ function ArbiterStatus({
       <dl className="grid w-full grid-cols-1 gap-x-5 gap-y-2.5 border-t border-01 px-3.5 py-3 text-body-13 min-[480px]:grid-cols-2 desktop:grid-cols-3">
         <Fact label="Dispute window">{durationText(terms.slashDelaySeconds)}</Fact>
         <Fact label="Time to rule">30 days from the dispute</Fact>
-        <Fact label="Split of a penalty">{splitSharesText(terms.slashAgentBps).replace("never taken from the provider", "stays with the provider")}</Fact>
+        <Fact label="Split of a penalty">{splitSharesText(terms.slashAgentBps, terms.slashPlatformBps ?? null).replace("never taken from the provider", "stays with the provider")}</Fact>
         <Fact label="Arbiter">{terms.arbiter ? <CopyChip value={terms.arbiter} label="arbiter address" /> : "None"}</Fact>
         <Fact label="Admin">
           <CopyChip value={terms.admin} label="admin address" />
@@ -730,7 +730,14 @@ function RulingSheet({
     : arbiter
       ? `Signed by the arbiter key ${shortId(arbiter)}: download the file and sign it in the arbiter's multi-signer wallet`
       : "Signed by the arbiter: download the file for the arbiter's multi-signer wallet";
-  const outcome = rulingOutcome({ kind, total: totalMoney, agentBps: terms.data?.slashAgentBps ?? null, count, signer });
+  const outcome = rulingOutcome({
+    kind,
+    total: totalMoney,
+    agentBps: terms.data?.slashAgentBps ?? null,
+    platformBps: terms.data?.slashPlatformBps ?? null,
+    count,
+    signer,
+  });
 
   const steps: WalletStep[] = [
     {

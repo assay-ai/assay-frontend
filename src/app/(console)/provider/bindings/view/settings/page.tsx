@@ -37,6 +37,7 @@ import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
 import { liveFormOf, parseLiveForm, type LiveForm } from "@/features/provider-binding/wizard/live-stage";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
+import { useChainTerms } from "@/hooks/useChainTerms";
 import type { BindingAuthMode, ToolBindingDetail, UpdateToolBindingBody } from "@/interfaces";
 import { ApiError } from "@/libs/ApiClient";
 import { plainApiError, plainError } from "@/libs/plain-language";
@@ -92,6 +93,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [stakeOpen, setStakeOpen] = React.useState(false);
   const stake = useStakeStatus();
+  const chainParams = useChainTerms().params;
 
   React.useEffect(() => {
     const section = params.get("section");
@@ -132,7 +134,14 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const freeTermsRows = freeTermsChangeRows(binding, body);
   const live = binding.status === "ACTIVE";
   const promiseStricter = body.slaFailureRate !== undefined && body.slaFailureRate < binding.slaFailureRate;
-  const effect = stakeEffectOf({ binding, price: parsed.price, mode, stake: stake.stake, staked: stake.staked });
+  const effect = stakeEffectOf({
+    binding,
+    price: parsed.price,
+    mode,
+    stake: stake.stake,
+    staked: stake.staked,
+    chainParams,
+  });
   const stakeRises =
     pricingChanged && effect.after !== null && (effect.before === null || BigInt(effect.after.amount) > BigInt(effect.before.amount));
   const shortAfterSave = pricingChanged ? effect.shortfall : null;
@@ -264,7 +273,7 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
             error={parsed.errors.failurePercent}
             hint={[
               "Out of every 100 checked calls. A new value applies from the next window.",
-              penaltyExample(parsed.price, mode, parsed.failureRate),
+              penaltyExample(parsed.price, mode, parsed.failureRate, chainParams),
             ]
               .filter(Boolean)
               .join(" ")}
