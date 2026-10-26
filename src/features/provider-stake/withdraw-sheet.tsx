@@ -35,6 +35,7 @@ import {
 } from "./withdraw-state";
 import { providerQueries } from "@/features/provider-home/queries";
 import { useChainTerms } from "@/hooks/useChainTerms";
+import { useWalletChainType } from "@/hooks/useWalletChainType";
 
 /**
  * "Withdraw stake": one sheet for both halves of getting stake back.
@@ -98,6 +99,8 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   const ready = state.phase === "ready" && state.unbonding;
   const pending = useProviderPendingTransactions();
   const { connectWallet } = useConnectWallet();
+  // From the served chains: no Solana wallet offered while only EVM chains are served.
+  const walletChainType = useWalletChainType();
   const realSteps = ready
     ? [
         withdrawStep({
@@ -231,7 +234,7 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           size="sm"
           icon={<Wallet aria-hidden="true" />}
           className="self-start"
-          onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
+          onClick={() => connectWallet({ walletChainType })}
         >
           Connect your stake wallet
         </Button>

@@ -21,6 +21,7 @@ import { PROVIDER_STAKE_KEY, useStakeStatus } from "./use-stake-status";
 import { STAKE_REDUCED_ONLY_BY, stakeAfterSentence } from "./stake-status";
 import { short, useStakeWallet, walletBlocker } from "./use-stake-wallet";
 import { simulatedSteps } from "./wallet-readiness";
+import { useWalletChainType } from "@/hooks/useWalletChainType";
 
 /** The gas token of every pinned stake deployment (Robinhood Chain testnet; see `providers/index.tsx`). */
 const NATIVE_SYMBOL = "ETH";
@@ -58,6 +59,8 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
   const wallet = useStakeWallet(status);
   const queryClient = useQueryClient();
   const { connectWallet } = useConnectWallet();
+  // From the served chains: no Solana wallet offered while only EVM chains are served.
+  const walletChainType = useWalletChainType();
   const decimals = status.required?.decimals ?? status.staked?.decimals ?? 6;
 
   const needed = amount ?? status.shortfall ?? null;
@@ -223,7 +226,7 @@ export function StakeSheet({ open, onOpenChange, amount, reason, onStaked }: Sta
             size="sm"
             icon={<Wallet aria-hidden="true" />}
             className="self-start"
-            onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
+            onClick={() => connectWallet({ walletChainType })}
           >
             Connect a wallet
           </Button>

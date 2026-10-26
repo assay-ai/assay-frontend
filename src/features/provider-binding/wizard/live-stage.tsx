@@ -14,6 +14,8 @@ import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
+import { providerQueries } from "@/features/provider-home/queries";
+import { needsSecondContact, SECOND_CONTACT_PROMPT } from "@/features/m41/second-contact";
 import { useChainTerms } from "@/hooks/useChainTerms";
 import type {
   CatalogueSettlementAsset,
@@ -62,6 +64,7 @@ export const REQUIREMENT_SENTENCE: Record<PublishRequirement, string> = {
   API_KEY_CREDENTIALS: "Add your API key headers for this address under Authentication.",
   STAKE_AT_MINIMUM_ON_EVERY_CHAIN: "Add stake to cover paid calls.",
   SIGNATURE_PROVIDER_CHECKED: "Set your provider id in your signature check, then test again.",
+  SECOND_CONTACT: SECOND_CONTACT_PROMPT,
 };
 
 export interface LiveForm {
@@ -253,6 +256,7 @@ export function LiveStage({
   // The stake is paid in the chain's settlement asset (USDG on Robinhood Chain), never a typed-in name.
   const stakeSymbol = chain?.settlementAssetSymbol ?? null;
   const names = useProviderToolNames();
+  const registration = useQuery(providerQueries.registration());
   const check = useQuery({
     queryKey: ["provider", "tool-binding", binding.id, "publish-check"],
     queryFn: () => getPublishCheck(binding.id),
@@ -325,13 +329,27 @@ export function LiveStage({
       : null;
   const penaltyExample = penaltyExampleOf(parsed.price, mode, parsed.failureRate, chainParams);
 
-  const unmet = (check.data?.requirements ?? []).filter((requirement) => !requirement.met);
+  const unmetNow = (check.data?.requirements ?? []).filter((requirement) => !requirement.met);
+  /*
+    A cached check from before the last test (or the last save) reads "needs a
+    new passing test" for the moment its refetch takes, then Publish enables.
+    While it refetches, say "Checking…" instead of a scary reason that is
+    about to vanish (onboarding wave 2 item 6). Publish stays off meanwhile.
+  */
+  const rechecking = check.isFetching && unmetNow.length > 0;
+  const unmet = rechecking ? [] : unmetNow;
   const testMissing = unmet.find((r) => r.requirement === "TESTER_RUN" || r.requirement === "TESTER_PASSED");
   const credentialsMissing = unmet.find((r) => r.requirement === "API_KEY_CREDENTIALS");
   const payoutMissing = unmet.find((r) => r.requirement === "PAYOUT_ACCOUNT");
+  // Asked as soon as the listing charges, not only once the saved check catches up (wave 2 item 5).
+  const secondContactMissing = needsSecondContact({
+    paid: mode !== "FREE",
+    ownerContact: registration.data ? registration.data.registration.ownerContact : undefined,
+    gateUnmet: unmet.some((r) => r.requirement === "SECOND_CONTACT"),
+  });
   // T3: one tester row per contract major the listing serves.
   const versioned = (tool.versions?.length ?? 0) > 0;
-  const testRows = versioned && check.data ? majorTestRows(check.data, termsOf(binding).majors) : [];
+  const testRows = versioned && check.data && !rechecking ? majorTestRows(check.data, termsOf(binding).majors) : [];
   const untested = testRows.filter((row) => !row.met).map((row) => `v${row.major}`);
   const move = versioned ? moveNotice(termsOf(binding), majorChoices(tool)) : null;
   const hasErrors = Object.keys(parsed.errors).length > 0 || budget.error !== null;
@@ -367,6 +385,16 @@ export function LiveStage({
         {REQUIREMENT_SENTENCE.PAYOUT_ACCOUNT}{" "}
         <Link href="/provider/setup" className="text-primary-600 underline">
           Add it in setup
+        </Link>
+      </>
+    );
+  else if (rechecking) blockReason = "Checking your listing…";
+  else if (secondContactMissing)
+    blockReason = (
+      <>
+        {SECOND_CONTACT_PROMPT}{" "}
+        <Link href="/provider/setup?step=you" className="text-primary-600 underline">
+          Add a second contact
         </Link>
       </>
     );

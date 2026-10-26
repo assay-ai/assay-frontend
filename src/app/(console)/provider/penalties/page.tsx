@@ -35,6 +35,7 @@ import {
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useConnectedAddresses, useSigner } from "@/hooks/useSigner";
 import { cn } from "@/utils";
+import { useWalletChainType } from "@/hooks/useWalletChainType";
 
 /**
  * Penalties — route `/provider/penalties`. One page for what used to be three
@@ -119,9 +120,11 @@ export default function PenaltiesPage() {
         : `Disputes are recorded on chain against your stake, so only the wallet that holds it can file one. Connect that wallet (${penalties.ownAddress.slice(0, 6)}…${penalties.ownAddress.slice(-4)}) in this browser.`;
 
   const { connectWallet } = useConnectWallet();
+  // From the served chains: no Solana wallet offered while only EVM chains are served.
+  const walletChainType = useWalletChainType();
   const needsConnect =
     !simulated && Boolean(penalties.ownAddress) && signerState.status !== "ready" && (!reading || stalled);
-  const onConnect = needsConnect ? () => connectWallet({ walletChainType: "ethereum-and-solana" }) : undefined;
+  const onConnect = needsConnect ? () => connectWallet({ walletChainType }) : undefined;
 
   const [disputing, setDisputing] = React.useState<PenaltyRow | null>(null);
   const pending = useProviderPendingTransactions();

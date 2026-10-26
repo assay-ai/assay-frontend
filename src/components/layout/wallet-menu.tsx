@@ -17,6 +17,7 @@ import { ACCOUNT_MENU_LINKS } from "@/components/layout/nav-config";
 import { BalanceRows, WalletChainRows } from "@/components/layout/wallet-menu-rows";
 import { Avatar } from "@/components/ui/avatar";
 import type { FullBalance } from "@/features/g30/balance";
+import { useProviderEntry } from "@/features/provider-entry/use-provider-entry";
 import { useChains } from "@/hooks/useChains";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { clearSessionToken } from "@/libs/ApiClient";
@@ -118,6 +119,8 @@ export function WalletMenu({ className }: { className?: string }) {
   });
   // A chain that serves free calls only takes no deposit: no "Add funds" there.
   const freeOnly = useFreeOnlyChain({ enabled: open && (demoEnabled() || (ready && authenticated)) });
+  // "List your API" for a buyer, "Provider console" for a provider (onboarding wave 2, item 1).
+  const providerEntry = useProviderEntry({ enabled: open });
 
 
   /*
@@ -273,6 +276,13 @@ export function WalletMenu({ className }: { className?: string }) {
             The rare pages: the top bar keeps to the five sections, and these
             live here on every width (the mobile top bar carries this menu too).
           */}
+          {providerEntry ? (
+            <DropdownMenuPrimitive.Item asChild className={ITEM_CLASS}>
+              <Link href={providerEntry.href} data-testid="account-menu-provider-entry">
+                <span className="flex-1">{providerEntry.label}</span>
+              </Link>
+            </DropdownMenuPrimitive.Item>
+          ) : null}
           {ACCOUNT_MENU_LINKS.map((link) => (
             <DropdownMenuPrimitive.Item key={link.id} asChild className={ITEM_CLASS}>
               {link.external ? (
