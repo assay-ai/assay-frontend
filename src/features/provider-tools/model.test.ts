@@ -195,6 +195,43 @@ describe("the publish gate", () => {
     expect(rows[1]!.detail).toBe("eip155:1 below the minimum");
   });
 
+  /* Onboarding run 3: a raw "API_KEY_CREDENTIALS", "POST /providers/me/tool-bindings", and paid-only rows "done" on a free tool. */
+  it("never shows a raw code or an API route", () => {
+    const rows = gateRows(
+      {
+        passed: false,
+        requirements: [
+          { requirement: "API_KEY_CREDENTIALS", met: false, code: "credentials_missing_for_origin", detail: "No API key is stored for https://p.test." },
+          { requirement: "BINDING_PUBLISHED", met: false, code: null, detail: "Create, test and publish your binding of this tool (POST /providers/me/tool-bindings)." },
+          { requirement: "SOMETHING_NEW", met: false, code: null, detail: null },
+        ],
+        screen: [],
+      },
+      tool(),
+    );
+    expect(rows[0]!.label).toBe("Your API key is stored for your endpoint");
+    expect(rows[0]!.fix).toEqual({ kind: "link", label: "Add your API key", href: connectHref(tool()) });
+    expect(rows[1]!.detail).toBeNull();
+    expect(rows[2]!.label).toBe("Another check Assay runs before others can use it");
+    expect(rows.map((r) => `${r.label} ${r.todo} ${r.detail ?? ""}`).join(" ")).not.toMatch(/POST \//);
+    expect(rows.map((r) => r.label).join(" ")).not.toMatch(/[A-Z]{3,}_[A-Z]/);
+  });
+
+  it("reads a second contact and stake as not needed on a free tool, never as done", () => {
+    const paidOnly: ProviderToolGate = {
+      passed: true,
+      requirements: [
+        { requirement: "SECOND_CONTACT", met: true, code: null, detail: null },
+        { requirement: "STAKE_AT_MINIMUM_ON_EVERY_CHAIN", met: true, code: null, detail: null },
+        { requirement: "TESTER_PASSED", met: true, code: null, detail: null },
+      ],
+      screen: [],
+    };
+    expect(gateRows(paidOnly, tool(), { free: true }).map((r) => r.notNeeded)).toEqual([true, true, false]);
+    expect(gateRows(paidOnly, tool(), { free: false }).map((r) => r.notNeeded)).toEqual([false, false, false]);
+    expect(gateRows(paidOnly, tool()).map((r) => r.notNeeded)).toEqual([false, false, false]);
+  });
+
   it("opens the listing wizard on this tool, and comes back to the flow", () => {
     expect(connectHref(tool())).toBe("/provider/bindings/new?stage=connect&tool=t1&back=%2Fprovider%2Fapis%2Fview%3Fid%3Dt1%26step%3Dconnect");
     expect(connectHref(tool({ binding: { bindingId: "b1", status: "DRAFT", mappingVersion: 1, publishedVersion: null } }), "live")).toBe(

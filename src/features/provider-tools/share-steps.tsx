@@ -9,6 +9,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { CopyLine } from "@/components/toolsets/toolset-bits";
 import { Button } from "@/components/ui/button";
+import { useBinding } from "@/features/provider-binding/binding-header";
 import { routes } from "@/libs/routes";
 import {
   shareProviderToolUnlisted,
@@ -62,7 +63,27 @@ export function ConnectStep({
       </section>
     );
   }
+  return <ConnectStepBody tool={tool} gate={gate} gateLoading={gateLoading} gateError={gateError} onRecheck={onRecheck} onStep={onStep} />;
+}
+
+function ConnectStepBody({
+  tool,
+  gate,
+  gateLoading,
+  gateError,
+  onRecheck,
+  onStep,
+}: {
+  tool: ProviderTool;
+  gate: ProviderToolGate | null;
+  gateLoading: boolean;
+  gateError: boolean;
+  onRecheck: () => void;
+  onStep: (step: PublishStepId) => void;
+}) {
   const binding = tool.binding;
+  // Free or paid decides whether a second contact and stake are needed at all.
+  const listing = useBinding(binding?.bindingId ?? "");
   return (
     <section className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 px-4 py-4" data-testid="connect-step">
       <header className="flex flex-col gap-1">
@@ -98,7 +119,7 @@ export function ConnectStep({
       ) : gateError || !gate ? (
         <PageState kind="error" description="The checks could not be loaded." onRetry={onRecheck} />
       ) : (
-        <GateChecklist gate={gate} tool={tool} onStep={onStep} />
+        <GateChecklist gate={gate} tool={tool} onStep={onStep} free={listing.data ? listing.data.pricingMode === "FREE" : null} />
       )}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" icon={<RefreshCw aria-hidden="true" />} onClick={onRecheck}>

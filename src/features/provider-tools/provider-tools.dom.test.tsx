@@ -103,6 +103,26 @@ describe("the publish gate", () => {
   });
 });
 
+describe("the checklist of a free tool", () => {
+  it("shows a second contact and stake as not needed, not done", () => {
+    const gate: ProviderToolGate = {
+      passed: true,
+      requirements: [
+        { requirement: "SECOND_CONTACT", met: true, code: null, detail: null },
+        { requirement: "STAKE_AT_MINIMUM_ON_EVERY_CHAIN", met: true, code: null, detail: null },
+        { requirement: "TESTER_PASSED", met: true, code: null, detail: null },
+      ],
+      screen: [],
+    };
+    const words = text(render(<GateChecklist gate={gate} tool={base} onStep={() => undefined} free />));
+    expect(words).toContain("A second contact is set : not needed");
+    expect(words).toContain("Your stake is at the minimum : not needed");
+    expect(words).toContain("Not needed while the tool is free");
+    expect(words).toContain("The test passed : done");
+    expect(words).not.toContain("A second contact is set : done");
+  });
+});
+
 describe("versions", () => {
   it("show the one agents get, and the changelog", () => {
     const words = text(render(<VersionHistory tool={base} />));

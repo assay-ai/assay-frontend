@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CircleAlert, ShieldAlert, X } from "lucide-react";
+import { Check, CircleAlert, Minus, ShieldAlert, X } from "lucide-react";
 import Link from "next/link";
 import * as React from "react";
 
@@ -64,12 +64,15 @@ export function GateChecklist({
   gate,
   tool,
   onStep,
+  free = null,
 }: {
   gate: ProviderToolGate;
   tool: Pick<ProviderTool, "id" | "binding">;
   onStep: (step: PublishStepId) => void;
+  /** The listing is free (null while unknown): a second contact and stake are then not needed, not "done". */
+  free?: boolean | null;
 }) {
-  const rows = gateRows(gate, tool);
+  const rows = gateRows(gate, tool, { free });
   const findings = gate.screen.flatMap((s) => s.findings.map((f) => ({ ...f, semver: s.semver })));
   return (
     <div className="flex flex-col gap-3" data-testid="gate-checklist">
@@ -82,15 +85,19 @@ export function GateChecklist({
             <span className="flex min-w-0 items-start gap-2.5">
               <span
                 aria-hidden="true"
-                className={cn("mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full", row.met ? "bg-success-10 text-success-700" : "bg-danger-10 text-danger-700")}
+                className={cn(
+                  "mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full",
+                  row.notNeeded ? "bg-02 text-03" : row.met ? "bg-success-10 text-success-700" : "bg-danger-10 text-danger-700",
+                )}
               >
-                {row.met ? <Check className="size-3" /> : <X className="size-3" />}
+                {row.notNeeded ? <Minus className="size-3" /> : row.met ? <Check className="size-3" /> : <X className="size-3" />}
               </span>
               <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-label-13 text-01">
+                <span className={cn("text-label-13", row.notNeeded ? "text-03" : "text-01")}>
                   {row.label}
-                  <span className="sr-only">{row.met ? ": done" : ": not yet"}</span>
+                  <span className="sr-only">{row.notNeeded ? ": not needed" : row.met ? ": done" : ": not yet"}</span>
                 </span>
+                {row.notNeeded ? <span className="text-body-xs text-03">Not needed while the tool is free. Paid tools need it.</span> : null}
                 {row.met ? null : <span className="text-body-13 text-02">{row.todo}</span>}
                 {!row.met && row.detail ? <span className="text-body-xs text-03 [overflow-wrap:anywhere]">{row.detail}</span> : null}
               </span>

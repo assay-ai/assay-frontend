@@ -253,6 +253,26 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
   const [touched, setTouched] = React.useState(false);
   // What a try run of the endpoint worked out: the new tool starts from it instead of a placeholder schema.
   const [tried, setTried] = React.useState<TryOutcome | null>(null);
+  // The one line as the box shows it. A value put in without an input event (autofill, a form-filling
+  // tool) never reached `summary`, and the next render wiped it (onboarding run 3): read it back first.
+  const summaryRef = React.useRef<HTMLInputElement>(null);
+  const keepTypedSummary = () => {
+    const shown = summaryRef.current?.value;
+    if (shown !== undefined && shown !== summary) setSummary(shown);
+  };
+  // Such tools still send an input event, which React drops (its own value tracker already holds the
+  // new value): a plain listener takes it, before any render puts the old value back.
+  React.useEffect(() => {
+    const box = summaryRef.current;
+    if (!box) return;
+    const take = () => setSummary((current) => (box.value !== current ? box.value : current));
+    box.addEventListener("input", take);
+    box.addEventListener("change", take);
+    return () => {
+      box.removeEventListener("input", take);
+      box.removeEventListener("change", take);
+    };
+  }, [tool]);
   const listId = React.useId();
 
   // A provider that already publishes tools holds its public name: never ask it to claim it again.
@@ -404,7 +424,9 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
       <Field
         label="What it does, in one line"
         value={summary}
+        ref={summaryRef}
         onChange={(e) => setSummary(e.target.value)}
+        onBlur={keepTypedSummary}
         suffix={`${summary.length}/${SUMMARY_MAX}`}
         hint="The only text agents see in their tool list. Say what it does and when to use it."
         error={touched && summary ? (summaryProblem ?? undefined) : undefined}
@@ -416,7 +438,13 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
           Inputs, outputs and an example come from your endpoint&apos;s answer; you can change them in step 2.
         </p>
       ) : (
-        <TryPanel compact onUse={(outcome) => setTried(outcome)} />
+        <TryPanel
+          compact
+          onUse={(outcome) => {
+            keepTypedSummary();
+            setTried(outcome);
+          }}
+        />
       )}
       {create.isError ? <ErrorBox view={providerToolErrorView(create.error)} onSuggestion={(s) => setLocalName(s.includes("__") ? s.split("__").pop()! : s)} /> : null}
       <div className="flex flex-col gap-1">
