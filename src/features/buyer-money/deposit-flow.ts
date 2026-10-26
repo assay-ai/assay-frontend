@@ -144,7 +144,10 @@ async function settleOrRecheck<T>(depositId: string, send: () => Promise<T>): Pr
  *
  * - `CREATED` — nothing reached the chain through it; the same payload may go back.
  * - `EXPIRED` — reachable only from CREATED, so its payload was never broadcast by us.
- * - `FAILED` — the backend watched the chain and saw no transfer.
+ * - `FAILED` — the backend watched the chain and saw no transfer. It stores no
+ *   `chainTxRef`, so the same hash can still be claimed by a fresh intent once
+ *   it lands (the backend credits one hash once: `findByChainTxRef` and
+ *   `uq_ledger_entries_deposit_pending`).
  */
 async function outcomeBeforeRetry(
   depositId: string,
@@ -291,11 +294,10 @@ export async function runDepositStep(
     const { depositId, hash } = hooks.previous;
     const read = await outcomeBeforeRetry(depositId);
     if (!("unsettled" in read)) return read;
-    if (read.unsettled === "FAILED") throw notObserved(read.deposit);
     await waitForSuccess(run.chainId, hash);
-    // The wallet's own transaction is mined. An EXPIRED intent can no longer
-    // take it, but a fresh one can (one hash credits once).
-    if (read.unsettled === "EXPIRED") {
+    // The wallet's own transaction is mined. An EXPIRED or FAILED intent can no
+    // longer take it, but a fresh one can (one hash credits once).
+    if (read.unsettled !== "CREATED") {
       return settleHashOnFreshIntent(run, hash, (id) => hooks.onSubmitted(hash, id));
     }
     return settleByHash(run, depositId, hash, (id) => hooks.onSubmitted(hash, id));

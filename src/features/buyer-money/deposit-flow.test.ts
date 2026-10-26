@@ -298,4 +298,20 @@ describe("injected wallet: Try again on an intent that can no longer take the ha
     expect(retry.onSubmitted).toHaveBeenCalledWith(HASH, "dep-2");
     expect(evm.sendEvmDepositFor).not.toHaveBeenCalled();
   });
+
+  it("FAILED: once the transaction is mined, a fresh intent claims the same hash (one hash credits once)", async () => {
+    service.getDeposit.mockResolvedValue(deposit("FAILED", { statusReason: "no transfer was observed" }));
+    const retry = { ...hooks(), previous: { kind: "hash" as const, hash: HASH, depositId: "dep-1" } };
+    const result = await settle(runDepositStep(freshRun(), signer, retry));
+    expect(result).toMatchObject({ status: "SETTLED" });
+    expect(service.settleDepositByBroadcast.mock.calls).toEqual([["dep-2", HASH]]);
+    expect(retry.onSubmitted).toHaveBeenCalledWith(HASH, "dep-2");
+  });
+
+  it("a fresh intent whose hash another deposit already credited is done, not a failure", async () => {
+    service.getDeposit.mockResolvedValue(deposit("FAILED"));
+    service.settleDepositByBroadcast.mockRejectedValue(new ApiError("PAYMENT_DEPOSIT_TRANSACTION_ALREADY_CLAIMED", "x", 409));
+    const retry = { ...hooks(), previous: { kind: "hash" as const, hash: HASH, depositId: "dep-1" } };
+    expect(await settle(runDepositStep(freshRun(), signer, retry))).toBe("already-credited");
+  });
 });
