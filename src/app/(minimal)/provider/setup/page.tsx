@@ -17,10 +17,12 @@ import { stakeFloorText, stakeRuleOf } from "@/features/provider-binding/go-live
 import { combinedProgress } from "@/features/provider-binding/wizard/stages";
 import { Outcome } from "@/features/m41/outcome";
 import { plainTermsLine, termLabel, termValue } from "@/features/m41/terms";
-import { addressFamily, useProviderSetup, type ProviderSetup } from "@/features/m41/use-setup";
+import { payoutCandidates, useProviderSetup, type ProviderSetup } from "@/features/m41/use-setup";
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { waitingPeriodOf, waitingPeriodPhrase } from "@/features/provider-stake/withdraw-state";
 import { useChainName } from "@/hooks/useChainName";
+import { useChains } from "@/hooks/useChains";
+import { useWalletChainType } from "@/hooks/useWalletChainType";
 import { useDocumentTitle } from "@/hooks/useDocumentTitle";
 import { useConnectedAddresses } from "@/hooks/useSigner";
 import { ApiError } from "@/libs/ApiClient";
@@ -338,7 +340,10 @@ function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void 
   const connected = useConnectedAddresses();
   const { connectWallet } = useConnectWallet();
   const chainName = useChainName();
-  const usable = connected.filter((address) => addressFamily(address) !== null);
+  // Only wallets that can be paid on a served chain: with EVM chains only, no Solana wallet is offered.
+  const { chains } = useChains();
+  const walletChainType = useWalletChainType();
+  const usable = React.useMemo(() => payoutCandidates(connected, chains), [connected, chains]);
   const { address, setAddress } = setup;
 
   // Follow the connected wallet: preselect it, and keep the choice valid when wallets change.
@@ -376,7 +381,7 @@ function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void 
             variant="secondary"
             icon={<Wallet />}
             className="self-start"
-            onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
+            onClick={() => connectWallet({ walletChainType })}
           >
             Connect wallet
           </Button>
@@ -384,6 +389,13 @@ function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void 
       ) : (
         <div className="flex w-full flex-col gap-2">
           <span className="text-label-13 text-01">{paidDone ? "Pay me in a different wallet" : "Wallet to be paid in"}</span>
+          {usable.length === 1 ? (
+            // One wallet fits: picked for you, and said in one line.
+            <p className="text-body-13 text-02" data-testid="payout-wallet-line">
+              Payouts go to <span className="font-mono text-mono-12 text-01 [overflow-wrap:anywhere]">{usable[0]}</span>
+              {setup.chainId ? ` on ${chainName(setup.chainId)}` : ""}.
+            </p>
+          ) : (
           <div role="radiogroup" aria-label="Wallet to be paid in" className="flex w-full flex-col gap-1.5">
             {usable.map((option) => (
               <label
@@ -404,14 +416,19 @@ function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void 
               </label>
             ))}
           </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-body-xs text-03">
-              {setup.chainId ? `Network: ${chainName(setup.chainId)}` : "Assay does not pay out on this wallet's network."}
+              {usable.length === 1 && setup.chainId
+                ? null
+                : setup.chainId
+                  ? `Network: ${chainName(setup.chainId)}`
+                  : "Assay does not pay out on this wallet's network."}
             </span>
             <button
               type="button"
               className="text-label-xs text-primary-600 underline-offset-2 hover:underline"
-              onClick={() => connectWallet({ walletChainType: "ethereum-and-solana" })}
+              onClick={() => connectWallet({ walletChainType })}
             >
               Use another wallet
             </button>

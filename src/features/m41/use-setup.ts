@@ -87,6 +87,22 @@ export function addressFamily(address: string): "eip155" | "solana" | null {
   return null;
 }
 
+/**
+ * The connected wallets that can be paid on a chain this deployment serves.
+ * Chain-driven (`GET /chains` namespaces): with only EVM chains served, a
+ * Solana wallet is not offered. While the list is unknown, every wallet of a
+ * known family is kept, as before.
+ */
+export function payoutCandidates(
+  addresses: readonly string[],
+  served: readonly { chainId: string; namespace: string }[],
+): string[] {
+  const known = addresses.filter((address) => addressFamily(address) !== null);
+  if (served.length === 0) return known;
+  const families = new Set(served.map((chain) => chain.namespace || chain.chainId.split(":")[0]));
+  return known.filter((address) => families.has(addressFamily(address)!));
+}
+
 /** The chain to prove `address` on: the agent's chain when it is that family, else the first served one. */
 export function payoutChainFor(
   address: string,

@@ -12,7 +12,13 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams({ step }),
 }));
 vi.mock("@privy-io/react-auth", () => ({ useConnectWallet: () => ({ connectWallet: () => undefined }), usePrivy: () => ({ ready: false, authenticated: false }) }));
-vi.mock("@/hooks/useSigner", () => ({ useConnectedAddresses: () => [] }));
+const wallets = vi.hoisted(() => ({ connected: [] as string[] }));
+vi.mock("@/hooks/useSigner", () => ({ useConnectedAddresses: () => wallets.connected }));
+const served = vi.hoisted(() => ({ chains: [] as { chainId: string; namespace: string; displayName: string }[] }));
+vi.mock("@/hooks/useChains", async (original) => ({
+  ...(await original<object>()),
+  useChains: () => ({ status: "ready", chains: served.chains }),
+}));
 
 const refused = new ApiError("ENDPOINT_REFUSED", "This address cannot be used: it resolves to a private network.", 422);
 const setup = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
@@ -90,5 +96,32 @@ describe("provider setup", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /Finish setup/ }).getAttribute("aria-busy")).toBeNull());
     await act(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
     expect(screen.getAllByText(/resolves to a private network/)).toHaveLength(1);
+  });
+
+  /* Onboarding wave 2 item 4: only wallets a served chain can pay, picked for you when one fits. */
+  it("hides a Solana wallet when only EVM chains are served, and names the one payout address", () => {
+    step = "wallet";
+    const evm = "0x1111111111111111111111111111111111111111";
+    const solana = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+    wallets.connected = [solana, evm];
+    served.chains = [{ chainId: "eip155:46630", namespace: "eip155", displayName: "Robinhood Chain testnet" }];
+    allDone({
+      steps: [
+        { key: "account", status: "DONE" },
+        { key: "payoutWallet", status: "TODO" },
+        { key: "endpoint", status: "TODO" },
+      ],
+      address: evm,
+      setAddress: () => undefined,
+      chainId: "eip155:46630",
+      walletBlockedBy: null,
+      prove: async () => undefined,
+    });
+    mount();
+    expect(screen.queryByText(solana)).toBeNull();
+    expect(screen.queryByRole("radiogroup", { name: "Wallet to be paid in" })).toBeNull();
+    expect(screen.getByTestId("payout-wallet-line").textContent).toBe(`Payouts go to ${evm} on Robinhood Chain testnet.`);
+    wallets.connected = [];
+    served.chains = [];
   });
 });
