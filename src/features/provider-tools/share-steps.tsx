@@ -97,7 +97,9 @@ function ConnectStepBody({
           {!binding
             ? "No endpoint connected yet."
             : binding.status === "ACTIVE"
-              ? "Your endpoint is connected and live."
+              ? tool.visibility === "PRIVATE"
+                ? "Your endpoint is connected and live for your team. Others can call it once you choose who can use it in step 4."
+                : "Your endpoint is connected and live."
               : binding.status === "DRAFT"
                 ? "Your listing is a draft: finish the test and publish it."
                 : `Your listing is ${binding.status.toLowerCase()}.`}
@@ -196,7 +198,7 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
           ? "A listed tool can't go back to only your team from here: ask support to remove it from the catalogue."
           : pending
             ? "Withdraw the review first, then you can stop sharing it."
-            : "Your own agents call it through your private tool sets. Nothing outside your team sees it.",
+            : "Who can call it: only your team's agents, through your private tool sets. No review; nothing outside your team sees it.",
       disabled: tool.visibility === "LISTED" || pending,
     },
     {
@@ -204,7 +206,7 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
       title: VISIBILITY_LABEL.UNLISTED,
       body: (
         <>
-          Anyone with the link to one of your link-only tool sets can call it. It is marked <NotReviewedChip /> and no other team can add it to their own tool sets.
+          Who can call it: anyone with the link to one of your link-only tool sets, as soon as the automatic checks pass. No one at Assay reviews it, so it is marked <NotReviewedChip />, and no other team can add it to their own tool sets.
         </>
       ),
       // Once listed it stays reachable by everyone; "Anyone with the link" is a step down only via support.
@@ -213,7 +215,7 @@ export function ShareStep({ tool, gate, onStep }: { tool: ProviderTool; gate: Pr
     {
       id: "LISTED",
       title: VISIBILITY_LABEL.LISTED,
-      body: `Assay reviews it first. Then it is in the catalogue, in search and on your public page @${tool.handle}. One maker's API is at most "Verified", never "Guaranteed".`,
+      body: `Who can call it: anyone, from the catalogue, search and your public page @${tool.handle}, once Assay reviews and approves it; until then it stays as it is now. One maker's API is at most "Verified", never "Guaranteed".`,
       disabled: false,
     },
   ];

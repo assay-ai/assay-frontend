@@ -210,9 +210,9 @@ export function providerToolState(tool: Pick<ProviderToolSummary, "status" | "vi
     return { id: "DRAFT", label: "Draft", tone: "neutral", detail: "Not published yet. Only your team can see it." };
   }
   if (tool.visibility === "UNLISTED") {
-    return { id: "UNLISTED", label: VISIBILITY_LABEL.UNLISTED, tone: "primary", detail: "Reachable through your own link-only tool sets. It shows “Not reviewed” until Assay reviews it." };
+    return { id: "UNLISTED", label: VISIBILITY_LABEL.UNLISTED, tone: "primary", detail: "Anyone with the link to one of your link-only tool sets can call it. No one at Assay reviewed it, so it shows “Not reviewed”." };
   }
-  return { id: "PRIVATE", label: VISIBILITY_LABEL.PRIVATE, tone: "neutral", detail: "Your own agents can call it through your private tool sets." };
+  return { id: "PRIVATE", label: VISIBILITY_LABEL.PRIVATE, tone: "neutral", detail: "Live for your team only: your own agents can call it through your private tool sets. No one else can until you share it." };
 }
 
 /** Whether the "Not reviewed" badge is shown: reachable by others, never approved. */

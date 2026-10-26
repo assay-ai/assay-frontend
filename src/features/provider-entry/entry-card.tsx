@@ -51,7 +51,7 @@ export function ProviderEntryView({ entry, pending = false, className }: { entry
         <Store aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-03" />
         <div className="flex min-w-0 flex-col gap-0.5">
           <p className="text-label-13 text-01">Have an API? List it on Assay and get paid per call.</p>
-          <p className="text-body-xs text-03">About five minutes, no review queue. Free listings need no stake.</p>
+          <p className="text-body-xs text-03">Live in about five minutes. Listing your own API in the public catalogue is reviewed by Assay. Free listings need no stake.</p>
         </div>
       </div>
       <Button size="sm" variant="secondary" asChild className="self-start tablet:self-center">

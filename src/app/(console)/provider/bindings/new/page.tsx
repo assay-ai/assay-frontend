@@ -239,7 +239,8 @@ function WizardContent() {
     try {
       const published = await publishToolBinding(binding.id);
       await applyPublished(queryClient, published, binding);
-      toast.success(`${tool?.name ?? "Your tool"} is live`);
+      // Your own API stays with your team until its "Who can use it" step: say so, not just "live".
+      toast.success(back ? `${tool?.name ?? "Your tool"} is live for your team` : `${tool?.name ?? "Your tool"} is live`);
     } catch (error) {
       if (!isAlreadyLive(error)) throw error instanceof ApiError ? new Error(plainApiError(error)) : error;
       void queryClient.invalidateQueries({ queryKey: bindingQueryKey(binding.id) });

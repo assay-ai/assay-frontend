@@ -146,8 +146,8 @@ export default function ProviderSetupPage() {
           <header className="flex flex-col gap-1">
             <h1 className="text-heading-sm text-01 tablet:text-heading-md">Set up your provider account</h1>
             <p className="text-body-13 text-02">
-              Three short steps, about five minutes. Then you list your first tool and publish it yourself: there is no
-              review queue.
+              Three short steps, about five minutes. Then you list your first tool and make it live yourself, with no
+              wait for a review. Only putting your own API in the public catalogue is reviewed by Assay first.
             </p>
           </header>
           <p className="text-label-13 text-02">{combinedProgress([done.you, done.paid, done.api].filter(Boolean).length, null)}</p>

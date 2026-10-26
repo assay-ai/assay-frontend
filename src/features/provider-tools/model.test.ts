@@ -339,3 +339,10 @@ describe("serverTopicChoices", () => {
     expect(serverTopicChoices({ topics: "weather" }, "")).toBeNull();
   });
 });
+
+describe("the state line of a private tool", () => {
+  it("says it is live for the team only, and who can call it", () => {
+    expect(providerToolState(tool({ visibility: "PRIVATE" })).detail).toBe("Live for your team only: your own agents can call it through your private tool sets. No one else can until you share it.");
+    expect(providerToolState(tool({ visibility: "UNLISTED" })).detail).toMatch(/^Anyone with the link to one of your link-only tool sets can call it\. No one at Assay reviewed it/);
+  });
+});

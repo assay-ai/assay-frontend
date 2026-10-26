@@ -77,7 +77,7 @@ export function GateChecklist({
   return (
     <div className="flex flex-col gap-3" data-testid="gate-checklist">
       <p className={cn("text-label-sm", gate.passed ? "text-success-700" : "text-01")} role="status">
-        {gate.passed ? "Every check passes. You can share it." : `${rows.filter((r) => !r.met).length} of ${rows.length} checks to fix before others can use it`}
+        {gate.passed ? "Every check passes. You can share it in “Who can use it”." : `${rows.filter((r) => !r.met).length} of ${rows.length} checks to fix before others can use it`}
       </p>
       <ul className="flex flex-col divide-y divide-01 rounded-lg border border-01">
         {rows.map((row) => (
