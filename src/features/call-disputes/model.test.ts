@@ -220,6 +220,7 @@ describe("errors", () => {
   it("says what happened", () => {
     expect(disputeErrorText(new ApiError("DISPUTE_ALREADY_OPEN", "x", 409))).toMatch(/already reported/);
     expect(disputeErrorText(new ApiError("DISPUTE_RATE_LIMITED", "x", 429))).toMatch(/in 24 hours/);
+    expect(disputeErrorText(new ApiError("DISPUTE_ALREADY_DECIDED", "x", 409))).toBe("This call's report was already decided, so it can't be reported again.");
   });
 });
 

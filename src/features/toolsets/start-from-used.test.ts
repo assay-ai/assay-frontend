@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { freeSlugAmong, usedTools } from "./start-from-used";
+import { freeSlugAmong, toolIdsForNames, usedTools } from "./start-from-used";
 
 // Review F: the buyer called three tools; only get_weather has a live provider.
 const calls = [
@@ -44,5 +44,15 @@ describe("freeSlugAmong", () => {
     expect(freeSlugAmong("tools-i-use", [])).toBe("tools-i-use");
     expect(freeSlugAmong("tools-i-use", ["tools-i-use", "tools-i-use-2"])).toBe("tools-i-use-3");
     expect(freeSlugAmong("a".repeat(64), ["a".repeat(64)])).toBe(`${"a".repeat(62)}-2`);
+  });
+});
+
+describe("toolIdsForNames (BUG-PROD-BUY-CONNECT-02)", () => {
+  it("keeps a tool with no live provider, found through every tool on Assay", () => {
+    expect(toolIdsForNames(["get_usd_eur_rate", "get_weather"], listed, known)).toEqual({ ids: ["rate", "weather"], missing: [] });
+  });
+
+  it("names what is not a tool on Assay instead of dropping it silently", () => {
+    expect(toolIdsForNames(["get_weather", "no_such_tool"], listed, known)).toEqual({ ids: ["weather"], missing: ["no_such_tool"] });
   });
 });

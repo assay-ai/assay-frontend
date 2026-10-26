@@ -9,6 +9,7 @@ import { createKeyErrorText, useCreateKey } from "@/components/buyer-money/creat
 import { McpConfigTabs, TEMPLATE_COPY_REASON } from "@/components/buyer-money/mcp-config-tabs";
 import { useAgentsAndKeys, type KeyRow } from "@/components/buyer-money/use-agents";
 import { useCatalogue } from "@/components/g31/use-catalogue";
+import { useToolNames } from "@/components/g31/use-tool-names";
 import { EntityPicker } from "@/components/patterns/entity-picker";
 import { Skeleton } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
@@ -35,10 +36,12 @@ import {
 } from "@/features/connect/mcp-url";
 import { allowToolsBody, restoreBody } from "@/features/toolsets/access-result";
 import { defaultEntry } from "@/features/toolsets/entry-rules";
+import { toolIdsForNames } from "@/features/toolsets/start-from-used";
 import { ALWAYS_LATEST_LABEL, DISCOVERY_DETAILS, DISCOVERY_LABELS, DRAFT_NOTICE, HOW_AGENT_SEES_LABEL, lockLabel } from "@/features/toolsets/labels";
 import { badgeLabel } from "@/features/toolsets/public";
 import { cantRunReason, cantRunTools, copyBlocked, offersFreeOnly, overBudgetWith, previewSummary, previewWarnings, type PreviewWarning } from "@/features/toolsets/preview";
 import type { PublicToolsetCard } from "@/services/public-toolsets.service";
+import type { CatalogueTool as KnownTool } from "@/services/tools.service";
 import { createToolset, recordConnectUrl, type McpUrlPreview } from "@/services/toolsets.service";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
@@ -193,6 +196,7 @@ export function ConnectBody({
   const toolsets = useToolsets();
   const sets = React.useMemo(() => toolsets.data?.items ?? [], [toolsets.data]);
   const catalogue = useCatalogue();
+  const toolNames = useToolNames();
   const access = useAgentAccess(effectiveAgentId);
   const servers = useAgentServers(effectiveAgentId, { pollMs: waitPoll });
   const update = useUpdateAccess(effectiveAgentId);
@@ -388,7 +392,19 @@ export function ConnectBody({
           ? "No provider yet"
           : `${t.pricingMode === "FREE" ? "Free" : `from ${formatMoney(t.fromPrice, { decimals: 4 })}`} · ${t.providerCount} provider${t.providerCount === 1 ? "" : "s"}`;
       return { id: mcp, label: mcp, disabled: t.providerCount === 0, detail: title ? `${title} · ${price}` : price };
-    });
+    })
+    // The catalogue lists only tools with a live listing; the rest of Assay's tools are shown too, disabled.
+    .concat(
+      [...toolNames.byId.values()]
+        .filter((t) => !catalogue.tools.some((row) => row.toolId === t.id))
+        .map((t) => ({ tool: t, mcp: mcpToolName(t) }))
+        .filter((x): x is { tool: KnownTool; mcp: string } => x.mcp !== null && !tools.includes(x.mcp))
+        .sort((a, b) => a.mcp.localeCompare(b.mcp))
+        .map(({ tool: t, mcp }) => {
+          const title = toolDisplay(t).title;
+          return { id: mcp, label: mcp, disabled: true, detail: title ? `${title} · No provider yet` : "No provider yet" };
+        }),
+    );
   // A remote-only install of a second URL signs in again (R-UI-11): the agent already has another server.
   const secondUrl = (servers.data?.servers ?? []).some((s) => s.canonicalUrl !== preview.data?.canonicalUrl && s.canonicalUrl !== url);
   const others = servers.data && preview.data ? overBudgetWith(preview.data, servers.data.servers) : null;
@@ -1031,7 +1047,7 @@ function KeyLine({ hint, keyName, agentName, full, client }: { hint: string | nu
 }
 
 /** "Only these tools" → a tool set, name only (the slug is generated). */
-function SaveAsToolset({
+export function SaveAsToolset({
   tools,
   onSaved,
   suggest,
@@ -1042,17 +1058,14 @@ function SaveAsToolset({
 }) {
   const queryClient = useQueryClient();
   const catalogue = useCatalogue();
+  const known = useToolNames();
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState(`My ${tools.length} tools`);
+  // A tool no provider takes calls for now stays in the set (BUG-PROD-BUY-CONNECT-02); only a name Assay does not know is left out, and said.
+  const { ids, missing } = toolIdsForNames(tools, catalogue.tools, known.byId);
+  const resolving = missing.length > 0 && (catalogue.isPending || known.isPending);
   const save = useMutation({
-    mutationFn: () =>
-      createToolset({
-        name: name.trim(),
-        entries: tools
-          .map((mcpName) => catalogue.tools.find((t) => mcpToolName(t) === mcpName)?.toolId)
-          .filter((id): id is string => Boolean(id))
-          .map(defaultEntry),
-      }),
+    mutationFn: () => createToolset({ name: name.trim(), entries: ids.map(defaultEntry) }),
     onSuccess: (set) => {
       void queryClient.invalidateQueries({ queryKey: toolsetKeys.all });
       toast.success(`Saved as the tool set ${set.name}`);
@@ -1071,7 +1084,7 @@ function SaveAsToolset({
       className="flex flex-col gap-2 tablet:flex-row tablet:items-end"
       onSubmit={(e) => {
         e.preventDefault();
-        if (name.trim()) save.mutate();
+        if (name.trim() && !resolving && ids.length > 0) save.mutate();
       }}
     >
       <Field
@@ -1080,9 +1093,10 @@ function SaveAsToolset({
         value={name}
         onChange={(e) => setName(e.target.value)}
         error={save.isError ? errorText(save.error) : undefined}
+        hint={!resolving && missing.length > 0 ? `Left out, not a tool on Assay: ${missing.join(", ")}` : undefined}
         wrapperClassName="flex-1"
       />
-      <Button type="submit" size="sm" loading={save.isPending} disabled={!name.trim()}>
+      <Button type="submit" size="sm" loading={save.isPending} disabled={!name.trim() || resolving || ids.length === 0}>
         Save
       </Button>
     </form>

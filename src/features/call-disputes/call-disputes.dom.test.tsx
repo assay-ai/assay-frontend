@@ -160,3 +160,39 @@ describe("receiptReportState", () => {
     expect(receiptReportState(undefined)).toBe("none");
   });
 });
+
+// BUG-PROD-BUY-SPEND-02: one decided report per call is final (the API answers DISPUTE_ALREADY_DECIDED).
+describe("Report it again", () => {
+  const receipt = {
+    intentId: "i1",
+    toolId: "tool-1",
+    status: "SETTLED",
+    createdAt: FILED,
+    settledAt: FILED,
+    disputeWindowEndsAt: "2026-10-18T11:00:00.000Z",
+    disputeFilingClosesAt: "2026-10-25T10:00:00.000Z",
+    chargedPrice: usd,
+    refundableIfReportedNow: false,
+  } as unknown as Receipt;
+  const later = t0 + 2 * 60 * 60_000;
+  const reportBox = (items: CallDispute[]) => {
+    const client = new QueryClient();
+    client.setQueryData(["call-disputes", "buyer", "intent", "i1"], { items });
+    return text(renderToStaticMarkup(<QueryClientProvider client={client}><ReceiptReport receipt={receipt} toolName="acme__search_posts" now={later} /></QueryClientProvider>));
+  };
+
+  it("is offered after a withdrawn report", () => {
+    expect(reportBox([{ ...dispute, state: "WITHDRAWN" }])).toContain("Report it again");
+  });
+
+  it("is not offered once a report was decided, even under a later withdrawn one", () => {
+    expect(reportBox([{ ...dispute, state: "UPHELD" }])).not.toContain("Report it again");
+    expect(reportBox([{ ...dispute, state: "REJECTED" }])).not.toContain("Report it again");
+    expect(
+      reportBox([
+        { ...dispute, id: "d2", state: "WITHDRAWN", createdAt: "2026-10-18T11:30:00.000Z" },
+        { ...dispute, state: "REJECTED" },
+      ]),
+    ).not.toContain("Report it again");
+  });
+});

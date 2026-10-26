@@ -7,10 +7,16 @@ import { DepositChainChoice } from "@/components/funding/deposit-chain-choice";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } from "@/features/buyer-money/deposit-flow";
+import {
+  runApproveStep,
+  runDepositStep,
+  warmWallet,
+  type DepositAttempt,
+  type DepositRun,
+} from "@/features/buyer-money/deposit-flow";
 import { DEPOSIT_CREDIT_TEXT } from "@/features/buyer-money/confirming";
 import { testTokenHelp } from "@/features/buyer-money/gas-help";
-import { describeMoneyError } from "@/features/buyer-money/money-errors";
+import { describeMoneyError, describeSubmittedDepositError } from "@/features/buyer-money/money-errors";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { depositChoiceFor } from "@/features/funding/deposit-chain";
 import { depositWalletView, useDepositWallet } from "@/features/funding/deposit-wallet";
@@ -106,6 +112,12 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
     setAmount(PRESELECTED);
     runRef.current = null;
   }, [open]);
+  // Warm the wallet as soon as the drawer is open, so a slow session refresh
+  // is over before the click creates the intent (BUG-PROD-DEPOSIT-01).
+  const readySigner = signerState.status === "ready" ? signerState.signer : null;
+  React.useEffect(() => {
+    if (open && readySigner) void warmWallet(readySigner);
+  }, [open, readySigner]);
   const resetKey = `${amount}|${chainId ?? ""}`;
   const evm = chainId !== null && isEvmChain(chainId);
   // What the depositing wallet holds, before any prompt (pinned token and escrow; EVM only).
@@ -171,6 +183,8 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
             onSubmitted: (hash, depositId) => {
               const explorerUrl = chain ? explorerTxUrl(chain, hash) : undefined;
               report({ stage: "submitted", data: { kind: "hash", hash, depositId } satisfies DepositAttempt, explorerUrl });
+              // The same hash moved to a fresh intent: track that one, not the old.
+              if (trackedId && trackedId !== `deposit:${depositId}`) pending.resolve(trackedId);
               trackedId = `deposit:${depositId}`;
               pending.track({
                 id: trackedId,
@@ -237,6 +251,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
       disabledReason={disabledReason}
       trackerNoun="Step"
       describeError={describeMoneyError}
+      describeSubmittedError={describeSubmittedDepositError}
       successTitle="Deposit confirmed on chain"
       successDescription={
         needsCaps

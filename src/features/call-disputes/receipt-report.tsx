@@ -105,7 +105,8 @@ export function ReceiptReport({
   const latest = [...(reports.data?.items ?? [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0] ?? null;
   const { terms } = useChainTerms();
   const hold = reportWindow(receipt, now, terms.holdCompound);
-  const openReport = latest && latest.state === "OPEN" ? latest : null;
+  // The API takes a new report only when every earlier one was withdrawn: one open at a time, and a decided one is final.
+  const canReportAgain = (reports.data?.items ?? []).every((d) => d.state === "WITHDRAWN");
 
   // The API says when a call can't be reported at all (not settled, free, your own): no button then.
   if (!latest && !receipt.disputeFilingClosesAt) return null;
@@ -127,7 +128,7 @@ export function ReceiptReport({
           <Button asChild variant="secondary" size="sm" className="touch-target">
             <Link href={routes.callDispute(latest.id)}>See the report</Link>
           </Button>
-          {!openReport && hold.open ? (
+          {canReportAgain && hold.open ? (
             <Button variant="ghost" size="sm" className="touch-target" icon={<Flag aria-hidden="true" />} onClick={() => setOpen(true)}>
               Report it again
             </Button>
