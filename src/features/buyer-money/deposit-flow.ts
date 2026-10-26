@@ -228,24 +228,35 @@ export async function runApproveStep(
   });
 }
 
+/** Reports `hash` on a new intent; `onReplaced` names it, so a later retry checks that one. */
+async function settleHashOnFreshIntent(
+  run: Pick<DepositRun, "chainId" | "amountAtomic">,
+  hash: string,
+  onReplaced?: (depositId: string) => void,
+): Promise<SettledDeposit | "already-credited"> {
+  const fresh = await createDeposit(run.amountAtomic, run.chainId);
+  onReplaced?.(fresh.depositId);
+  try {
+    return await settleOrRecheck(fresh.depositId, () => settleDepositByBroadcast(fresh.depositId, hash));
+  } catch (again) {
+    if (isAlreadyClaimed(again)) return "already-credited";
+    throw again;
+  }
+}
+
 /** Credits a deposit the wallet itself broadcast; an expired intent is replaced, one hash credits once. */
 export async function settleByHash(
   run: Pick<DepositRun, "chainId" | "amountAtomic">,
   depositId: string,
   hash: string,
+  onReplaced?: (depositId: string) => void,
 ): Promise<SettledDeposit | "already-credited"> {
   try {
     return await settleOrRecheck(depositId, () => settleDepositByBroadcast(depositId, hash));
   } catch (caught) {
     if (isAlreadyClaimed(caught)) return "already-credited";
     if (!(caught instanceof ApiError) || caught.code !== "PAYMENT_DEPOSIT_EXPIRED") throw caught;
-    const fresh = await createDeposit(run.amountAtomic, run.chainId);
-    try {
-      return await settleOrRecheck(fresh.depositId, () => settleDepositByBroadcast(fresh.depositId, hash));
-    } catch (again) {
-      if (isAlreadyClaimed(again)) return "already-credited";
-      throw again;
-    }
+    return settleHashOnFreshIntent(run, hash, onReplaced);
   }
 }
 
@@ -282,7 +293,12 @@ export async function runDepositStep(
     if (!("unsettled" in read)) return read;
     if (read.unsettled === "FAILED") throw notObserved(read.deposit);
     await waitForSuccess(run.chainId, hash);
-    return settleByHash(run, depositId, hash);
+    // The wallet's own transaction is mined. An EXPIRED intent can no longer
+    // take it, but a fresh one can (one hash credits once).
+    if (read.unsettled === "EXPIRED") {
+      return settleHashOnFreshIntent(run, hash, (id) => hooks.onSubmitted(hash, id));
+    }
+    return settleByHash(run, depositId, hash, (id) => hooks.onSubmitted(hash, id));
   }
   if (hooks.previous?.kind === "signed") {
     const { depositId, raw } = hooks.previous;
@@ -318,7 +334,8 @@ export async function runDepositStep(
         settleDeposit(created.depositId, run.chainId, submission.rawTransaction),
       );
     }
-    return settleByHash(run, created.depositId, submission.transactionHash);
+    const hash = submission.transactionHash;
+    return settleByHash(run, created.depositId, hash, (id) => hooks.onSubmitted(hash, id));
   }
 
   const { transactionBytes } = await buildDepositTransaction({

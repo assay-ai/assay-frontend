@@ -182,6 +182,8 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
             onSubmitted: (hash, depositId) => {
               const explorerUrl = chain ? explorerTxUrl(chain, hash) : undefined;
               report({ stage: "submitted", data: { kind: "hash", hash, depositId } satisfies DepositAttempt, explorerUrl });
+              // The same hash moved to a fresh intent: track that one, not the old.
+              if (trackedId && trackedId !== `deposit:${depositId}`) pending.resolve(trackedId);
               trackedId = `deposit:${depositId}`;
               pending.track({
                 id: trackedId,
