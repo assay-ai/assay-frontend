@@ -411,4 +411,13 @@ describe("site-wide Report-Only policy", () => {
       connectCsp.completeHeaders(text.replace("  Cache-Control: public", `  ${SITE}: default-src *\n  Cache-Control: public`), {}, []),
     ).toThrow(/only \/\* may set it, not \/_next\/static\/\*/);
   });
+
+  it("the strict pages detach the looser /* framing and referrer headers, and the build fails without that", async () => {
+    const text = await headersFile();
+    for (const name of ["Content-Security-Policy", "X-Frame-Options", "Referrer-Policy"]) {
+      const detach = `  ! ${name}\n`;
+      expect(text.split(detach)).toHaveLength(csp.STRICT_PATHS.length + 1);
+      expect(() => connectCsp.completeHeaders(text.replace(detach, ""), {}, [])).toThrow(new RegExp(`/connect/\\*: needs exactly one "! ${name}"`));
+    }
+  });
 });

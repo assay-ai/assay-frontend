@@ -6,7 +6,10 @@
 # no report endpoint). `pnpm build` (scripts/connect-csp.js) adds the API and
 # MCP origins of the build's environment to its connect-src in out/_headers.
 # The strict pages below detach it (`! Content-Security-Policy-Report-Only`):
-# they keep only their own, enforced policy.
+# they keep only their own, enforced policy. They detach the looser framing
+# and referrer values of /* too (Content-Security-Policy frame-ancestors
+# 'self', X-Frame-Options SAMEORIGIN, Referrer-Policy), so each is sent once,
+# with the strict value.
 
 /*
   Content-Security-Policy: frame-ancestors 'self'
@@ -19,10 +22,11 @@
 
 # The consent and enable-paid pages (spec R-WEB-2, R-WEB-4): the strict
 # policy (scripts/csp-policy.js strictPolicy()), no framing at all and no
-# referrer. Cloudflare Pages joins these with the /* values by comma: two CSPs
-# are both enforced (frame-ancestors 'self' and 'none' allow nothing), a
-# repeated X-Frame-Options blocks framing, and the last Referrer-Policy token
-# wins. `pnpm build` (scripts/connect-csp.js) completes the policy in
+# referrer. Cloudflare Pages applies every matching block in order, each one
+# first dropping the headers it detaches (`!`), then adding its own; a header
+# an earlier block set is repeated (joined by comma), not replaced. So these
+# blocks detach the /* Content-Security-Policy, X-Frame-Options and
+# Referrer-Policy before setting the strict ones. `pnpm build` (scripts/connect-csp.js) completes the policy in
 # out/_headers with the hashes of each page's inline scripts and the API
 # origin: under /connect/* each page gets its own block with the full policy,
 # and /connect/* keeps fallbackPolicy() with every page's hashes for anything
@@ -39,6 +43,9 @@
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin-allow-popups
   ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
 
 /agents/enable-paid
   Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
@@ -46,6 +53,9 @@
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin-allow-popups
   ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
 
 # Content-hashed build assets never change under the same name.
 /_next/static/*
