@@ -7,7 +7,7 @@ const usd = (amount: string) => ({ amount, asset: "eip155:46630", decimals: 6 })
 
 describe("ruling sheet: what happens", () => {
   it("states the uphold split with what leaves the stake and what stays", () => {
-    const lines = rulingOutcome({ kind: "UPHOLD", total: usd("5000000"), agentBps: 6000, count: 1, signer: "Signed by the arbiter key" });
+    const lines = rulingOutcome({ kind: "UPHOLD", total: usd("5000000"), agentBps: 6000, platformBps: 3000, count: 1, signer: "Signed by the arbiter key" });
     expect(lines.map((l) => l.text)).toEqual([
       "$4.50 leaves the provider's stake: $3.00 to the agents who paid · $1.50 to the platform. $0.50 stays with the provider",
       "Final: it can't be disputed again",

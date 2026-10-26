@@ -201,7 +201,7 @@ describe("per-chain prices", () => {
 
 describe("stakeRuleSentence", () => {
   it("states the penalty rule as /why-list-here does: the promise, the sample, the daily cap", () => {
-    const text = stakeRuleSentence();
+    const text = stakeRuleSentence("10%");
     expect(text).toContain("fails more often than it promised");
     expect(text).toContain("400 checked calls");
     expect(text).toContain("10%");

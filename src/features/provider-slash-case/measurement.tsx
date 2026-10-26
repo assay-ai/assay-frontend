@@ -18,11 +18,12 @@ import { formatMoney } from "@/utils/money";
 
 import { presentArithmeticRow } from "./labels";
 import {
-  SLASH_AGENT_BPS,
-  SLASH_PLATFORM_BPS,
-  SLASH_SPLIT_SOURCE,
+  splitOfParams,
   splitPenalty,
 } from "./distribution";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import { UNKNOWN } from "@/libs/chain-terms";
+import { UtcTime } from "@/components/patterns/utc-time";
 
 /**
  * `dObK1`'s "The measurement" — the full derivation, ending in Distribution.
@@ -106,7 +107,12 @@ export function Measurement({ data }: { data: SlashProposalCaseDetail }) {
     valueTone: toneMap[row.tone],
   }));
 
-  const split = splitPenalty(data.proposal.penaltyAmount);
+  const { params: chainParams } = useChainTerms();
+  const shares = splitOfParams(chainParams);
+  const split = splitPenalty(data.proposal.penaltyAmount, shares);
+  const agentPercent = shares ? shares.agentBps / 100 : null;
+  const platformPercent = shares ? shares.platformBps / 100 : null;
+  const keptPercent = shares ? (10_000 - shares.agentBps - shares.platformBps) / 100 : null;
 
   return (
     <Panel>
@@ -142,36 +148,36 @@ export function Measurement({ data }: { data: SlashProposalCaseDetail }) {
               Distribution
             </span>
             <p className="min-w-0 flex-1 font-mono text-mono-13 text-01">
-              <span className="font-semibold">{formatMoney(split.agent)}</span>{" "}
+              <span className="font-semibold">{split ? formatMoney(split.agent) : UNKNOWN}</span>{" "}
               agents who bought from this binding
               <span className="text-03"> · </span>
               <span className="font-semibold">
-                {formatMoney(split.platform)}
+                {split ? formatMoney(split.platform) : UNKNOWN}
               </span>{" "}
               platform
               <span className="text-03"> · </span>
               <span className="font-semibold text-success-600">
-                {formatMoney(split.neverTaken)}
+                {split ? formatMoney(split.neverTaken) : UNKNOWN}
               </span>{" "}
               <span className="text-success-700">never taken from you</span>
             </p>
           </div>
           <p className="text-body-xs leading-[1.55] text-02">
-            {SLASH_AGENT_BPS / 100}% goes to the agents harmed and{" "}
-            {SLASH_PLATFORM_BPS / 100}% to the platform; the remaining{" "}
-            {(10_000 - SLASH_AGENT_BPS - SLASH_PLATFORM_BPS) / 100}% is not paid
+            {agentPercent ?? UNKNOWN}% goes to the agents harmed and{" "}
+            {platformPercent ?? UNKNOWN}% to the platform; the remaining{" "}
+            {keptPercent ?? UNKNOWN}% is not paid
             to anyone — it is never taken out of your stake, so a proposal of{" "}
             {formatMoney(data.proposal.penaltyAmount)} reduces your stake by{" "}
-            {formatMoney(split.taken)}. This is the split of the proposal as
+            {split ? formatMoney(split.taken) : UNKNOWN}. This is the split of the proposal as
             made. On chain the amount reserved for a penalty is what it takes,
             always in full: when today&rsquo;s penalty limit has no room, the
             penalty waits until it has, and is then paid in full.
           </p>
           <p className="text-body-xs leading-[1.55] text-02">
-            Split as published on {SLASH_SPLIT_SOURCE.readAt}. These
+            Split as read from the chain{chainParams?.readAt ? <> on <UtcTime value={chainParams.readAt} /></> : null}. These
             proportions are set on chain, inside bounds the program enforces on
             whoever holds the admin key — there is no waiting period on a
-            change, so this figure is a snapshot of the published split and not
+            change, so this figure is a snapshot of the current split and not
             a guarantee about the next one.
           </p>
         </div>

@@ -19,6 +19,7 @@ import { routes } from "@/libs/routes";
 import { listProviderCallDisputes, type CallDisputeState } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { OPEN_REPORTS_PAGE, providerQueries } from "@/features/provider-home/queries";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 /**
  * Bad-result reports — route `/provider/call-disputes`: buyers' reports about
@@ -33,6 +34,7 @@ const FILTERS: { id: "open" | "all"; label: string; state: CallDisputeState[] | 
 ];
 
 export default function ProviderReportsPage() {
+  const { terms: chainTerms } = useChainTerms();
   const [filter, setFilter] = React.useState<"open" | "all">("open");
   const names = useProviderToolNames();
   const now = useNow();
@@ -66,7 +68,7 @@ export default function ProviderReportsPage() {
               <li>{DISPUTE_COPY.reply} You can reply once.</li>
               <li>{DISPUTE_COPY.silent}</li>
               <li>{DISPUTE_COPY.decides}</li>
-              <li>A report filed during the 1-hour hold keeps the payment held until it is decided; if upheld, the buyer gets it back and you are not paid for that call.</li>
+              <li>A report filed during the {chainTerms.holdCompound} hold keeps the payment held until it is decided; if upheld, the buyer gets it back and you are not paid for that call.</li>
               <li>A report filed after the hold: the payment was already collected. If upheld, it counts against your listing&apos;s quality.</li>
             </ul>
           </details>

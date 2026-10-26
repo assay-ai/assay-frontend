@@ -16,7 +16,12 @@ import type { Money } from "@/interfaces";
 import type { SlashProposalCaseDetail } from "@/interfaces/provider-slash-cases";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import type { SlashStatusKey } from "@/libs/chains/evm/stake-slashes/status";
-import { splitPenalty } from "@/features/provider-slash-case/distribution";
+import {
+  recordedSplit,
+  splitPenalty,
+  type SlashDistribution,
+  type SlashSplit,
+} from "@/features/provider-slash-case/distribution";
 import { formatDate } from "@/libs/utc-time";
 
 export type PenaltyTab = "needs-action" | "disputed" | "closed";
@@ -51,6 +56,10 @@ export interface PenaltyRow {
   reserved: Money | null;
   /** What an executed penalty actually took. */
   applied: Money | null;
+  /** An executed penalty's split as the chain recorded it (`SlashExecuted`); never recomputed. */
+  recorded?: { agentAmount: string; platformAmount: string; providerAmount: string } | null;
+  /** The chain's current split (`GET /chains`), for a penalty not executed yet; `null` while unknown. */
+  split?: SlashSplit | null;
   proposedAt: string;
   /** On-chain `executableAt`: the dispute deadline while pending. */
   executableAt: string;
@@ -80,6 +89,8 @@ export function penaltyRowOf(
   asset: { decimals: number; symbol: string },
   index: AssayCaseIndex | null,
   nowSeconds: number,
+  /** The chain's split (`GET /chains`), for what a penalty not executed yet would take. */
+  split: SlashSplit | null = null,
 ): PenaltyRow {
   const id = row.requestId.toLowerCase();
   const money = (value: bigint): Money => ({ amount: value.toString(), asset: asset.symbol, decimals: asset.decimals });
@@ -101,6 +112,14 @@ export function penaltyRowOf(
     amount: money(row.penalty),
     reserved: row.reserved > 0n ? money(row.reserved) : null,
     applied: row.applied === null ? null : money(row.applied),
+    recorded: row.executedSplit
+      ? {
+          agentAmount: row.executedSplit.agentAmount.toString(),
+          platformAmount: row.executedSplit.platformAmount.toString(),
+          providerAmount: row.executedSplit.providerAmount.toString(),
+        }
+      : null,
+    split,
     proposedAt: iso(row.proposedAt) ?? new Date(0).toISOString(),
     executableAt: iso(row.executableAt) ?? new Date(0).toISOString(),
     disputedAt: iso(row.disputedAt),
@@ -177,9 +196,10 @@ export function penaltyTimeline(row: PenaltyRow): PenaltyTimelineStep[] {
 
 /**
  * What a provider loses: an executed penalty takes the agent's and the
- * platform's shares (60% + 30% under the current terms); the remaining 10%
- * is never taken. Split exactly as the program does (floors), see
- * `provider-slash-case/distribution.ts`.
+ * platform's shares (`slashAgentBps` + `slashPlatformBps` on chain); the rest
+ * is never taken. An executed record shows the split the chain recorded
+ * (`SlashExecuted`); otherwise it is split exactly as the program does
+ * (floors) with the chain's current bps, see `provider-slash-case/distribution.ts`.
  *
  * The basis is what was applied, else what the chain reserved (execution
  * applies exactly that), else the penalty. Null for a record that took nothing.
@@ -188,9 +208,18 @@ export function lossBasis(row: Pick<PenaltyRow, "applied" | "reserved" | "amount
   return row.applied ?? row.reserved ?? row.amount;
 }
 
-export function lossOf(row: Pick<PenaltyRow, "applied" | "reserved" | "amount" | "closedAs">): Money | null {
+type LossInput = Pick<PenaltyRow, "applied" | "reserved" | "amount" | "closedAs" | "recorded" | "split">;
+
+/** Where this penalty goes: as recorded when executed, else at the chain's split; `null` while unknown. */
+export function distributionOf(row: LossInput): SlashDistribution | null {
+  const basis = lossBasis(row);
+  if (row.closedAs === "executed" && row.recorded) return recordedSplit(row.recorded, basis);
+  return splitPenalty(basis, row.split ?? null);
+}
+
+export function lossOf(row: LossInput): Money | null {
   if (row.closedAs === "cancelled" || row.closedAs === "expired") return null;
-  return splitPenalty(lossBasis(row)).taken;
+  return distributionOf(row)?.taken ?? null;
 }
 
 export interface PenaltyCase {

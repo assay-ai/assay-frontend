@@ -431,10 +431,10 @@ describe("the next step for this operator", () => {
 
   it("splits the money by the chain's current terms", () => {
     // One split everywhere: 60% agents, 30% platform, 10% never taken (A6).
-    expect(penaltySplit(USD("28470000"), 6000)).toEqual({ agents: USD("17082000"), platform: USD("8541000"), neverTaken: USD("2847000") });
-    expect(penaltySplit(USD("1"), 6000)).toEqual({ agents: USD("0"), platform: USD("0"), neverTaken: USD("1") });
-    expect(penaltySplit(USD("100"), 8000)).toBeNull();
-    expect(penaltySplit(USD("x"), 6000)).toBeNull();
+    expect(penaltySplit(USD("28470000"), 6000, 3000)).toEqual({ agents: USD("17082000"), platform: USD("8541000"), neverTaken: USD("2847000") });
+    expect(penaltySplit(USD("1"), 6000, 3000)).toEqual({ agents: USD("0"), platform: USD("0"), neverTaken: USD("1") });
+    expect(penaltySplit(USD("100"), 8000, 3000)).toBeNull();
+    expect(penaltySplit(USD("x"), 6000, 3000)).toBeNull();
   });
 });
 

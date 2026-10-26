@@ -10,6 +10,7 @@ import "@/libs/demo/fixtures";
 import { demoSettledReceipt } from "@/libs/demo/fixtures-buyer";
 
 import ReceiptPage from "./page";
+import { WithChains } from "@/test/chain-fixture";
 
 /*
   The receipt page as a whole: one story from the headline down to the
@@ -33,7 +34,15 @@ function render(receipt: Receipt): string {
   client.setQueryData(["receipt", receipt.intentId], receipt);
   client.setQueryData(["receipt-evidence", receipt.intentId], null);
   client.setQueryData(["call-disputes", "buyer", "intent", receipt.intentId], { items: [] });
-  return text(renderToStaticMarkup(<QueryClientProvider client={client}><ReceiptPage /></QueryClientProvider>));
+  return text(
+    renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <WithChains>
+          <ReceiptPage />
+        </WithChains>
+      </QueryClientProvider>,
+    ),
+  );
 }
 
 /** The timeline panel's words: from its title to the details row. */

@@ -315,7 +315,7 @@ export default function OperatorCasePage() {
   // Ruling is neutral: Cancel and Uphold carry equal weight, each opening its sheet on the Arbiter.
   const ruling = next.kind === "action" && next.action === "rule";
   const primary = next.kind === "action" && !ruling ? actionFor(next.action, true) : undefined;
-  const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, split?.agentBps ?? null, true);
+  const reduction = stakeReduction(proposal.appliedAmount ?? proposal.penaltyAmount, split?.agentBps ?? null, split?.platformBps ?? null, true);
   const readOnlyRuling = facts.stage === "disputed" && !authority.rule;
   const restoration = showsRestoration(facts.stage, brief, facts.expired);
   const pendingActions = live.map((a) => a.action);
@@ -451,7 +451,7 @@ export default function OperatorCasePage() {
             {reduction && split && (facts.stage === "executed" || !MOVES_NOTHING.includes(facts.stage)) ? (
               <Fact
                 label={facts.stage === "executed" ? "Taken from the stake" : facts.stage === "upheld" ? "Taken from the stake when it executes" : "Taken from the stake if upheld"}
-                hint={reductionHint(split.agentBps, split.lastKnown ? split.readAt : null)}
+                hint={reductionHint(split.agentBps, split.platformBps, split.lastKnown ? split.readAt : null)}
               >
                 {formatMoney(reduction)}
               </Fact>
@@ -483,6 +483,7 @@ export default function OperatorCasePage() {
             penalty={proposal.appliedAmount ?? proposal.penaltyAmount}
             stage={facts.stage}
             agentBps={split?.agentBps ?? null}
+            platformBps={split?.platformBps ?? null}
             lastKnownAt={split?.lastKnown ? split.readAt : null}
           />
         </div>

@@ -1,9 +1,10 @@
 import Decimal from "decimal.js";
 
-import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
 import { estimatePenalty, exampleFailureRate } from "@/features/provider-penalties/estimate";
 import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import type { Money, PricingMode, ProviderStake, ProviderTermsSummary } from "@/interfaces";
+import type { ChainParams } from "@/interfaces/chain";
+import { percentText as bpsPercentText, UNKNOWN } from "@/libs/chain-terms";
 import { formatMoney } from "@/utils/money";
 
 /**
@@ -13,9 +14,10 @@ import { formatMoney } from "@/utils/money";
  * Nothing here types a platform constant in as fact. The stake rule
  * `max(floor, multiplier × price)` is read out of any binding's derivation
  * line on `GET /providers/me/stake`, and the take rate out of the published
- * commercial terms; when neither is on the wire the current published terms
- * (floor $50, 1000 × price, 10%) are used and the caller labels them
- * "current terms".
+ * commercial terms; when neither is on the wire, the chain's own values from
+ * `GET /chains` (`minimumStake`, `takeRateBps`) are used, and until those
+ * arrive the floor and the rate are unknown ("—"), never a typed-in number.
+ * The 1000 × price multiple is platform policy, not a chain value.
  */
 
 export type PriceChoice = "free" | "free-paid" | "paid";
@@ -49,33 +51,61 @@ export const EXAMPLE_WINDOW_CALLS = 1000;
  * listing or without a price or promise. The formula is the backend's
  * (`estimatePenalty`), and the caps are the stake rule's.
  */
-export function penaltyExample(price: Money | null, mode: PricingMode, declaredRate: number | null): string | null {
+export function penaltyExample(
+  price: Money | null,
+  mode: PricingMode,
+  declaredRate: number | null,
+  params: ChainParams | null = null,
+): string | null {
   if (mode === "FREE" || !price || declaredRate === null) return null;
   const observed = exampleFailureRate(declaredRate);
   const estimate = estimatePenalty({ price, calls: EXAMPLE_WINDOW_CALLS, observedRate: observed, declaredRate });
   return (
     `Example: at ${percentText(observed)}% failures in a window of ${EXAMPLE_WINDOW_CALLS.toLocaleString("en-US")} paid calls, ` +
     `up to about ${formatMoney(estimate.penalty)} of your stake could be taken. The chain never lets penalties take more ` +
-    `than ${DAILY_CAP_PERCENT}% of your stake in any 24 hours. Within your promise, or below ${MIN_CHECKED_CALLS} checked ` +
+    `than ${bpsPercentText(params?.slashCapBps)} of your stake in any 24 hours. Within your promise, or below ${MIN_CHECKED_CALLS} checked ` +
     `calls in a window, nothing is taken.`
   );
 }
 
 export interface StakeRule {
-  floor: Decimal;
+  /** The minimum for any paid tool, in dollars; `null` until the server or the chain said. */
+  floor: Decimal | null;
   multiplier: Decimal;
-  /** False: the published defaults, not read from the wire. */
+  /** False: the floor is not known yet (no derivation, no chain params). */
   fromServer: boolean;
 }
 
 const DERIVATION = /max\(floor\s+([\d.]+)\s*,\s*([\d.]+)\s*[×x]\s*([\d.]+)\)/i;
+/** Platform policy (`PROVIDER_MINIMUM_STAKE_MULTIPLE`), not a chain value. */
+const STAKE_PRICE_MULTIPLE = new Decimal(1000);
 
-export function stakeRuleOf(stake: ProviderStake | null | undefined): StakeRule {
+/**
+ * The stake rule: a binding's derivation line first, else the chain's
+ * `minimumStake` (`GET /chains`), else an unknown floor.
+ */
+export function stakeRuleOf(
+  stake: ProviderStake | null | undefined,
+  params: ChainParams | null = null,
+  decimals = 6,
+): StakeRule {
   for (const item of stake?.requirement ?? []) {
     const match = DERIVATION.exec(item.derivation ?? "");
     if (match) return { floor: new Decimal(match[1]!), multiplier: new Decimal(match[2]!), fromServer: true };
   }
-  return { floor: new Decimal(50), multiplier: new Decimal(1000), fromServer: false };
+  if (params?.minimumStake && /^\d+$/.test(params.minimumStake)) {
+    return {
+      floor: new Decimal(params.minimumStake).div(new Decimal(10).pow(decimals)),
+      multiplier: STAKE_PRICE_MULTIPLE,
+      fromServer: true,
+    };
+  }
+  return { floor: null, multiplier: STAKE_PRICE_MULTIPLE, fromServer: false };
+}
+
+/** The floor as `$50`, or "—" while unknown. */
+export function stakeFloorText(rule: StakeRule): string {
+  return rule.floor ? `$${rule.floor.toFixed(0)}` : UNKNOWN;
 }
 
 function major(money: Money): Decimal {
@@ -90,9 +120,9 @@ function fromMajor(value: Decimal, like: { asset: string; decimals: number }): M
   };
 }
 
-/** The stake a paid listing at `price` needs on its own, or null for a free one. */
+/** The stake a paid listing at `price` needs on its own, or null for a free one (or an unknown floor). */
 export function stakeNeededFor(price: Money | null, mode: PricingMode, rule: StakeRule): Money | null {
-  if (mode === "FREE" || !price || major(price).lte(0)) return null;
+  if (mode === "FREE" || !price || major(price).lte(0) || !rule.floor) return null;
   return fromMajor(Decimal.max(rule.floor, rule.multiplier.mul(major(price))), price);
 }
 
@@ -127,8 +157,10 @@ export function stakeEffectOf(input: {
   mode: PricingMode;
   stake: ProviderStake | null | undefined;
   staked: Money | null | undefined;
+  /** The chain's params, for the floor when no derivation line is on the wire. */
+  chainParams?: ChainParams | null;
 }): StakeEffect {
-  const rule = stakeRuleOf(input.stake);
+  const rule = stakeRuleOf(input.stake, input.chainParams ?? null, input.price?.decimals ?? input.binding.price.decimals);
   const { binding } = input;
   const before = totalStakeWith(stakeNeededFor(binding.price, binding.pricingMode, rule), input.stake, binding.id);
   const after = totalStakeWith(stakeNeededFor(input.price, input.mode, rule), input.stake, binding.id);
@@ -138,20 +170,25 @@ export function stakeEffectOf(input: {
 }
 
 export interface TakeRate {
-  /** e.g. 0.1 for 10%. */
-  rate: Decimal;
+  /** e.g. 0.1 for 10%; `null` until the terms or the chain said. */
+  rate: Decimal | null;
   fromServer: boolean;
 }
 
-export function takeRateOf(terms: ProviderTermsSummary | null | undefined): TakeRate {
+/** The published terms' take rate first, else the chain's `takeRateBps`, else unknown. */
+export function takeRateOf(terms: ProviderTermsSummary | null | undefined, params: ChainParams | null = null): TakeRate {
   const term = terms?.commercialTerms?.find((entry) => /take.?rate|fee/i.test(entry.key));
   const match = term ? /([\d.]+)\s*%/.exec(term.value) : null;
   if (match) return { rate: new Decimal(match[1]!).div(100), fromServer: true };
-  return { rate: new Decimal("0.1"), fromServer: false };
+  if (params?.takeRateBps !== null && params?.takeRateBps !== undefined) {
+    return { rate: new Decimal(params.takeRateBps).div(10_000), fromServer: true };
+  }
+  return { rate: null, fromServer: false };
 }
 
-/** What the provider receives per paid call. */
-export function providerShare(price: Money, take: TakeRate): Money {
+/** What the provider receives per paid call, or `null` while the rate is unknown. */
+export function providerShare(price: Money, take: TakeRate): Money | null {
+  if (!take.rate) return null;
   const share = major(price).mul(new Decimal(1).minus(take.rate));
   return {
     amount: share.mul(new Decimal(10).pow(price.decimals)).toDecimalPlaces(0, Decimal.ROUND_DOWN).toFixed(0),
@@ -335,7 +372,7 @@ export function stakeSummary({
 }): StakeSummary {
   const fmt = (value: Money) => formatMoney(value);
   const multiplier = rule.multiplier.toNumber().toLocaleString("en-US");
-  const floorWins = major(needed).eq(rule.floor) && rule.multiplier.mul(major(price)).lt(rule.floor);
+  const floorWins = rule.floor !== null && major(needed).eq(rule.floor) && rule.multiplier.mul(major(price)).lt(rule.floor);
   const perTool = floorWins
     ? `This tool alone needs ${fmt(needed)} (the minimum for any paid tool).`
     : `This tool alone needs ${fmt(needed)} (${multiplier} × ${formatMoney(price, { decimals: 6 })}).`;

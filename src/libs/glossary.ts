@@ -16,8 +16,8 @@
  * screens use, so they cannot drift from them.
  */
 
-import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
 import { PENALTY_MULTIPLIER } from "@/features/provider-penalties/estimate";
+import { type ChainTerms, fillTerms } from "@/libs/chain-terms";
 import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 
 /**
@@ -32,13 +32,12 @@ const EXAMPLE_PENALTY = (
 ).toFixed(2);
 const pct = (rate: number) => `${Math.round(rate * 100)}%`;
 
-/**
- * How long each paid call's money is held before the provider can collect it,
- * so a buyer can report a bad result: the backend's `collectHoldSeconds`
- * (3600 s by default). It decides when a payment is final, so the stake is
- * the only money at risk only after it.
+/*
+ * The on-chain numbers in these definitions (the daily slash cap, the report
+ * window) are placeholders: `{{dailyCapPercent}}`, `{{holdWindow}}`. `<Term>`
+ * and every other reader fills them from `GET /chains` with `fillTerms`
+ * (`libs/chain-terms.ts`), so no definition keeps a copy of a chain value.
  */
-export const REPORT_WINDOW = "1 hour";
 
 export const GLOSSARY = {
   escrow: {
@@ -91,7 +90,7 @@ export const GLOSSARY = {
   "refundable-until": {
     term: "Refundable until",
     definition:
-      "The hour after a call is charged. Report a bad result before this time (shown in UTC) and the payment is held back until the report is decided.",
+      "The {{holdWindow}} after a call is charged. Report a bad result before this time (shown in UTC) and the payment is held back until the report is decided.",
   },
   report: {
     term: "Report a bad result (a dispute)",
@@ -114,15 +113,15 @@ export const GLOSSARY = {
   },
   "stake-rule": {
     term: "Stake rule",
-    definition: `A provider that fails clearly more often than it promised (beyond a margin for chance), over at least ${MIN_CHECKED_CALLS} checked calls in a window, loses part of its stake: never more than ${DAILY_CAP_PERCENT}% of it in any 24 hours, and each penalty is limited to a maximum set on chain. Part of it goes to the buyers it served badly. Within its promise, or below ${MIN_CHECKED_CALLS} checked calls, nothing is taken.`,
+    definition: `A provider that fails clearly more often than it promised (beyond a margin for chance), over at least ${MIN_CHECKED_CALLS} checked calls in a window, loses part of its stake: never more than {{dailyCapPercent}} of it in any 24 hours, and each penalty is limited to a maximum set on chain. Part of it goes to the buyers it served badly. Within its promise, or below ${MIN_CHECKED_CALLS} checked calls, nothing is taken.`,
   },
   "payout-final": {
     term: "When a payment is final",
-    definition: `Each paid call's payment becomes the provider's ${REPORT_WINDOW} after the call, once a buyer can no longer report a bad result, and a call that fails because of the provider (for example, its stake fell below the minimum) is not paid. After that, a payout is never clawed back, and only the provider's stake is at risk.`,
+    definition: `Each paid call's payment becomes the provider's {{holdWindow}} after the call, once a buyer can no longer report a bad result, and a call that fails because of the provider (for example, its stake fell below the minimum) is not paid. After that, a payout is never clawed back, and only the provider's stake is at risk.`,
   },
   "penalty-example": {
     term: "Penalty example",
-    definition: `A tool priced $${EXAMPLE.price.toFixed(2)} that promised at most ${pct(EXAMPLE.promised)} failures fails ${pct(EXAMPLE.observed)} of ${EXAMPLE.calls.toLocaleString("en-US")} paid calls in a window: ${EXAMPLE.calls.toLocaleString("en-US")} × $${EXAMPLE.price.toFixed(2)} × (${pct(EXAMPLE.observed)} − ${pct(EXAMPLE.promised)}) × ${PENALTY_MULTIPLIER} = up to about $${EXAMPLE_PENALTY} of its stake. 12% is clearly above 3% over that many calls, so the margin for chance does not save it; the penalty is still never more than ${DAILY_CAP_PERCENT}% of the stake in any 24 hours, nor more than the maximum set on chain.`,
+    definition: `A tool priced $${EXAMPLE.price.toFixed(2)} that promised at most ${pct(EXAMPLE.promised)} failures fails ${pct(EXAMPLE.observed)} of ${EXAMPLE.calls.toLocaleString("en-US")} paid calls in a window: ${EXAMPLE.calls.toLocaleString("en-US")} × $${EXAMPLE.price.toFixed(2)} × (${pct(EXAMPLE.observed)} − ${pct(EXAMPLE.promised)}) × ${PENALTY_MULTIPLIER} = up to about $${EXAMPLE_PENALTY} of its stake. 12% is clearly above 3% over that many calls, so the margin for chance does not save it; the penalty is still never more than {{dailyCapPercent}} of the stake in any 24 hours, nor more than the maximum set on chain.`,
   },
   spent: {
     term: "Spent",
@@ -204,3 +203,8 @@ export type GlossaryKey = keyof typeof GLOSSARY;
 
 /** Every key, for tests and for a "glossary" listing. */
 export const GLOSSARY_KEYS = Object.keys(GLOSSARY) as GlossaryKey[];
+
+/** A definition with the chain's terms filled in (see the placeholders above). */
+export function definitionOf(key: GlossaryKey, terms: ChainTerms): string {
+  return fillTerms(GLOSSARY[key].definition, terms);
+}

@@ -6,7 +6,9 @@ import { ConfirmSheet } from "@/components/patterns/confirm-sheet";
 import { Term } from "@/components/patterns/term";
 import { WINDOW_WORDS } from "@/features/provider-sla/window";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
+import { useChainTerms } from "@/hooks/useChainTerms";
 import type { Money, ProviderStake, ToolBindingDetail } from "@/interfaces";
+import type { ChainParams } from "@/interfaces/chain";
 import { ApiError } from "@/libs/ApiClient";
 import { plainApiError, plainError } from "@/libs/plain-language";
 import { formatMoney, toDecimal } from "@/utils/money";
@@ -34,6 +36,8 @@ export function resumeFacts(
   binding: Pick<ToolBindingDetail, "id" | "pricingMode" | "price" | "slaFailureRate">,
   stake: ProviderStake | null,
   staked: Money | null,
+  /** The chain's params: the floor when no derivation line is on the wire. */
+  params: ChainParams | null = null,
 ): ResumeFacts {
   const free = binding.pricingMode === "FREE";
   const rows = [
@@ -44,7 +48,7 @@ export function resumeFacts(
     rows.push({ label: "Stake", value: "None needed: a free listing puts no money at risk" });
     return { rows, shortfall: null, free };
   }
-  const needed = stakeNeededFor(binding.price, binding.pricingMode, stakeRuleOf(stake));
+  const needed = stakeNeededFor(binding.price, binding.pricingMode, stakeRuleOf(stake, params, binding.price.decimals));
   const total = totalStakeWith(needed, stake, binding.id);
   if (needed) rows.push({ label: "Stake it needs", value: formatMoney(needed, { decimals: 2 }) });
   if (total && needed && total.amount !== needed.amount) {
@@ -76,7 +80,8 @@ export function ResumeSheet({
   onConfirm: () => Promise<unknown>;
 }) {
   const stake = useStakeStatus();
-  const facts = resumeFacts(binding, stake.stake, stake.staked);
+  const { params } = useChainTerms();
+  const facts = resumeFacts(binding, stake.stake, stake.staked, params);
   return (
     <ConfirmSheet
       open={open}

@@ -31,6 +31,7 @@ import {
   type DisputeStatusView,
   type ReportWindowView,
 } from "./model";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 /**
  * The parts of "Report a bad result" every side shares: the status chip,
@@ -47,7 +48,8 @@ export function DisputeChip({ view }: { view: DisputeStatusView }) {
 
 /** The clock in the 40 px-friendly stepper: reported, reply, decision, refund. */
 export function DisputeTimeline({ dispute, side, now, onElapsed }: { dispute: CallDispute; side: "buyer" | "provider" | "operator"; now: number; onElapsed?: () => void }) {
-  return <StatusTimeline steps={disputeTimeline(dispute, now, side)} label="Report status" alwaysDay onElapsed={onElapsed} />;
+  const { terms } = useChainTerms();
+  return <StatusTimeline steps={disputeTimeline(dispute, now, side, terms.holdCompound)} label="Report status" alwaysDay onElapsed={onElapsed} />;
 }
 
 function pretty(value: unknown): string {

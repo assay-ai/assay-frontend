@@ -17,7 +17,7 @@ import {
   escrowCanDelegate,
   findDelegation,
   MAX_DELEGATION_DAYS,
-  MIN_VALID_UNTIL_LEAD_SECONDS,
+  minValidUntilLeadSeconds,
   parseDelegationForm,
   serverNowSeconds,
   supportsDelegation,
@@ -342,31 +342,43 @@ describe("keeping the current expiry", () => {
     expect(parsed.ok && parsed.body.validUntil).toBe(String(NOW + 10 * 86_400));
   });
 
-  it("refuses to keep an expiry closer than the D-21 floor (11100 s + margin)", () => {
+  // The chain's tighten delay, as `GET /chains` serves it (D-24: 3 h).
+  const TIGHTEN = 10_800;
+  const LEAD = minValidUntilLeadSeconds(TIGHTEN)!;
+
+  it("refuses to keep an expiry closer than the D-21 floor (tighten delay + 300 s + margin)", () => {
     // Past the old one-hour floor, but inside the three hours (D-24) after the request's deadline.
     const soon = NOW + 11_100;
-    const form = { ...editDelegationForm(grant, NOW), keepExpiry: true };
-    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, soon);
+    const form = { ...editDelegationForm(grant, NOW, TIGHTEN), keepExpiry: true };
+    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, soon, TIGHTEN);
     expect(parsed.ok).toBe(false);
     expect(!parsed.ok && parsed.errors.validDays).toMatch(/less than about 3 hours 7 minutes/);
     // And a grant that close to its end does not start on "keep".
     expect(
-      editDelegationForm({ ...grant, validUntil: new Date(soon * 1000).toISOString() }, NOW)
+      editDelegationForm({ ...grant, validUntil: new Date(soon * 1000).toISOString() }, NOW, TIGHTEN)
         .keepExpiry,
     ).toBe(false);
   });
 
   it("keeps an expiry right at the floor", () => {
-    const edge = NOW + MIN_VALID_UNTIL_LEAD_SECONDS;
-    const form = { ...editDelegationForm(grant, NOW), keepExpiry: true };
-    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, edge);
+    const edge = NOW + LEAD;
+    const form = { ...editDelegationForm(grant, NOW, TIGHTEN), keepExpiry: true };
+    const parsed = parseDelegationForm(form, ESCROW, DELEGATE, NOW, edge, TIGHTEN);
     expect(parsed.ok && parsed.body.validUntil).toBe(String(edge));
     expect(
-      editDelegationForm({ ...grant, validUntil: new Date(edge * 1000).toISOString() }, NOW)
+      editDelegationForm({ ...grant, validUntil: new Date(edge * 1000).toISOString() }, NOW, TIGHTEN)
         .keepExpiry,
     ).toBe(true);
-    expect(MIN_VALID_UNTIL_LEAD_SECONDS).toBeGreaterThan(11_100); // D-24: 3 h tighten delay + 300 s deadline
-    expect(MIN_VALID_UNTIL_LEAD_SECONDS).toBeLessThanOrEqual(11_100 + 300);
+    expect(LEAD).toBeGreaterThan(11_100); // D-24: 3 h tighten delay + 300 s deadline
+    expect(LEAD).toBeLessThanOrEqual(11_100 + 300);
+  });
+
+  it("follows the chain's tighten delay, and leaves the floor to the backend while it is unknown", () => {
+    expect(minValidUntilLeadSeconds(3_600)).toBe(3_600 + 420);
+    expect(minValidUntilLeadSeconds(null)).toBeNull();
+    const soon = NOW + 11_100;
+    const form = { ...editDelegationForm(grant, NOW), keepExpiry: true };
+    expect(parseDelegationForm(form, ESCROW, DELEGATE, NOW, soon).ok).toBe(true);
   });
 });
 
@@ -384,6 +396,7 @@ describe("delegationInvalidText", () => {
   it("says the expiry is too soon for DelegateValidUntilInvalid", () => {
     const text = delegationInvalidText(
       refusal("DelegateValidUntilInvalid — validUntil must be at least 1800004200"),
+      10_800,
     );
     expect(text).toMatch(/expiry is too soon/);
     expect(text).toMatch(/3 hours 7 minutes/);

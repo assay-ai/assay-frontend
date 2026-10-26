@@ -12,10 +12,11 @@
 export const PROVIDER_REPLY_HOURS = 24;
 /** "An operator decides within 72 hours." */
 export const DECISION_HOURS = 72;
-/** "The 1-hour hold": a charged call's payment is held this long after it settles (the demo's receipts use it too). */
-export const DISPUTE_HOLD_MINUTES = 60;
-/** The on-chain safety timeout, named in secondary text only. */
-export const HELD_TIMEOUT_DAYS = 7;
+/*
+ * The dispute hold and the on-chain safety timeout are chain values: they are
+ * read from `GET /chains` (`collectHoldSeconds`, `heldTimeoutSeconds`) through
+ * `libs/chain-terms.ts`, never kept here.
+ */
 /** "You can report up to 20 calls in 24 hours" (fewer for a buyer whose reports are mostly rejected). */
 export const REPORTS_PER_DAY = 20;
 /** A UI choice, not a backend rule: a takedown waiting for its second operator reads as urgent this close to its confirm-by. */

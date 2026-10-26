@@ -15,6 +15,8 @@ import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 
 import { InboxItem, inboxView } from "./_components/inbox-item";
 import type { NoticeContext } from "./_components/notice-view";
+import { splitOfParams } from "@/features/provider-slash-case/distribution";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 /**
  * Inbox — what needs a decision, then what Assay told you about your tools.
@@ -46,10 +48,14 @@ export default function ProviderInboxPage() {
   // penalties cancelled for one reason.
   const names = useProviderToolNames();
   const bindings = useProviderBindings();
+  const chainParams = useChainTerms().params;
   const ctx: NoticeContext = React.useMemo(() => {
     const byId = new Map((bindings.data?.items ?? []).map((binding) => [binding.id, binding.toolId]));
-    return { toolName: (bindingId) => (bindingId ? names.toolName(byId.get(bindingId)) : null) };
-  }, [bindings.data, names]);
+    return {
+      toolName: (bindingId) => (bindingId ? names.toolName(byId.get(bindingId)) : null),
+      split: splitOfParams(chainParams),
+    };
+  }, [bindings.data, names, chainParams]);
   const shown = collapseNotices(
     items.map((item) => ({ ...item, view: inboxView(item, ctx) })),
     (item) => item.view.groupKey,

@@ -385,6 +385,7 @@ export function agentPaySteps(input: AgentPayStepsInput): WalletStep[] {
           addressOfAccount(delegateAccount!),
           expiry ? Math.floor(Date.now() / 1000) : nowSeconds,
           expiry?.validUntil,
+          money.chain?.params?.tightenDelaySeconds ?? null,
         );
         if (!parsed.ok) throw new Error(Object.values(parsed.errors)[0] ?? "These limits cannot be used.");
         const intent = await createDelegateIntent(parsed.body);

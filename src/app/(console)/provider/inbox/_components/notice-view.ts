@@ -1,5 +1,5 @@
 import { penaltyMoney } from "@/features/provider-penalties/money";
-import { splitPenalty } from "@/features/provider-slash-case/distribution";
+import { recordedSplit, splitPenalty, type SlashSplit } from "@/features/provider-slash-case/distribution";
 import type { Money } from "@/interfaces";
 import { plainRuleCode } from "@/libs/plain-language";
 import { routes } from "@/libs/routes";
@@ -29,6 +29,8 @@ export interface NoticeContext {
   toolName: (bindingId: string | null | undefined) => string | null;
   /** Clock, for "tomorrow 14:23 UTC" and for deadlines already past; injectable for tests. */
   now?: number;
+  /** The chain's current split (`GET /chains`), for a notice that does not carry the recorded one. */
+  split?: SlashSplit | null;
 }
 
 export interface NoticeView {
@@ -175,7 +177,32 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
     case "provider.slash_executed": {
       const applied = amount(p, "applied");
       if (!applied) return stored;
-      const split = splitPenalty(applied);
+      // The split the chain recorded when the notice carries it; else the chain's current one.
+      const agentAmount = amount(p, "agentAmount");
+      const platformAmount = amount(p, "platformAmount");
+      const split =
+        agentAmount && platformAmount && BigInt(agentAmount.amount) + BigInt(platformAmount.amount) <= BigInt(applied.amount)
+          ? recordedSplit(
+              {
+                agentAmount: agentAmount.amount,
+                platformAmount: platformAmount.amount,
+                providerAmount: (
+                  BigInt(applied.amount) -
+                  BigInt(agentAmount.amount) -
+                  BigInt(platformAmount.amount)
+                ).toString(),
+              },
+              applied,
+            )
+          : splitPenalty(applied, ctx.split ?? null);
+      if (!split) {
+        return {
+          title: `${penaltyMoney(applied)} penalty${on(tool)} was executed`,
+          body: "Part of every penalty is never taken; the penalty page shows what left your stake and where it went.",
+          target: null,
+          groupKey: null,
+        };
+      }
       return {
         title: `${penaltyMoney(applied)} penalty${on(tool)} was executed`,
         body:

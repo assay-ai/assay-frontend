@@ -14,6 +14,7 @@ import { PrivySessionBridge } from "@/providers/PrivySessionBridge";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createAppQueryClient } from "@/providers/query-client";
+import { ChainListContext } from "@/hooks/useChainTerms";
 import { useChains } from "@/hooks/useChains";
 
 interface PrivyShellProps {
@@ -228,7 +229,11 @@ function ChainsGate({ children }: { children: React.ReactNode }) {
       </div>
     );
   }
-  return <PrivyShell chains={result.chains}>{children}</PrivyShell>;
+  return (
+    <ChainListContext.Provider value={result.chains}>
+      <PrivyShell chains={result.chains}>{children}</PrivyShell>
+    </ChainListContext.Provider>
+  );
 }
 
 export function Providers({ children }: { children: React.ReactNode }) {

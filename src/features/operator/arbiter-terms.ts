@@ -18,7 +18,7 @@ import { operatorQueries } from "@/features/operator/queries";
 const KEY = "assay.operator.arbiter-terms.v1";
 
 interface Kept {
-  terms: Pick<ArbiterTerms, "slashAgentBps">;
+  terms: Pick<ArbiterTerms, "slashAgentBps" | "slashPlatformBps">;
   readAt: number;
 }
 
@@ -50,9 +50,15 @@ export function lastKnownSplit(chainId: string, now: number = Date.now()): Kept 
 }
 
 /** Keep a successful read. Never throws. */
-export function rememberSplit(chainId: string, terms: Pick<ArbiterTerms, "slashAgentBps">, readAt: number): void {
+export function rememberSplit(chainId: string, terms: Pick<ArbiterTerms, "slashAgentBps" | "slashPlatformBps">, readAt: number): void {
   try {
-    window.localStorage.setItem(KEY, JSON.stringify({ ...readAll(), [chainId]: { terms: { slashAgentBps: terms.slashAgentBps }, readAt } }));
+    window.localStorage.setItem(
+      KEY,
+      JSON.stringify({
+        ...readAll(),
+        [chainId]: { terms: { slashAgentBps: terms.slashAgentBps, slashPlatformBps: terms.slashPlatformBps }, readAt },
+      }),
+    );
   } catch {
     // A private window: the split is simply not drawn when the chain can't be read.
   }
@@ -60,6 +66,8 @@ export function rememberSplit(chainId: string, terms: Pick<ArbiterTerms, "slashA
 
 export interface SplitTerms {
   agentBps: number;
+  /** The treasury's share (`slashPlatformBps`); `null` when the read did not carry it. */
+  platformBps: number | null;
   /** When it was read (ms). */
   readAt: number;
   /** True when the chain could not be read now and this is the last read. */
@@ -67,9 +75,16 @@ export interface SplitTerms {
 }
 
 /** The split to draw: the live read, else the last one kept, else null. Pure. */
-export function splitTerms(live: { data?: Pick<ArbiterTerms, "slashAgentBps">; dataUpdatedAt: number; isError: boolean }, kept: Kept | null): SplitTerms | null {
-  if (live.data) return { agentBps: live.data.slashAgentBps, readAt: live.dataUpdatedAt, lastKnown: false };
-  if (live.isError && kept) return { agentBps: kept.terms.slashAgentBps, readAt: kept.readAt, lastKnown: true };
+export function splitTerms(
+  live: { data?: Pick<ArbiterTerms, "slashAgentBps" | "slashPlatformBps">; dataUpdatedAt: number; isError: boolean },
+  kept: Kept | null,
+): SplitTerms | null {
+  if (live.data) {
+    return { agentBps: live.data.slashAgentBps, platformBps: live.data.slashPlatformBps ?? null, readAt: live.dataUpdatedAt, lastKnown: false };
+  }
+  if (live.isError && kept) {
+    return { agentBps: kept.terms.slashAgentBps, platformBps: kept.terms.slashPlatformBps ?? null, readAt: kept.readAt, lastKnown: true };
+  }
   return null;
 }
 

@@ -1,5 +1,4 @@
 import type { Money } from "@/interfaces";
-import { DAILY_CAP_PERCENT } from "@/features/explorer/provider-economics";
 import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import { toDecimal, formatDecimal } from "@/utils/money";
 
@@ -158,10 +157,10 @@ export function failsOften(quality: { measuredCalls: number; failedCalls: number
  * loses stake only for failing more often than it promised, judged over a
  * full window, and never more than the daily cap.
  */
-export function stakeRuleSentence(): string {
+export function stakeRuleSentence(dailyCapPercent: string): string {
   return (
     `A provider that fails more often than it promised, over at least ${MIN_CHECKED_CALLS} checked calls in a window, ` +
-    `loses part of its stake (never more than ${DAILY_CAP_PERCENT}% of it in any 24 hours), and part of that goes to the buyers it served badly.`
+    `loses part of its stake (never more than ${dailyCapPercent} of it in any 24 hours), and part of that goes to the buyers it served badly.`
   );
 }
 

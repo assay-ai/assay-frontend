@@ -18,6 +18,7 @@ import { ExploreNav } from "./explore-nav";
 import { formatPrice, stakeLines, type ChainStake } from "./format";
 import { useCatalogue, type ProviderRow } from "./use-catalogue";
 import { routes } from "@/libs/routes";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 /**
  * Providers explorer.
@@ -212,6 +213,7 @@ export function ProviderCard({
 }
 
 export function ProvidersView() {
+  const { terms: chainTerms } = useChainTerms();
   const { providers, tools, isPending, isError, error, callsWindow } = useCatalogue();
   const chainName = useChainName();
   const [query, setQuery] = React.useState("");
@@ -295,7 +297,7 @@ export function ProvidersView() {
         <Info aria-hidden="true" className="mt-0.5 size-[15px] shrink-0 text-03" />
         <p className="text-body-13 text-02" data-testid="providers-stake-rule">
           Anyone can register and list a tool, and a provider stakes before serving paid calls.{" "}
-          {stakeRuleSentence()} The verified label is an identity check, not a gate: it tells you who
+          {stakeRuleSentence(chainTerms.dailyCapPercent)} The verified label is an identity check, not a gate: it tells you who
           you are buying from, not whether their results are good. The failure rate does that.
         </p>
       </div>

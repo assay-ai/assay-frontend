@@ -34,6 +34,7 @@ import {
   withdrawStateOf,
 } from "./withdraw-state";
 import { providerQueries } from "@/features/provider-home/queries";
+import { useChainTerms } from "@/hooks/useChainTerms";
 
 /**
  * "Withdraw stake": one sheet for both halves of getting stake back.
@@ -58,6 +59,7 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
   const names = useProviderToolNames();
   const queryClient = useQueryClient();
   const entry = stakeActionChain(status.stake ?? undefined);
+  const { params: chainParams } = useChainTerms(entry?.chainId);
   const state = withdrawStateOf(entry);
   const decimals = state.staked?.decimals ?? status.required?.decimals ?? 6;
 
@@ -87,9 +89,10 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
       ? toolsPausedAt(plan, BigInt(state.staked.amount) - BigInt(parsed.atomic ?? "0"))
       : [];
   const pausesTools = pausing.length > 0;
-  const waiting = waitingPeriodOf(state.periodMs, registration.data?.terms);
+  const waiting = waitingPeriodOf(state.periodMs, registration.data?.terms, chainParams?.unbondingPeriodSeconds);
   const periodKnown = waiting.exact;
-  const maturesAt = availableAfterRequest(state) ?? new Date(Date.now() + waiting.ms).toISOString();
+  const maturesAt =
+    availableAfterRequest(state) ?? (waiting.ms !== null ? new Date(Date.now() + waiting.ms).toISOString() : null);
   const blocker = walletBlocker(wallet);
 
   const ready = state.phase === "ready" && state.unbonding;

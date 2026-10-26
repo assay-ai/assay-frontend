@@ -76,6 +76,54 @@ export interface Chain {
    * Refuse the chain by name; never dial an empty string.
    */
   publicRpcUrl?: string;
+  /** The settlement contracts of this chain. Absent on a chain with none (Solana). */
+  contracts?: ChainContracts;
+  /**
+   * The parameters the settlement contracts hold, as the backend last read
+   * them (`ChainParamsDto`). The chain is the source of truth: every screen
+   * renders these through `libs/chain-terms.ts` and never a copy of its own.
+   * Absent on a chain with none.
+   */
+  params?: ChainParams;
+}
+
+export interface ChainContracts {
+  config: string;
+  stake: string;
+  escrow: string;
+  asset: string;
+}
+
+/**
+ * `ChainParamsDto` from assay-backend `src/modules/chains/dto/get-chains.dto.ts`.
+ * Amounts are atomic units of the settlement asset (scale `Chain.decimals`).
+ * `null` is "not known yet": render "—", never a guess.
+ */
+export interface ChainParams {
+  /** `chain`: read from the contracts. `config`: the backend could not read them yet. */
+  source: "chain" | "config";
+  readAt: string | null;
+  minimumStake: string | null;
+  /** The most one attestation (one record) can slash. */
+  penaltyAmount: string | null;
+  takeRateBps: number | null;
+  slashAgentBps: number | null;
+  slashPlatformBps: number | null;
+  /** Most of the stake at risk slashed per provider per rolling 24 h. */
+  slashCapBps: number | null;
+  unbondingPeriodSeconds: number | null;
+  slashDelaySeconds: number | null;
+  /** The delay a provider actually gets: the larger of the chain's and the platform's floor. */
+  effectiveSlashDelaySeconds: number;
+  /** The dispute hold on every paid call. */
+  collectHoldSeconds: number | null;
+  withdrawDelaySeconds: number;
+  tightenDelaySeconds: number;
+  redeemGraceSeconds: number;
+  heldTimeoutSeconds: number;
+  disputeTimeoutSeconds: number;
+  paused: boolean | null;
+  arbiter: string | null;
 }
 
 export interface GetChainsResponse {

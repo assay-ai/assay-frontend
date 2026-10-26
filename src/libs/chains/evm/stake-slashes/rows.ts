@@ -34,6 +34,10 @@ export type ParsedStakeLog =
       readonly beneficiary: Address;
       readonly penalty: bigint;
       readonly applied: bigint;
+      /** The split the chain applied, as `SlashExecuted` recorded it. */
+      readonly agentAmount?: bigint;
+      readonly platformAmount?: bigint;
+      readonly providerAmount?: bigint;
       readonly executedAt: bigint;
       readonly txHash: Hex | null;
       readonly blockNumber: bigint | null;
@@ -107,6 +111,9 @@ export function parseStakeLog(log: RawLog): ParsedStakeLog | null {
         beneficiary: decoded.args.beneficiary,
         penalty: decoded.args.penalty,
         applied: decoded.args.applied,
+        agentAmount: decoded.args.agentAmount,
+        platformAmount: decoded.args.platformAmount,
+        providerAmount: decoded.args.providerAmount,
         executedAt: decoded.args.executedAt,
         txHash,
         blockNumber,
@@ -172,6 +179,12 @@ export interface ChainSlashRow {
   readonly reserved: bigint;
   /** What the chain took. `null` until executed. */
   readonly applied: bigint | null;
+  /**
+   * An executed record's split as `SlashExecuted` recorded it (agents,
+   * platform, and the provider's share never taken). `null` before execution
+   * or when the event was not seen; absent in older fixtures.
+   */
+  readonly executedSplit?: { agentAmount: bigint; platformAmount: bigint; providerAmount: bigint } | null;
   readonly beneficiary: Address;
   /** Unix seconds. */
   readonly proposedAt: number;
@@ -285,6 +298,18 @@ export function buildChainSlashRows(
       penalty: record?.penalty ?? (proposed?.kind === "proposed" ? proposed.penalty : BigInt(0)),
       reserved: record?.reserved ?? (proposed?.kind === "proposed" ? proposed.reserved : BigInt(0)),
       applied: status.key === "executed" ? (record?.applied ?? executedApplied) : null,
+      executedSplit:
+        status.key === "executed" &&
+        executed?.kind === "executed" &&
+        executed.agentAmount !== undefined &&
+        executed.platformAmount !== undefined &&
+        executed.providerAmount !== undefined
+          ? {
+              agentAmount: executed.agentAmount,
+              platformAmount: executed.platformAmount,
+              providerAmount: executed.providerAmount,
+            }
+          : null,
       beneficiary:
         record?.beneficiary ??
         (proposed?.kind === "proposed" ? proposed.beneficiary : ("0x" as Address)),

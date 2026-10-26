@@ -22,12 +22,12 @@ describe("the penalty view's split when the chain can't be read (B12)", () => {
   const CHAIN = "eip155:46630";
 
   it("draws the live read when there is one", () => {
-    expect(splitTerms({ data: { slashAgentBps: 6000 }, dataUpdatedAt: 5, isError: false }, { terms: { slashAgentBps: 5000 }, readAt: 1 })).toEqual({ agentBps: 6000, readAt: 5, lastKnown: false });
+    expect(splitTerms({ data: { slashAgentBps: 6000 }, dataUpdatedAt: 5, isError: false }, { terms: { slashAgentBps: 5000 }, readAt: 1 })).toEqual({ agentBps: 6000, platformBps: null, readAt: 5, lastKnown: false });
   });
 
   it("falls back to the last read, saying when, only when the read failed", () => {
     const kept = { terms: { slashAgentBps: 6000 }, readAt: 1_000 };
-    expect(splitTerms({ dataUpdatedAt: 0, isError: true }, kept)).toEqual({ agentBps: 6000, readAt: 1_000, lastKnown: true });
+    expect(splitTerms({ dataUpdatedAt: 0, isError: true }, kept)).toEqual({ agentBps: 6000, platformBps: null, readAt: 1_000, lastKnown: true });
     expect(splitTerms({ dataUpdatedAt: 0, isError: false }, kept)).toBeNull();
     expect(splitTerms({ dataUpdatedAt: 0, isError: true }, null)).toBeNull();
   });
