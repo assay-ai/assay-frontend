@@ -79,6 +79,24 @@ describe("inboxView: stored rows read from event + payload", () => {
     expect(view.title).toBe("$0.04 penalty on get_weather was executed");
   });
 
+  it("says a stake exactly at the minimum as information, not an alarm (onboarding wave item 3)", () => {
+    const view = inboxView(
+      row({
+        event: "provider.stake_headroom_low",
+        severity: "WARNING",
+        title: "Stake headroom is running low",
+        body: "x",
+        subjectType: "binding",
+        subjectId: "1fbd249d-d4a5-4f33-aa21-6aa69487b2fc",
+        payload: { asset: "eip155:46630/erc20:0xDb", staked: "50000000", required: "50000000", bindingId: "1fbd249d-d4a5-4f33-aa21-6aa69487b2fc" },
+      }),
+      names,
+    );
+    expect(view.title).toBe("get_weather: your stake is at the $50.00 minimum");
+    expect(view.severity).toBe("INFO");
+    expect(view.target).toEqual({ href: "/provider/capital?sheet=stake", label: "Add stake" });
+  });
+
   it("renders the legacy headroom row by tool and in dollars, with Add stake", () => {
     const view = inboxView(
       row({

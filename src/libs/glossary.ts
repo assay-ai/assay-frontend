@@ -85,7 +85,7 @@ export const GLOSSARY = {
   reserved: {
     term: "Reserved",
     definition:
-      "A call's price set aside from your balance while its result is checked; it is charged only if the result passes, and released if it does not.",
+      "A call's price set aside from your balance until the call settles; it is charged when the call settles, and released if a check refuses the result.",
   },
   "refundable-until": {
     term: "Refundable until",
@@ -136,7 +136,7 @@ export const GLOSSARY = {
   hold: {
     term: "Hold",
     definition:
-      "Money reserved from your balance while a call is checked; it is charged if the call passes and released if it fails.",
+      "Money reserved from your balance until a call settles; it is charged when the call settles and released if a check refuses the result.",
   },
   "settlement-chain": {
     term: "Settlement chain",

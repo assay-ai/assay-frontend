@@ -48,6 +48,13 @@ const COOP = { "Cross-Origin-Opener-Policy": "same-origin-allow-popups" };
  */
 const SPLAT_HEADERS = { "/connect/*": COOP, "/agents/enable-paid": COOP };
 
+/**
+ * Headers `/*` sets with a looser value than the strict pages. Cloudflare
+ * Pages would send both values (it repeats a header set by two matching
+ * blocks), so each strict block detaches these before setting its own.
+ */
+const SITE_FRAMING_HEADERS = ["Content-Security-Policy", "X-Frame-Options", "Referrer-Policy"];
+
 /** Inline scripts: a `<script>` element with no `src`. */
 const INLINE_SCRIPT = /<script(?![^>]*\ssrc=)[^>]*>([\s\S]*?)<\/script>/gi;
 
@@ -177,6 +184,10 @@ function completeHeaders(headersText, pages, connectOrigins, siteConnectOrigins 
     if (!done.has(pattern)) throw new Error(`${pattern}: no Content-Security-Policy block in _headers`);
     // The strict pages keep only their enforced policy: the looser site-wide one is detached there.
     if (seen[pattern]?.[`!${SITE_HEADER}`]?.length !== 1) throw new Error(`${pattern}: needs exactly one "! ${SITE_HEADER}" in _headers`);
+    // And the looser /* framing and referrer values, so each is sent once, with the strict value.
+    for (const name of SITE_FRAMING_HEADERS) {
+      if (seen[pattern]?.[`!${name}`]?.length !== 1) throw new Error(`${pattern}: needs exactly one "! ${name}" in _headers`);
+    }
   }
   if (siteDone !== 1) throw new Error(`${SITE_PATH}: needs exactly one ${SITE_HEADER} in _headers`);
   for (const other of Object.keys(seen)) {
@@ -237,4 +248,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { pagesFor, urlPathOf, completeHeaders, inlineScriptHashes, assertOwnScriptsOnly, SPLAT_HEADERS };
+module.exports = { pagesFor, urlPathOf, completeHeaders, inlineScriptHashes, assertOwnScriptsOnly, SPLAT_HEADERS, SITE_FRAMING_HEADERS };

@@ -19,6 +19,7 @@ import {
   setupHref,
   type ListingMode,
 } from "@/features/explorer/provider-economics";
+import { PLATFORM_CHECKS_SENTENCE } from "@/features/explorer/explorer-text";
 import { MIN_CHECKED_CALLS } from "@/features/provider-sla/reading";
 import { useChainTerms } from "@/hooks/useChainTerms";
 import type { ChainTerms } from "@/libs/chain-terms";
@@ -155,7 +156,7 @@ function Calculator({
                 value={price}
                 onChange={(event) => setPrice(event.target.value)}
                 error={parsedPrice.error ?? undefined}
-                hint="Buyers pay this only when the result passes the check."
+                hint="Buyers pay this per paid call, unless the response fails a check."
               />
               <Field
                 id="calculator-calls"
@@ -179,8 +180,8 @@ function Calculator({
                   ]}
                 />
                 <p className="text-body-xs text-03">
-                  A call whose result fails the check is not charged to the buyer and not paid to you. Nobody keeps the
-                  money.
+                  A call whose response fails a check (the wrong shape, or a quality rule where one is switched on) is
+                  not charged to the buyer and not paid to you. Nobody keeps the money.
                 </p>
               </div>
             ) : null}
@@ -293,8 +294,8 @@ export default function WhyListHerePage() {
           List an API. Get paid on chain, per call, never clawed back.
         </h1>
         <p className="max-w-[760px] text-center text-body-md text-02">
-          We check the result of every call before money moves. A failed call is not charged to the buyer and not paid
-          to you — and you can see the check behind every decision.
+          {PLATFORM_CHECKS_SENTENCE} A failed call is not charged to the buyer and not paid to you — and you can see
+          the check behind every decision.
         </p>
         <p className="flex max-w-[760px] items-start gap-2 text-left text-body-13 text-01" data-testid="stake-reconcile">
           <ShieldCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success-500" />
@@ -405,7 +406,7 @@ function agreement(terms: ChainTerms): ReadonlyArray<{ tone: "alert" | "check"; 
   },
   {
     tone: "alert",
-    title: "A result that fails the check is not paid",
+    title: "A result that fails a check is not paid",
     detail: "The buyer is not charged either. Nobody keeps the money.",
   },
   {

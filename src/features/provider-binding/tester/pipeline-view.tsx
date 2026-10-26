@@ -34,6 +34,16 @@ const WARNING_TITLE: Record<BindingTestReport["warnings"][number]["code"], strin
 /** Warnings never change the outcome (the backend says so); the label says it too. */
 const WARNING_NOTE = "Warning (does not block Go live)";
 
+/**
+ * Warnings that are fine in the common case, said as information with why
+ * (onboarding wave item 3): a public API answers anyone, so an unchecked
+ * signature only matters when what it returns is private or costs you.
+ */
+const FINE_FOR_PUBLIC: Partial<Record<BindingTestReport["warnings"][number]["code"], string>> = {
+  ACCEPTS_UNSIGNED:
+    "Fine for public data: your API answers calls without our signature, which is normal for an open API. Check the signature only if what it returns is private or each call costs you, so that only Assay can call it.",
+};
+
 const WORD: Record<PipelineStatus, string> = {
   pass: "passed",
   fail: "failed",
@@ -127,15 +137,18 @@ export function TestPipelineView({
         ))}
       </ol>
 
-      {report.warnings.map((warning) => (
-        <Alert
-          key={warning.code}
-          variant="warning"
-          title={`${WARNING_TITLE[warning.code]} · ${WARNING_NOTE}`}
-          description={warning.message}
-          showClose={false}
-        />
-      ))}
+      {report.warnings.map((warning) => {
+        const fine = FINE_FOR_PUBLIC[warning.code];
+        return (
+          <Alert
+            key={warning.code}
+            variant={fine ? "info" : "warning"}
+            title={fine ? `${WARNING_TITLE[warning.code]} · does not block Go live` : `${WARNING_TITLE[warning.code]} · ${WARNING_NOTE}`}
+            description={fine ? `${fine} ${warning.message}` : warning.message}
+            showClose={false}
+          />
+        );
+      })}
 
       <details className="rounded-lg border border-01 bg-02 px-3.5 py-2.5">
         <summary className="cursor-pointer select-none text-label-13 text-02">Show the raw exchange</summary>

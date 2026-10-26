@@ -61,7 +61,7 @@ export function DiscardPendingKey({
           variant="secondary"
           type="button"
           className="text-danger-600"
-          disabled={discard.isPending}
+          loading={discard.isPending}
           onClick={() => discard.mutate()}
         >
           {discard.isPending ? "Discarding…" : "Discard key"}

@@ -171,6 +171,10 @@ describe("I1: only an interaction that starts after arming acts", () => {
       fireEvent.click(approve());
     });
     expect(onApprove).not.toHaveBeenCalled();
+    // The next gesture comes later (Button takes one click per frame).
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
     await act(async () => {
       press(approve());
     });

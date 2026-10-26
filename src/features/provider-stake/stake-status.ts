@@ -71,6 +71,15 @@ export function stakeStatus(input: {
   const gap = money(have.minus(need), required);
   const recommendedText =
     recommended && have.lt(toDecimal(recommended)) ? ` Recommended: ${formatMoney(recommended)}.` : "";
+  // Exactly at the minimum is where a first paid tool starts: covered, said calmly (onboarding wave item 3).
+  if (have.eq(need)) {
+    return {
+      health: "close",
+      label: "Covered, at the minimum",
+      sentence: `Covered: your stake is at the ${minimum} minimum. A proposed penalty counts against your stake at once and would take it below; a margin keeps paid calls running.${recommendedText}`,
+      gap,
+    };
+  }
   if (have.lt(need.mul(1 + STAKE_CLOSE_SHARE))) {
     return {
       health: "close",

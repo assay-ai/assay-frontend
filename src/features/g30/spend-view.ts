@@ -37,7 +37,13 @@ export function previousTotal(groups: readonly SummaryGroup[]): Money | null {
 export interface RankedRow {
   key: string;
   label: string;
+  /**
+   * Paid calls, as the headline's "N calls" counts them: free calls are never
+   * in it, on any tab (BUG-PROD-BUY-SPEND-01); they are in `freeCalls`.
+   */
   calls: number;
+  /** Free calls, as the headline's "N free calls" counts them. */
+  freeCalls: number;
   /** Bar widths, 0–100, relative to the largest listed total. */
   chargedPct: number;
   notChargedPct: number;
@@ -46,7 +52,7 @@ export interface RankedRow {
   /**
    * Nothing listed and at least one call: free calls only. Free-tier calls
    * have no payment record, so the server counts them in `freeCalls`, not in
-   * `calls` (a free-only group has `calls: 0`); `calls` above is then the free count.
+   * `calls` (a free-only group has `calls: 0`); its count is in `freeCalls`.
    */
   free: boolean;
   charged: string;
@@ -60,6 +66,17 @@ function notChargedOf(g: SummaryGroup): Money {
   return g.notChargedTotal;
 }
 
+/**
+ * A group's paid and free call counts, the same split as the headline. A rare
+ * zero-price intent is in both `calls` and `freeCalls`; on a group with
+ * nothing listed the larger is its free count and it has no paid call.
+ */
+function callCounts(g: SummaryGroup): { calls: number; freeCalls: number; free: boolean } {
+  const freeCount = Math.max(g.calls, g.freeCalls ?? 0);
+  const free = toDecimal(g.listedTotal).isZero() && freeCount > 0;
+  return free ? { calls: 0, freeCalls: freeCount, free } : { calls: g.calls, freeCalls: g.freeCalls ?? 0, free };
+}
+
 export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string) => string): RankedRow[] {
   const max = groups.reduce((m, g) => Decimal.max(m, toDecimal(g.listedTotal)), new Decimal(0));
   return [...groups]
@@ -68,7 +85,6 @@ export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string)
         toDecimal(b.listedTotal).comparedTo(toDecimal(a.listedTotal)) || b.calls - a.calls,
     )
     .map((g) => {
-      const listed = toDecimal(g.listedTotal);
       const charged = toDecimal(g.chargedTotal);
       const notCharged = toDecimal(notChargedOf(g));
       const owed = g.owedTotal ? toDecimal(g.owedTotal) : new Decimal(0);
@@ -77,13 +93,12 @@ export function rankRows(groups: readonly SummaryGroup[], labelOf: (key: string)
       // vs before" on a group that is entirely new is the row's own total again.
       const hadBefore = g.comparison ? !toDecimal(g.comparison.chargedTotal).isZero() : false;
       const deltaAmount = g.comparison && hadBefore ? new Decimal(g.comparison.deltaChargedTotal.amount || "0") : null;
-      // A rare zero-price intent is in both `calls` and `freeCalls`, so the larger is the row's count.
-      const freeCount = Math.max(g.calls, g.freeCalls ?? 0);
-      const free = listed.isZero() && freeCount > 0;
+      const { calls, freeCalls, free } = callCounts(g);
       return {
         key: g.key,
         label: labelOf(g.key),
-        calls: free ? freeCount : g.calls,
+        calls,
+        freeCalls,
         chargedPct: pct(charged),
         notChargedPct: pct(notCharged),
         owedPct: pct(owed),
@@ -113,9 +128,9 @@ function escape(value: string): string {
 }
 
 /**
- * One CSV row per group: names AND ids, the asset, and plain amounts. A
- * free-only group counts its free calls, as the row on screen does (never
- * "0 calls"), and the last column says how many calls were free.
+ * One CSV row per group: names AND ids, the asset, and plain amounts.
+ * "Calls" is paid calls and "Free calls" the free ones, as on screen and in
+ * the headline, on every grouping.
  */
 export function spendCsv(
   groups: readonly SummaryGroup[],
@@ -126,15 +141,14 @@ export function spendCsv(
     options.labelOf(g.key),
     g.key,
     options.assetLabel,
-    // A rare zero-price intent is in both `calls` and `freeCalls` (see `rankRows`).
-    String(toDecimal(g.listedTotal).isZero() ? Math.max(g.calls, g.freeCalls ?? 0) : g.calls),
+    String(callCounts(g).calls),
     formatMoney(g.listedTotal, { grouped: false, exact: true, symbol: "", decimals: g.listedTotal.decimals }),
     formatMoney(g.chargedTotal, { grouped: false, exact: true, symbol: "", decimals: g.chargedTotal.decimals }),
     formatMoney(notChargedOf(g), { grouped: false, exact: true, symbol: "", decimals: notChargedOf(g).decimals }),
     String(g.notChargedCalls ?? g.refundedCalls),
     g.owedTotal ? formatMoney(g.owedTotal, { grouped: false, exact: true, symbol: "", decimals: g.owedTotal.decimals }) : "0",
     String(g.owedCalls ?? 0),
-    String(g.freeCalls ?? 0),
+    String(callCounts(g).freeCalls),
   ]);
   return [header, ...rows].map((r) => r.map(escape).join(",")).join("\n");
 }

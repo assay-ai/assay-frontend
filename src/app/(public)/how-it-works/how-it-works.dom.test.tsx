@@ -25,7 +25,10 @@ describe("How it works", () => {
   it("says what Assay is in one line under the headline", () => {
     const at = html.indexOf('data-testid="product-definition"');
     expect(at).toBeGreaterThan(html.indexOf("<h1"));
-    expect(text).toContain("AI agents pay per call for MCP tools, only when the result passes the check");
+    expect(text).toContain("AI agents pay per call for MCP tools, and a response in the wrong shape is never charged");
+    // Quality rules are not on for every tool: the page never claims they run on every call.
+    expect(text).not.toMatch(/only when the result passes the check|quality rules run on every call/i);
+    expect(text).toContain("quality rules run on tools where they are switched on");
     expect(text).toContain("Providers list their APIs, put up a stake, and get paid per call");
   });
 

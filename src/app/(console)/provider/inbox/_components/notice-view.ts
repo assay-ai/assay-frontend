@@ -44,6 +44,12 @@ export interface NoticeView {
    * reason) and are shown once; null = never grouped.
    */
   groupKey: string | null;
+  /**
+   * A calmer tone than the notice's own severity, when its payload shows the
+   * normal state (a stake exactly at the minimum, right after publishing on
+   * the floor). Only ever lowers the tone.
+   */
+  severity?: "INFO";
 }
 
 /** The platform settles in 6-decimal stablecoins; rows written before `decimals` was in the payload. */
@@ -299,6 +305,18 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
       const margin =
         amount(p, "margin") ??
         ({ ...required, amount: ((BigInt(required.amount) * HEADROOM_PERCENT) / 100n).toString() } as Money);
+      // Exactly at the minimum is where a first paid tool starts: covered, said as information (onboarding wave item 3).
+      if (BigInt(staked.amount) === BigInt(required.amount)) {
+        return {
+          title: `${tool ? `${tool}: your` : "Your"} stake is at the ${formatMoney(required)} minimum`,
+          body:
+            "That covers your paid tools now. A proposed penalty counts against your stake at once and would take it below the minimum; " +
+            "adding a margin keeps paid calls running if that happens.",
+          target: addStake,
+          groupKey: `stake-headroom:${bindingId ?? ""}`,
+          severity: "INFO",
+        };
+      }
       return {
         title: `${tool ? `${tool}: your` : "Your"} stake (${formatMoney(staked)}) is within ${formatMoney(margin)} of the ${formatMoney(required)} minimum`,
         body:
@@ -317,7 +335,7 @@ export function noticeView(item: NoticeSource, ctx: NoticeContext): NoticeView {
       return {
         title: `${tool ?? "One paid tool"}: your stake is below the ${formatMoney(required)} minimum`,
         body:
-          `Your stake (${formatMoney(staked)}, after pending penalties) is below the ${formatMoney(required)} minimum. ` +
+          `Your stake (${formatMoney(staked)}, after any pending penalties) is below the ${formatMoney(required)} minimum. ` +
           `Paid calls continue${until ? ` until ${until}` : ` for ${grace}`}; unpaid earnings go to your stake meanwhile. ` +
           `If it is still below then, ${tool ?? "the tool"} stops taking paid calls. Add stake.`,
         target: addStake,

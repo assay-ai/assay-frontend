@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { buyerStatus, BUYER_COPY, disputeErrorText, disputeReasonLabel, fullDateTime, refundedBeforeDecision } from "@/features/call-disputes/model";
 import { CallLink, callDisputeKeys, DisputeChip, DisputeTimeline, EvidencePanes, useNow } from "@/features/call-disputes/ui";
 import { useEntityNames } from "@/hooks/useEntityNames";
-import { ApiError } from "@/libs/ApiClient";
+import { isRecordMissing } from "@/libs/record-missing";
 import { getCallDispute, withdrawCallDispute, type CallDisputeDetail } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { toast } from "@/utils/toast";
@@ -55,10 +55,11 @@ function ReportContent() {
   );
   if (report.isPending) return frame(<PageState kind="loading" rows={5} label="Loading the report" />);
   if (report.isError || !report.data) {
-    const missing = report.error instanceof ApiError && report.error.status === 404;
+    const missing = isRecordMissing(report.error);
     return frame(
       <PageState
         kind={missing ? "empty" : "error"}
+        titleAsH1
         title={missing ? "We could not find this report" : "This report could not be loaded"}
         description={missing ? "The link may be incomplete. Your reports are all listed under Reports." : disputeErrorText(report.error)}
         {...(missing ? { action: { label: "Open Reports", href: "/spend/disputes" } } : { onRetry: () => void report.refetch() })}

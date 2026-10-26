@@ -81,8 +81,9 @@ export function ToolStage({
         <PageState
           kind="empty"
           title={query ? `No tool matches “${query}”` : "No tools to list yet"}
-          description={`Ask us to add it. ${REPLY_PROMISE}`}
+          description={`Publish your own API as a tool now, or ask us to add one. ${REPLY_PROMISE}`}
           action={{ label: "Request a tool", onClick: () => setRequestOpen(true) }}
+          secondaryAction={{ label: "Publish your API", href: "/provider/apis/new" }}
         />
       ) : (
         <ul className="grid w-full grid-cols-1 gap-3 tablet:grid-cols-2">

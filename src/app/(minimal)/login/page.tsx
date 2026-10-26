@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useChainTerms } from "@/hooks/useChainTerms";
 import { definitionOf } from "@/libs/glossary";
 import { useWalletLink } from "@/features/auth/wallet-link";
+import { PLATFORM_CHECKS_SENTENCE } from "@/features/explorer/explorer-text";
 import { isStrictPagePath, loadPage } from "@/features/oauth/strict-pages";
 import { safeNextPath } from "@/libs/login-redirect";
 import { cn } from "@/utils";
@@ -70,7 +71,7 @@ const PROOF_POINTS = [
   {
     icon: ScanSearch,
     title: "We check the result",
-    detail: "Response shape and result-quality rules run on every call, at every price.",
+    detail: PLATFORM_CHECKS_SENTENCE,
   },
   {
     icon: Split,
@@ -89,7 +90,7 @@ const PROVIDER_POINTS: ReadonlyArray<
   {
     icon: Coins,
     title: "Paid per call, on chain",
-    detail: "Buyers pay your price for each call whose result passes the check; you are paid on chain, to your own wallet, after Assay's fee.",
+    detail: "Buyers pay your price for each paid call that passes the checks; you are paid on chain, to your own wallet, after Assay's fee.",
   },
   {
     icon: Wallet,
@@ -133,10 +134,10 @@ function BuyerPitch() {
       <div className="flex flex-col gap-7">
         <div className="flex flex-col gap-3.5">
           <h2 className="max-w-[420px] text-heading-lg text-01 desktop:text-display-md">
-            {"You don't pay for results you can't use."}
+            {"Checked before the money moves."}
           </h2>
           <p className="max-w-[420px] text-body-sm text-03">
-            Your agent calls a tool. We check the result before the money moves — and we show you
+            Your agent calls a tool. We check the response before the money moves — and we show you
             the amount we did not take.
           </p>
         </div>
@@ -189,8 +190,7 @@ function ProviderPitch() {
       <div className="flex flex-col gap-3.5">
         <h2 className="max-w-[420px] text-heading-lg text-01 desktop:text-display-md">List an API. Get paid per call.</h2>
         <p className="max-w-[420px] text-body-sm text-03">
-          Agents pay for your tool through Assay, per call. We check each result before the money moves, so buyers
-          pay only for results they can use.
+          Agents pay for your tool through Assay, per call. {PLATFORM_CHECKS_SENTENCE}
         </p>
       </div>
 

@@ -28,7 +28,7 @@ import { useChains } from "@/hooks/useChains";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import type { ProviderStakeRequirementItem, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
-import { formatMoney } from "@/utils/money";
+import { formatMoney, toDecimal } from "@/utils/money";
 import { providerQueries } from "@/features/provider-home/queries";
 
 /**
@@ -202,7 +202,7 @@ export default function ProviderStakePage() {
             className={
               status.enough === false
                 ? "text-body-13 text-danger-600"
-                : health.health === "close"
+                : health.health === "close" && health.gap && toDecimal(health.gap).gt(0)
                   ? "text-body-13 text-warning-700"
                   : "text-body-13 text-02"
             }

@@ -25,6 +25,8 @@ describe("RecordGate", () => {
     expect(html).toContain("No receipt selected");
     expect(html).toContain('href="/spend"');
     expect(html).not.toContain("the receipt");
+    // The whole page: its title is the one h1 (BUG-PROD-NF-02).
+    expect(html.match(/<h1\b[^>]*>No receipt selected<\/h1>/g)).toHaveLength(1);
   });
 
   it("renders the record screen when the id is there", () => {

@@ -84,8 +84,9 @@ function BarRow({ row, href }: { row: RankedRow; href: string | null }) {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-body-xs text-03">
-          <span>{plural(row.calls, "call")}</span>
-          {row.free ? <span>free calls only</span> : null}
+          {/* Paid and free counted apart, as in the headline: a free-only row never says "0 calls". */}
+          {row.free ? null : <span>{plural(row.calls, "call")}</span>}
+          {row.freeCalls > 0 ? <span>{plural(row.freeCalls, "free call")}</span> : null}
           {row.notCharged ? <span className="text-teal-600">{row.notCharged} not charged</span> : null}
           {row.owed ? <span className="text-warning-700">{row.owed} owed</span> : null}
           {row.delta ? <span>{row.delta} vs before</span> : null}

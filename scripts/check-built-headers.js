@@ -66,6 +66,22 @@ function matches(pattern, urlPath) {
   return pattern.endsWith("*") ? urlPath.startsWith(pattern.slice(0, -1)) : pattern === urlPath;
 }
 
+/**
+ * The headers Cloudflare Pages sends for `urlPath`: `name → [values]`. Every
+ * matching block applies in file order, each one first dropping the headers
+ * it detaches, then setting its own; a header a previous block already set
+ * is appended to (sent again, joined by comma), not replaced.
+ */
+function effectiveHeaders(blocks, urlPath, also = urlPath) {
+  const out = {};
+  for (const block of blocks) {
+    if (!matches(block.pattern, urlPath) && !matches(block.pattern, also)) continue;
+    for (const name of block.detach) delete out[name];
+    for (const [name, values] of Object.entries(block.headers)) out[name] = [...(out[name] ?? []), ...values];
+  }
+  return out;
+}
+
 /** The directives of a policy: `name → [tokens]`. */
 function directives(policy) {
   const out = {};
@@ -170,10 +186,15 @@ function checkOut(outDir) {
     // Each page needs a block named for it (the build writes one per page), so a page whose block is gone is not left on the splat fallback.
     if (!own.some((block) => block.pattern === urlPath)) problems.push(`${urlPath}: no block named for this page in _headers`);
     for (const block of own) problems.push(...checkPolicy(urlPath, block, html));
-    // Framing and referrer headers: Cloudflare joins every matching block, so read their union.
-    const union = (name) => own.flatMap((block) => block.headers[name] ?? []).join(",");
-    if (union("x-frame-options") !== "DENY") problems.push(`${urlPath}: X-Frame-Options must be DENY, found "${union("x-frame-options")}"`);
-    if (union("referrer-policy") !== "no-referrer") problems.push(`${urlPath}: Referrer-Policy must be no-referrer, found "${union("referrer-policy")}"`);
+    // Framing and referrer headers as the response carries them, `/*` included: one value each, the strict one.
+    const sent = effectiveHeaders(blocks, urlPath);
+    const one = (name) => (sent[name] ?? []).join(",");
+    if (one("x-frame-options") !== "DENY") problems.push(`${urlPath}: X-Frame-Options must be DENY, found "${one("x-frame-options")}"`);
+    if (one("referrer-policy") !== "no-referrer") problems.push(`${urlPath}: Referrer-Policy must be no-referrer, found "${one("referrer-policy")}"`);
+    for (const policy of sent["content-security-policy"] ?? []) {
+      const ancestors = (directives(policy)["frame-ancestors"] ?? []).join(" ");
+      if (ancestors !== "'none'") problems.push(`${urlPath}: a Content-Security-Policy it is sent has frame-ancestors "${ancestors || "missing"}", not 'none'`);
+    }
   }
   return problems;
 }
@@ -206,15 +227,8 @@ function serve(outDir, extra = {}) {
     }
     const candidates = [urlPath, `${urlPath}.html`, path.join(urlPath, "index.html")].map((p) => path.join(outDir, p));
     const file = candidates.find((c) => c.startsWith(outDir) && fs.existsSync(c) && fs.statSync(c).isFile());
-    const headers = {};
     const clean = urlPath.replace(/\.html$/, "").replace(/\/index$/, "") || "/";
-    const detached = new Set();
-    for (const block of blocks) {
-      if (!matches(block.pattern, clean) && !matches(block.pattern, urlPath)) continue;
-      for (const [name, values] of Object.entries(block.headers)) headers[name] = [headers[name], ...values].filter(Boolean).join(", ");
-      for (const name of block.detach) detached.add(name);
-    }
-    for (const name of detached) delete headers[name];
+    const headers = Object.fromEntries(Object.entries(effectiveHeaders(blocks, clean, urlPath)).map(([name, values]) => [name, values.join(", ")]));
     if (!file) {
       res.writeHead(404, headers);
       res.end("not found");
@@ -399,4 +413,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { checkOut, parseHeaders };
+module.exports = { checkOut, parseHeaders, effectiveHeaders };

@@ -74,21 +74,37 @@ describe("rankRows", () => {
     const freeOnly = { ...group("free", "0", "0", 0), freeCalls: 4 };
     const [row] = rankRows([freeOnly], (k) => k);
     expect(row!.free).toBe(true);
-    expect(row!.calls).toBe(4);
+    expect(row!.calls).toBe(0);
+    expect(row!.freeCalls).toBe(4);
   });
   it("does not count a zero-price intent twice (in calls and in freeCalls)", () => {
     const [row] = rankRows([{ ...group("free", "0", "0", 2), freeCalls: 5 }], (k) => k);
-    expect(row!.calls).toBe(5);
+    expect(row!.calls).toBe(0);
+    expect(row!.freeCalls).toBe(5);
   });
   it("keeps an empty group (no calls, no free calls) not free, as before", () => {
     const [row] = rankRows([group("none", "0", "0", 0)], (k) => k);
     expect(row!.free).toBe(false);
     expect(row!.calls).toBe(0);
   });
-  it("keeps a paid row's count as its paid calls", () => {
+  it("keeps a paid row's count as its paid calls, its free calls apart", () => {
     const [row] = rankRows([{ ...group("paid", "100", "100", 3), freeCalls: 9 }], (k) => k);
     expect(row!.free).toBe(false);
     expect(row!.calls).toBe(3);
+    expect(row!.freeCalls).toBe(9);
+  });
+  it("counts calls as the headline does on every tab: paid rows add up to the paid total, free apart (BUG-PROD-BUY-SPEND-01)", () => {
+    // 12 paid + 5 free: by tool, a paid tool and a free-only one; by provider, one mixed row.
+    const byTool = rankRows([group("rate", "120", "120", 12), { ...group("weather", "0", "0", 0), freeCalls: 5 }], (k) => k);
+    const byProvider = rankRows([{ ...group("p1", "120", "120", 12), freeCalls: 5 }], (k) => k);
+    for (const rows of [byTool, byProvider]) {
+      expect(rows.reduce((n, r) => n + r.calls, 0)).toBe(12);
+      expect(rows.reduce((n, r) => n + r.freeCalls, 0)).toBe(5);
+    }
+    const csv = (groups: Parameters<typeof spendCsv>[0]) =>
+      spendCsv(groups, { dimensionHeader: "Tool", labelOf: (k) => k, assetLabel: "USDG" }).split("\n").slice(1).map((line) => line.split(","));
+    const tool = csv([group("rate", "120", "120", 12), { ...group("weather", "0", "0", 0), freeCalls: 5 }]);
+    expect(tool.map((cells) => [cells[3], cells[10]])).toEqual([["12", "0"], ["0", "5"]]);
   });
 });
 
@@ -115,10 +131,10 @@ describe("spend CSV", () => {
 });
 
 describe("spend CSV, free-only group (fe-followup M5)", () => {
-  it("counts the free calls, never '0 calls'", () => {
+  it("counts its calls as free calls, not as paid calls", () => {
     const g = { ...group("t1", "0", "0", 0), freeCalls: 4 };
     const csv = spendCsv([g], { dimensionHeader: "Tool", labelOf: (k) => k, assetLabel: "USDG" });
-    expect(csv.split("\n")[1]).toBe("t1,t1,USDG,4,0.000000,0.000000,0.000000,0,0.000000,0,4");
+    expect(csv.split("\n")[1]).toBe("t1,t1,USDG,0,0.000000,0.000000,0.000000,0,0.000000,0,4");
   });
 });
 

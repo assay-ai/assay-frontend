@@ -20,11 +20,11 @@ const jetbrainsMono = JetBrains_Mono({
 
 // Brand and wording follow the landing page (assay-landing-page/src/pages.mjs),
 // so a shared link reads the same wherever it points.
-// The product's own promise, as How it works states it: agents pay for a
-// tool call only when the result passes Assay's check.
-const TITLE = "Assay — Agents pay for tools only when they work";
+// Only what runs today: the response shape is checked on every paid call;
+// quality rules run only on tools where they are switched on.
+const TITLE = "Assay — Paid tools for AI agents, checked before money moves";
 const DESCRIPTION =
-  "Your agent calls a paid tool. Assay checks the result before the money moves, so you don't pay for results you can't use.";
+  "Your agent calls a paid tool. Assay checks the response shape before the money moves, so a response in the wrong shape is never charged.";
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
 
 export const metadata: Metadata = {

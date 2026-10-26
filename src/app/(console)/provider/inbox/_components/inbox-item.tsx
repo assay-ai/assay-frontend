@@ -119,8 +119,8 @@ export function InboxItem({
   /** Unread when any folded notice is; defaults to this one's own state. */
   unread?: boolean;
 }) {
-  const { Icon, tone, border } = SEVERITY_ICON[item.severity] ?? SEVERITY_ICON.INFO;
   const shown = view ?? inboxView(item);
+  const { Icon, tone, border } = SEVERITY_ICON[shown.severity ?? item.severity] ?? SEVERITY_ICON.INFO;
   const target = shown.target ?? notificationHref(item);
   const isUnread = unread ?? !item.readAt;
 

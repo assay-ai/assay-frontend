@@ -98,6 +98,18 @@ describe("check-built-headers", () => {
     expect(checkOut(dir).join("\n")).toMatch(/\/connect\/authorize: does not detach Content-Security-Policy-Report-Only/);
   });
 
+  it("fails a strict page that is also sent the /* framing and referrer values (one value each, the strict one)", () => {
+    const dir = build();
+    const file = join(dir, "_headers");
+    const text = readFileSync(file, "utf8");
+    writeFileSync(file, text.replace("  ! Content-Security-Policy\n", "").replace("  ! X-Frame-Options\n", "").replace("  ! Referrer-Policy\n", ""));
+    const out = checkOut(dir).join("\n");
+    expect(out).toMatch(/\/connect\/authorize: X-Frame-Options must be DENY, found "SAMEORIGIN,DENY"/);
+    expect(out).toMatch(/\/connect\/authorize: Referrer-Policy must be no-referrer, found "strict-origin-when-cross-origin,no-referrer"/);
+    expect(out).toMatch(/\/connect\/authorize: a Content-Security-Policy it is sent has frame-ancestors "'self'"/);
+    expect(out).not.toMatch(/\/agents\/enable-paid: X-Frame-Options/);
+  });
+
   it("fails a script without integrity", () => {
     const dir = build();
     const file = join(dir, "connect/authorize.html");

@@ -9,6 +9,8 @@ import { DEMO_NOW_MS } from "@/libs/demo/demo-clock";
 import "@/libs/demo/fixtures";
 import { demoSettledReceipt } from "@/libs/demo/fixtures-buyer";
 
+import { ApiError } from "@/libs/ApiClient";
+
 import ReceiptPage from "./page";
 import { WithChains } from "@/test/chain-fixture";
 
@@ -193,5 +195,34 @@ describe("the receipt page tells one story", () => {
     expect(words).toContain(
       "The 1-hour hold has ended, so there is no refund for this call. If your report is accepted, it counts against the provider's quality and can lead to a penalty on their stake",
     );
+  });
+});
+
+/* BUG-PROD-NF-01/02: an id the API refuses as malformed is a call that does not exist, under one h1. */
+describe("a receipt that cannot be found", () => {
+  function renderError(id: string, error: ApiError): string {
+    intentId = id;
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false, retryOnMount: false } } });
+    client.getQueryCache().build(client, { queryKey: ["receipt", id] }).setState({ status: "error", error, fetchStatus: "idle" });
+    return renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <WithChains>
+          <ReceiptPage />
+        </WithChains>
+      </QueryClientProvider>,
+    );
+  }
+
+  it("shows the not-found state, not a retry, for a non-uuid id (400 VALIDATION_FAILED)", () => {
+    const html = renderError("not-a-uuid", new ApiError("VALIDATION_FAILED", "Validation failed (uuid is expected)", 400));
+    expect(text(html)).toContain("We could not find this call");
+    expect(text(html)).not.toContain("Try again");
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
+  });
+
+  it("and the same for a random uuid (404)", () => {
+    const html = renderError("e17d0000-0000-0000-0000-00000000ffff", new ApiError("NOT_FOUND", "not found", 404));
+    expect(text(html)).toContain("We could not find this call");
+    expect(html.match(/<h1\b/g)).toHaveLength(1);
   });
 });
