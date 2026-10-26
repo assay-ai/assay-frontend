@@ -9,6 +9,7 @@ export const providerToolKeys = {
   invitations: ["provider", "own-tools", "invitations"] as const,
   one: (id: string) => ["provider", "own-tools", "tool", id] as const,
   gate: (id: string) => ["provider", "own-tools", "tool", id, "gate"] as const,
+  topics: ["provider", "own-tools", "topics"] as const,
 };
 
 export function useProviderTool(id: string | null) {

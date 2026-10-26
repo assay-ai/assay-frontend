@@ -97,6 +97,20 @@ export function topicChoices(categories: readonly string[], current: string): { 
   return { options, neutral: NEUTRAL_TOPICS.find((t) => options.includes(t)) ?? null };
 }
 
+/**
+ * The topics from the server's own list (`GET /provider/tools/topics`), in its
+ * order, with its neutral one as the default. Null when the list is not there
+ * (an older API, or a read that failed): then {@link topicChoices} from the catalogue.
+ */
+export function serverTopicChoices(data: { topics?: unknown; neutral?: unknown } | null | undefined, current: string): { options: string[]; neutral: string | null } | null {
+  const listed = Array.isArray(data?.topics) ? data.topics.filter((t): t is string => typeof t === "string" && t.trim() !== "") : [];
+  if (listed.length === 0) return null;
+  const options = [...new Set(listed)];
+  if (current && !options.includes(current)) options.unshift(current);
+  const named = typeof data?.neutral === "string" && options.includes(data.neutral) ? data.neutral : null;
+  return { options, neutral: named ?? NEUTRAL_TOPICS.find((t) => options.includes(t)) ?? null };
+}
+
 /** "posts, Social" → ["posts", "social"]; with what is wrong, if anything. */
 export function parseTags(text: string): { tags: string[]; problem: string | null } {
   const tags = [...new Set(text.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))];

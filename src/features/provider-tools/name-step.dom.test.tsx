@@ -1,20 +1,25 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined, replace: () => undefined }), usePathname: () => "/provider/apis/new", useSearchParams: () => new URLSearchParams() }));
 vi.mock("@privy-io/react-auth", () => ({ usePrivy: () => ({ ready: false, authenticated: false }) }));
 const listPublicCategories = vi.hoisted(() => vi.fn());
 vi.mock("@/services/public-toolsets.service", async (original) => ({ ...(await original<object>()), listPublicCategories }));
-const tools = vi.hoisted(() => ({ tryProviderTool: vi.fn(), createProviderTool: vi.fn() }));
+const tools = vi.hoisted(() => ({ tryProviderTool: vi.fn(), createProviderTool: vi.fn(), listProviderToolTopics: vi.fn() }));
 vi.mock("@/services/provider-tools.service", async (original) => ({ ...(await original<object>()), listProviderTools: async () => ({ items: [] }), ...tools }));
 
 import { toolsetKeys } from "@/components/toolsets/use-toolsets";
+import { ApiError } from "@/libs/ApiClient";
 
 import { NameStep } from "./name-step";
 import { triedEndpointFor } from "./tried-endpoint";
 
+// An API without the topic list (before onboarding wave 4): the catalogue's topics, as before.
+beforeEach(() => {
+  tools.listProviderToolTopics.mockImplementation(() => Promise.reject(new ApiError("NOT_FOUND", "Cannot GET /provider/tools/topics", 404)));
+});
 afterEach(() => cleanup());
 
 function mount() {
@@ -44,6 +49,27 @@ describe("NameStep topic", () => {
     mount();
     const select = (await screen.findByTestId("topic-select")) as HTMLSelectElement;
     await waitFor(() => expect(select.value).toBe("other"));
+  });
+});
+
+/* Onboarding wave 4: the server's own topic list, ending in "other", is the choice when it is there. */
+describe("NameStep topic from the server's list", () => {
+  it("lists the server's topics in its order and defaults to its neutral one", async () => {
+    listPublicCategories.mockResolvedValue({ categories: [{ category: "weather", tools: 1, toolsets: 0 }] });
+    tools.listProviderToolTopics.mockResolvedValue({ topics: ["weather", "finance", "maps", "other"], neutral: "other" });
+    mount();
+    const select = (await screen.findByTestId("topic-select")) as HTMLSelectElement;
+    await waitFor(() => expect([...select.options].map((o) => o.value)).toEqual(["weather", "finance", "maps", "other"]));
+    await waitFor(() => expect(select.value).toBe("other"));
+    expect(document.body.textContent).toContain("Pick the closest, or “other” if none fits.");
+  });
+
+  it("falls back to the catalogue's topics when the list is not there", async () => {
+    listPublicCategories.mockResolvedValue({ categories: [{ category: "weather", tools: 1, toolsets: 0 }, { category: "finance", tools: 1, toolsets: 0 }] });
+    mount();
+    const select = (await screen.findByTestId("topic-select")) as HTMLSelectElement;
+    await waitFor(() => expect([...select.options].map((o) => o.value)).toEqual(["", "finance", "weather"]));
+    expect(select.value).toBe("");
   });
 });
 

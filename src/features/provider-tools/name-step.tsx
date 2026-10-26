@@ -20,7 +20,7 @@ import { ApiError } from "@/libs/ApiClient";
 import { isEvmChain } from "@/libs/chains/registry";
 import { routes } from "@/libs/routes";
 import { listPublicCategories } from "@/services/public-toolsets.service";
-import { createProviderTool, listProviderTools, updateProviderTool, type ProviderTool } from "@/services/provider-tools.service";
+import { createProviderTool, listProviderTools, listProviderToolTopics, updateProviderTool, type ProviderTool } from "@/services/provider-tools.service";
 import { claimOrgHandle } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
@@ -38,6 +38,7 @@ import {
   nameLengthWarning,
   parseTags,
   providerToolErrorView,
+  serverTopicChoices,
   topicChoices,
   type ProviderToolErrorView,
 } from "./model";
@@ -246,6 +247,8 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
   // A finished provider setup claims its first public name free (the server decides; this says it up front).
   const providerEntry = useProviderEntry({ enabled: !tool });
   const categories = useQuery({ queryKey: ["public-categories"], queryFn: listPublicCategories, retry: 0, staleTime: 5 * 60_000 });
+  // The server's own topic list, with "other"; an API without it (404) falls back to the catalogue's topics.
+  const serverTopics = useQuery({ queryKey: providerToolKeys.topics, queryFn: listProviderToolTopics, retry: 0, staleTime: 5 * 60_000 });
   const [localName, setLocalName] = React.useState("");
   const [category, setCategory] = React.useState(tool?.category ?? "");
   const [tags, setTags] = React.useState((tool?.tags ?? []).join(", "));
@@ -326,10 +329,13 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
 
   // The server takes only a topic the catalogue's tools use: a list to pick from, with a neutral
   // default only when the catalogue has one (onboarding wave 3). Free text only if the list is unavailable.
-  const topics = topicChoices((categories.data?.categories ?? []).map((c) => c.category), tool?.category ?? "");
+  const fromServer = serverTopicChoices(serverTopics.data, tool?.category ?? "");
+  const topics = fromServer ?? topicChoices((categories.data?.categories ?? []).map((c) => c.category), tool?.category ?? "");
+  // The default waits for the server's list, so a catalogue topic never wins over its "other".
+  const topicsSettled = !serverTopics.isPending;
   React.useEffect(() => {
-    if (!tool && category === "" && topics.neutral) setCategory(topics.neutral);
-  }, [tool, category, topics.neutral]);
+    if (!tool && topicsSettled && category === "" && topics.neutral) setCategory(topics.neutral);
+  }, [tool, topicsSettled, category, topics.neutral]);
   const topicField = (showError: boolean) =>
     topics.options.length > 0 ? (
       <Select
@@ -344,7 +350,9 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
           showError && categoryProblem ? (
             <span className="text-danger-700">{categoryProblem}</span>
           ) : (
-            "Required. Search and the catalogue group tools by it; new tools take one of the catalogue's topics."
+            fromServer
+              ? `Required. Search and the catalogue group tools by it. Pick the closest${fromServer.neutral ? `, or “${fromServer.neutral}” if none fits` : ""}.`
+              : "Required. Search and the catalogue group tools by it; new tools take one of the catalogue's topics."
           )
         }
       >

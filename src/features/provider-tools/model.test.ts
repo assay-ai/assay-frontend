@@ -19,6 +19,7 @@ import {
   resumeStep,
   showsNotReviewed,
   suggestLocalName,
+  serverTopicChoices,
   topicChoices,
   versionRows,
 } from "./model";
@@ -321,5 +322,20 @@ describe("topicChoices", () => {
     expect(topicChoices(["weather", "other", "finance"], "")).toEqual({ options: ["finance", "other", "weather"], neutral: "other" });
     expect(topicChoices(["weather", "uncategorised"], "").neutral).toBe("uncategorised");
     expect(topicChoices(["weather"], "social").options).toEqual(["social", "weather"]);
+  });
+});
+
+describe("serverTopicChoices", () => {
+  it("keeps the server's order and its neutral topic, and the tool's own topic", () => {
+    expect(serverTopicChoices({ topics: ["weather", "finance", "other"], neutral: "other" }, "")).toEqual({ options: ["weather", "finance", "other"], neutral: "other" });
+    expect(serverTopicChoices({ topics: ["weather", "other"], neutral: "other" }, "legacy")?.options).toEqual(["legacy", "weather", "other"]);
+    expect(serverTopicChoices({ topics: ["weather", "general"], neutral: null }, "")?.neutral).toBe("general");
+    expect(serverTopicChoices({ topics: ["weather"], neutral: "other" }, "")?.neutral).toBeNull();
+  });
+
+  it("is null when there is no usable list, so the catalogue's topics are used", () => {
+    expect(serverTopicChoices(undefined, "")).toBeNull();
+    expect(serverTopicChoices({ topics: [] }, "")).toBeNull();
+    expect(serverTopicChoices({ topics: "weather" }, "")).toBeNull();
   });
 });
