@@ -1,3 +1,5 @@
+import { mcpToolName } from "@/features/connect/mcp-url";
+
 /**
  * "Start from tools you've used": every tool the agents called recently, most
  * used first, each with whether it can run now. A tool with no live provider
@@ -68,4 +70,28 @@ export function freeSlugAmong(base: string, taken: readonly string[]): string {
     const candidate = `${base.slice(0, 64 - suffix.length)}${suffix}`;
     if (!used.has(candidate)) return candidate;
   }
+}
+
+/**
+ * "Only these tools" → the tool ids a tool set is created with. A name is
+ * looked up in the catalogue (tools with a live listing) and then in every
+ * tool on Assay (`GET /tools`): a tool no provider takes calls for right now
+ * still goes in the set and works again once one does, rather than being
+ * dropped (BUG-PROD-BUY-CONNECT-02). `missing` names what matched neither.
+ */
+export function toolIdsForNames(
+  names: readonly string[],
+  listed: readonly { toolId: string; name: string }[],
+  known: ReadonlyMap<string, { name: string }>,
+): { ids: string[]; missing: string[] } {
+  const ids: string[] = [];
+  const missing: string[] = [];
+  for (const name of names) {
+    const id =
+      listed.find((tool) => mcpToolName(tool) === name)?.toolId ??
+      [...known.entries()].find(([toolId, tool]) => mcpToolName({ name: tool.name, id: toolId }) === name)?.[0];
+    if (id && !ids.includes(id)) ids.push(id);
+    else if (!id) missing.push(name);
+  }
+  return { ids, missing };
 }
