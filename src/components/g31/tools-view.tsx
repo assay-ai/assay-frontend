@@ -46,6 +46,7 @@ import type { Chain } from "@/interfaces/chain";
 import { ApiError } from "@/libs/ApiClient";
 import { freeOnlyExploreText } from "@/libs/chains/paid-rails";
 import { plainError } from "@/libs/plain-language";
+import { ProviderEntryCard } from "@/features/provider-entry/entry-card";
 import { routes } from "@/libs/routes";
 import { getBalances } from "@/services";
 import { getCatalogueProvider, type CatalogueProviderDetail } from "@/services/catalogue.service";
@@ -498,6 +499,7 @@ export function ToolsView() {
       <React.Suspense fallback={<PageState kind="loading" rows={6} label="Loading tools" />}>
         <ToolsList />
       </React.Suspense>
+      <ProviderEntryCard buyersOnly />
     </div>
   );
 }
