@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { accountDiffers, isTimezone, type AccountForm } from "./account-form";
+import { accountDiffers, accountErrorsOf, isTimezone, type AccountForm } from "./account-form";
 
 const saved: AccountForm = {
   legalName: "Open Meteo",
@@ -32,5 +32,24 @@ describe("isTimezone: the IANA check the error text asks for", () => {
     expect(isTimezone("Mars/Base")).toBe(false);
     expect(isTimezone("hello")).toBe(false);
     expect(isTimezone("  ")).toBe(false);
+  });
+});
+
+/* Onboarding wave 2 item 5: the second contact is optional at sign-up. */
+describe("accountErrorsOf", () => {
+  const solo: AccountForm = { ...saved, ownerName: "", ownerEmail: "" };
+
+  it("accepts a solo developer with no second contact", () => {
+    expect(accountErrorsOf(solo, false)).toEqual({});
+  });
+
+  it("checks a second contact once one is typed", () => {
+    expect(accountErrorsOf({ ...solo, ownerName: "Sam" }, false)).toEqual({ ownerEmail: "Enter an email address we can reach a person at." });
+    expect(accountErrorsOf({ ...solo, ownerName: "Sam", ownerEmail: saved.technicalEmail }, false).ownerEmail).toMatch(/same inbox/);
+    expect(accountErrorsOf(saved, false)).toEqual({});
+  });
+
+  it("keeps a saved second contact required: it can be replaced, not removed", () => {
+    expect(Object.keys(accountErrorsOf(solo, true))).toEqual(["ownerName", "ownerEmail"]);
   });
 });

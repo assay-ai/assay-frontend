@@ -230,9 +230,10 @@ function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
       </div>
 
       <fieldset className="flex w-full flex-col gap-3 rounded-lg border border-01 bg-02 p-3.5">
-        <legend className="px-1 text-label-13 text-01">A second person</legend>
+        <legend className="px-1 text-label-13 text-01">A second person (optional for now)</legend>
         <p className="text-body-xs text-02">
-          Someone we can reach when you are away, with a different inbox. We only use it for escalations.
+          Someone we can reach when you are away, with a different inbox. We only use it for escalations. Free tools
+          do not need one; we ask for it before you charge for a tool.
         </p>
         <div className="grid w-full gap-4 tablet:grid-cols-2">
           <Field
@@ -315,7 +316,7 @@ function YouStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
       ) : null}
       {setup.attempted && setup.saveBlockedBy ? (
         <p role="status" className="text-body-xs text-danger-600">
-          {setup.saveBlockedBy.replace("Step 1 is not finished — every account field is required.", "Fill in every field above.").replace(
+          {setup.saveBlockedBy.replace("Step 1 is not finished — fill in the required account fields.", "Fill in the required fields above.").replace(
             "Step 4 is not finished — the terms above have to be accepted.",
             "Tick the box to accept the terms.",
           )}

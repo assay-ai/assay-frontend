@@ -26,7 +26,8 @@ import {
   updateProviderRegistration,
 } from "@/services";
 
-import { accountDiffers, isTimezone, type AccountForm } from "./account-form";
+import { accountDiffers, accountErrorsOf, type AccountForm } from "./account-form";
+import { secondContactGiven } from "./second-contact";
 import { justProvedAccountId, payoutStepIsDone, provedChainIsNew } from "./payout-accounts";
 import { resolveTerms } from "./terms";
 import { providerQueries } from "@/features/provider-home/queries";
@@ -74,10 +75,6 @@ const EMPTY_ACCOUNT: AccountForm = {
   timezone: "UTC",
 };
 
-/** A trimmed email that at least has a local part, an `@` and a dot-bearing host. */
-function looksLikeEmail(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+$/.test(value.trim());
-}
 
 /** The chain family an address belongs to: "eip155" for 0x…, "solana" for base58. */
 export function addressFamily(address: string): "eip155" | "solana" | null {
@@ -166,8 +163,8 @@ export function useProviderSetup() {
       legalName: r.legalName,
       technicalName: r.technicalContact.name,
       technicalEmail: r.technicalContact.email,
-      ownerName: r.ownerContact.name,
-      ownerEmail: r.ownerContact.email,
+      ownerName: r.ownerContact?.name ?? "",
+      ownerEmail: r.ownerContact?.email ?? "",
       timezone: r.timezone,
     });
     setSeeded(true);
@@ -191,24 +188,7 @@ export function useProviderSetup() {
   }
 
   /** Field-level refusals, computed from the form alone. Empty = nothing wrong. */
-  const accountErrors: Partial<Record<keyof AccountForm, string>> = {};
-  if (account.legalName.trim() === "") accountErrors.legalName = "Enter a legal or trading name.";
-  if (account.technicalName.trim() === "")
-    accountErrors.technicalName = "Name the person, not a role alias.";
-  if (!looksLikeEmail(account.technicalEmail))
-    accountErrors.technicalEmail = "Enter an email address we can reach a person at.";
-  if (account.ownerName.trim() === "")
-    accountErrors.ownerName = "Name the person, not a role alias.";
-  if (!looksLikeEmail(account.ownerEmail))
-    accountErrors.ownerEmail = "Enter an email address we can reach a person at.";
-  else if (
-    looksLikeEmail(account.technicalEmail) &&
-    account.ownerEmail.trim().toLowerCase() === account.technicalEmail.trim().toLowerCase()
-  )
-    accountErrors.ownerEmail =
-      "The technical and owner contacts must be different people — this is the same inbox.";
-  if (!isTimezone(account.timezone))
-    accountErrors.timezone = "Enter an IANA zone name, e.g. Europe/Oslo.";
+  const accountErrors = accountErrorsOf(account, Boolean(state?.registration.ownerContact));
 
   const accountComplete = Object.keys(accountErrors).length === 0;
 
@@ -238,7 +218,9 @@ export function useProviderSetup() {
           name: account.technicalName.trim(),
           email: account.technicalEmail.trim(),
         },
-        ownerContact: { name: account.ownerName.trim(), email: account.ownerEmail.trim() },
+        ...(secondContactGiven(account)
+          ? { ownerContact: { name: account.ownerName.trim(), email: account.ownerEmail.trim() } }
+          : {}),
         timezone: account.timezone.trim(),
         acceptedTerms: {
           providerAgreementVersion: terms.providerAgreementVersion,
@@ -257,7 +239,10 @@ export function useProviderSetup() {
           name: account.technicalName.trim(),
           email: account.technicalEmail.trim(),
         },
-        ownerContact: { name: account.ownerName.trim(), email: account.ownerEmail.trim() },
+        // Omitted when blank: the server keeps what it has (a second contact cannot be removed).
+        ...(secondContactGiven(account)
+          ? { ownerContact: { name: account.ownerName.trim(), email: account.ownerEmail.trim() } }
+          : {}),
         timezone: account.timezone.trim(),
       }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["provider", "registration"] }),
@@ -267,7 +252,7 @@ export function useProviderSetup() {
 
   /** Why the header button is refusing, or null when it is not. */
   const saveBlockedBy: string | null = !accountComplete
-    ? "Step 1 is not finished — every account field is required."
+    ? "Step 1 is not finished — fill in the required account fields."
     : !accepted
       ? "Step 4 is not finished — the terms above have to be accepted."
       : null;
@@ -281,8 +266,8 @@ export function useProviderSetup() {
         legalName: state.registration.legalName,
         technicalName: state.registration.technicalContact.name,
         technicalEmail: state.registration.technicalContact.email,
-        ownerName: state.registration.ownerContact.name,
-        ownerEmail: state.registration.ownerContact.email,
+        ownerName: state.registration.ownerContact?.name ?? "",
+        ownerEmail: state.registration.ownerContact?.email ?? "",
         timezone: state.registration.timezone,
       }
     : null;

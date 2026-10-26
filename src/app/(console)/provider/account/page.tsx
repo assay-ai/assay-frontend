@@ -170,7 +170,10 @@ export default function ProviderAccountPage() {
         },
         {
           id: "owner",
-          member: `${record.ownerContact.name} · ${record.ownerContact.email}`,
+          // Optional at sign-up; asked before a paid listing goes live.
+          member: record.ownerContact
+            ? `${record.ownerContact.name} · ${record.ownerContact.email}`
+            : "Not added yet (needed before you charge for a tool)",
           role: "Escalations",
         },
       ]

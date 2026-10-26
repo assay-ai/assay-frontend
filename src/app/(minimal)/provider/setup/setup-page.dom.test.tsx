@@ -75,6 +75,14 @@ describe("provider setup", () => {
     expect(nav.textContent).not.toContain("not started");
   });
 
+  it("says up front that the second person is optional until a paid listing (wave 2 item 5)", () => {
+    step = "you";
+    allDone();
+    mount();
+    expect(screen.getByText("A second person (optional for now)")).toBeTruthy();
+    expect(screen.getByText(/we ask for it before you charge for a tool/)).toBeTruthy();
+  });
+
   it("says a refused address once after Finish setup", async () => {
     step = "api";
     allDone({
