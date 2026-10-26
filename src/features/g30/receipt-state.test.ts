@@ -443,6 +443,43 @@ describe("receiptStory — headline, money strip, checks and timeline agree", ()
   });
 });
 
+describe("chargedHeadline — tools without switched-on quality checks", () => {
+  const stagesOf = (...statuses: string[]) =>
+    ["SCHEMA", "DETERMINISTIC_RULES", "CROSS_CHECK", "SEMANTIC"].map((stage, i) => ({
+      stage,
+      status: statuses[i] ?? statuses[statuses.length - 1],
+      passed: (statuses[i] ?? statuses[statuses.length - 1]) === "PASSED",
+    })) as unknown as Receipt["stages"];
+
+  it("says a call to a tool with no decision policy was charged without quality checks", () => {
+    const receipt = settledReceipt({
+      verdict: { status: "UNVERIFIED", reasonCode: "no_decision_policy" },
+      stages: stagesOf("NOT_REACHED", "NOT_REACHED"),
+      chargedPrice: usd("20000"),
+    });
+    expect(chargedHeadline(receipt)).toBe(
+      "Charged $0.02. Served. Quality checks are not switched on for this tool yet, so this call was charged without them.",
+    );
+    expect(chargedHeadline(receipt)).not.toMatch(/passed/i);
+  });
+
+  it("adds that a trial (SHADOW) policy did not affect the charge", () => {
+    const passed = settledReceipt({ stages: stagesOf("PASSED"), policy: { lifecycle: "SHADOW" } });
+    expect(chargedHeadline(passed)).toMatch(/ Checks for this tool are in trial; their result did not affect the charge\.$/);
+    const failed = settledReceipt({
+      verdict: { status: "FAIL" },
+      stages: stagesOf("FAILED"),
+      policy: { lifecycle: "SHADOW" },
+    });
+    expect(chargedHeadline(failed)).toMatch(/^Charged .* Checks for this tool are in trial; their result did not affect the charge\.$/);
+  });
+
+  it("says nothing about a trial for an ACTIVE policy", () => {
+    const receipt = settledReceipt({ stages: stagesOf("PASSED"), policy: { lifecycle: "ACTIVE" } });
+    expect(chargedHeadline(receipt)).not.toMatch(/trial/);
+  });
+});
+
 describe("receiptTimeline — the 1-hour hold", () => {
   const SETTLED = "2026-10-16T00:00:02.000Z";
   const INSIDE = Date.parse("2026-10-16T00:18:00.000Z");

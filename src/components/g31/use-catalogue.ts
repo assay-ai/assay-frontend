@@ -1,6 +1,6 @@
 "use client";
 
-import type { ToolVersionBrief } from "@/interfaces/contracts";
+import type { ToolChecks, ToolVersionBrief } from "@/interfaces/contracts";
 import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 
@@ -98,6 +98,8 @@ export interface ToolRow {
   description: string;
   /** UNVERIFIED | VERIFIED | GUARANTEED — how much of each call is checked. */
   tier: string;
+  /** Whether quality rules decide the charge; missing is `NONE`. */
+  checks?: ToolChecks;
   /** FREE | FREEMIUM | PAID, or null when nothing is routable. */
   pricingMode: string | null;
   /** Distinct providers with an ACTIVE binding — the depth of the market. */
@@ -231,6 +233,7 @@ export function useCatalogue() {
         name: row.name,
         description: row.description,
         tier: row.tier,
+        checks: row.checks,
         pricingMode: row.pricingMode,
         providerCount: row.providerCount,
         fromPrice: row.fromPrice,

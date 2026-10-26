@@ -57,7 +57,7 @@ export function BuyerPreview({
           ) : null}
           {mode !== "FREE" ? (
             <span className="rounded-full bg-success-10 px-2 py-0.5 text-label-xs text-success-700">
-              Not charged when a result fails the check
+              Not charged when the response is in the wrong shape
             </span>
           ) : null}
           {failureRate !== null ? (

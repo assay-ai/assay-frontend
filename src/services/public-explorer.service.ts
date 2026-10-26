@@ -1,4 +1,4 @@
-import type { CatalogueToolVersionFields, ToolVersionList } from "@/interfaces/contracts";
+import type { CatalogueToolVersionFields, ToolChecks, ToolVersionList } from "@/interfaces/contracts";
 import type { Money } from "@/interfaces";
 
 import { publicApi } from "./public-api";
@@ -51,6 +51,8 @@ export interface PublicTool extends CatalogueToolVersionFields {
   category?: string | null;
   description: string;
   tier: string;
+  /** Whether quality rules decide the charge; missing is `NONE`. */
+  checks?: ToolChecks;
   providerCount: number;
   /** Cheapest listed price. */
   fromPrice: Money | null;

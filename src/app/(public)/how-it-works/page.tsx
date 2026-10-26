@@ -8,6 +8,7 @@ import { BuyerCosts } from "@/components/explorer/buyer-costs";
 import { Term } from "@/components/patterns/term";
 import { MoneyPair } from "@/components/ui/money-pair";
 import { StakeRuleText } from "@/components/explorer/stake-rule-text";
+import { PLATFORM_CHECKS_SENTENCE } from "@/features/explorer/explorer-text";
 import { pageMetadata } from "@/libs/page-metadata";
 import {
   Panel,
@@ -57,7 +58,7 @@ import { HeroCtas } from "./demo-cta";
  */
 
 const DESC =
-  "A marketplace where AI agents pay per call for MCP tools, only when the result passes the check. Free calls need no deposit.";
+  "A marketplace where AI agents pay per call for MCP tools. The response shape is checked before money moves. Free calls need no deposit.";
 
 export const metadata: Metadata = {
   ...pageMetadata({ title: "How it works", description: DESC, url: "/how-it-works" }),
@@ -97,8 +98,8 @@ const FLOW: FlowStep[] = [
     n: "3",
     icon: ScanSearch,
     title: "We check the result",
-    detail: "Response shape and the tool's result-quality rules run on every call, at every price.",
-    note: "schema · rules · relevance",
+    detail: PLATFORM_CHECKS_SENTENCE,
+    note: "shape · rules where switched on",
   },
   {
     n: "4",
@@ -132,7 +133,7 @@ const CHECKS = [
 
 /** The product in one line: what it is, for whom, and on what terms. */
 const DEFINITION =
-  "Assay is a marketplace and payment layer where AI agents pay per call for MCP tools, only when the result passes the check. Buyers connect their agent with one MCP URL. Providers list their APIs, put up a stake, and get paid per call.";
+  "Assay is a marketplace and payment layer where AI agents pay per call for MCP tools, and a response in the wrong shape is never charged. Buyers connect their agent with one MCP URL. Providers list their APIs, put up a stake, and get paid per call.";
 
 const FORK = [
   {
@@ -194,14 +195,14 @@ export default function HowItWorksPage() {
       {/* Hero */}
       <section className="flex w-full flex-col items-center gap-4 px-4 pb-[34px] pt-[52px] tablet:px-6 desktop:px-7">
         <h1 className="max-w-[940px] text-center text-display-lg text-01">
-          {"You don't pay for results you can't use."}
+          {"Checked before the money moves."}
         </h1>
         <p className="max-w-[760px] text-center text-body-md text-01" data-testid="product-definition">
           {DEFINITION}
         </p>
         <p className="max-w-[720px] text-center text-body-md text-02">
-          Your agent calls a tool. We check the result before the money moves. If the result is
-          unusable, the charge never happens — and we show you the amount we did not take.
+          Your agent calls a tool. We check the response before the money moves. If it fails a check, the
+          charge never happens — and we show you the amount we did not take. {PLATFORM_CHECKS_SENTENCE}
         </p>
 
         <Fork id="fork-top" />
@@ -310,8 +311,8 @@ export default function HowItWorksPage() {
               <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-[15px]">
                 <Info aria-hidden="true" className="h-[15px] w-[15px] shrink-0 text-03" />
                 <p className="min-w-0 flex-1 text-body-13 text-02">
-                  Some tools also check relevance — does the answer fit the question — on every call
-                  or on a sample. Each tool&apos;s page says which, before you spend anything.
+                  Quality rules and relevance checks run only on tools where they are switched on. Each
+                  tool&apos;s page says what is checked, before you spend anything.
                 </p>
               </div>
               <div className="flex w-full items-start gap-2.5 rounded-lg border border-01 bg-02 p-[15px]">

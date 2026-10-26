@@ -73,7 +73,7 @@ function ToolRow({ tool, freeAllowance }: { tool: PublicTool; freeAllowance: num
   // "from" only over paid listings (`paidBindings`); `priceRange` ignores free ones.
   const range = priceRange(tool.price, tool.paidBindings > 1 ? [tool.fromPrice] : []);
   const offer = offerLine({ mode: tool.pricingMode, range, freeCallsPerDay: freeAllowance });
-  const sub = offerSubLine(tool.pricingMode, range);
+  const sub = offerSubLine(tool.pricingMode, range, tool.checks);
   return (
     <li>
       <Link
@@ -282,10 +282,10 @@ export default function CataloguePage() {
         </header>
       ) : (
         <header className="flex flex-col gap-3">
-        <h1 className="text-heading-lg text-01 tablet:text-display-md">Tools your agent can pay for — only when they work</h1>
+        <h1 className="text-heading-lg text-01 tablet:text-display-md">Tools your agent can pay for</h1>
         <p className="max-w-[720px] text-body-md text-02">
-          Every tool here is served by providers who put up a <Term k="stake">stake</Term>. Each result is checked
-          before money moves; if it fails, nobody is charged.
+          Every tool here is served by providers who put up a <Term k="stake">stake</Term>. Each tool&apos;s page says
+          what is checked before money moves.
         </p>
         <div className="flex flex-wrap items-start gap-2.5 pt-1">
           <StartFreeCta next="/" />

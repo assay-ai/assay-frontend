@@ -37,6 +37,7 @@ import {
   shortDay,
   smallestFreeAllowance,
   stakeSummary,
+  toolChecks,
 } from "./explorer-text";
 
 const usd = (amount: string) => ({ amount, asset: "eip155:1/erc20:0xabc", decimals: 6 });
@@ -71,9 +72,12 @@ describe("free tier", () => {
 });
 
 describe("priceSentence", () => {
-  it("states the pay-only-if-it-passes promise", () => {
-    expect(priceSentence({ mode: "PAID", price: usd("1000") })).toBe(
+  it("states the pay-only-if-it-passes promise only when checks are ACTIVE", () => {
+    expect(priceSentence({ mode: "PAID", price: usd("1000"), checks: "ACTIVE" })).toBe(
       "$0.001 per call. You pay only if the result passes the check.",
+    );
+    expect(priceSentence({ mode: "PAID", price: usd("1000") })).toBe(
+      "$0.001 per call. You are not charged if the response is in the wrong shape.",
     );
     expect(priceSentence({ mode: "FREEMIUM", price: usd("1000"), freeCallsPerDay: 100 })).toContain(
       "The first 100 calls each day are free for each agent",
@@ -227,8 +231,8 @@ describe("stakeSummary", () => {
 
 describe("misc", () => {
   it("explains checks by tier", () => {
-    expect(checkSentences("GUARANTEED")).toHaveLength(2);
-    expect(checkSentences("UNVERIFIED")).toHaveLength(1);
+    expect(checkSentences("GUARANTEED", "ACTIVE")).toHaveLength(2);
+    expect(checkSentences("UNVERIFIED", "ACTIVE")).toHaveLength(1);
   });
   it("pluralises", () => {
     expect(plural(1, "call")).toBe("1 call");
@@ -429,15 +433,21 @@ describe("costSentence and offerSubLine (public catalogue, free first)", () => {
 
   it("uses the range alone for a PAID tool, and the price sentence without one", () => {
     expect(costSentence({ mode: "PAID", price: usd("30000"), range: two })).toMatch(/^Providers charge from/);
-    expect(costSentence({ mode: "PAID", price: usd("20000"), range: one })).toBe(
+    expect(costSentence({ mode: "PAID", price: usd("20000"), range: one, checks: "ACTIVE" })).toBe(
       "$0.02 per call. You pay only if the result passes the check.",
+    );
+    expect(costSentence({ mode: "PAID", price: usd("20000"), range: one })).toBe(
+      "$0.02 per call. You are not charged if the response is in the wrong shape.",
     );
   });
 
   it("says 'after the free calls' under a FREEMIUM price, and the hold over a range", () => {
-    expect(offerSubLine("FREEMIUM", one)).toBe("after the free calls, only if it passes");
-    expect(offerSubLine("PAID", one)).toBe("paid only if it passes");
-    expect(offerSubLine("FREEMIUM", two)).toBe("held at most $0.03, paid only if it passes");
+    expect(offerSubLine("FREEMIUM", one, "ACTIVE")).toBe("after the free calls, only if it passes");
+    expect(offerSubLine("PAID", one, "ACTIVE")).toBe("paid only if it passes");
+    expect(offerSubLine("FREEMIUM", two, "ACTIVE")).toBe("held at most $0.03, paid only if it passes");
+    expect(offerSubLine("FREEMIUM", one)).toBe("after the free calls; not charged if the shape is wrong");
+    expect(offerSubLine("PAID", one)).toBe("not charged if the shape is wrong");
+    expect(offerSubLine("FREEMIUM", two)).toBe("held at most $0.03, not charged if the shape is wrong");
     expect(offerSubLine("FREE", one)).toBe("");
     expect(offerSubLine("PAID", null)).toBe("");
   });
@@ -616,5 +626,72 @@ describe("FREE listing with a daily cap (final2 P3)", () => {
       "Free for 50 calls/day per agent, then $0.12 per call",
     );
     expect(listingOfferText({ pricingMode: "PAID", price: paid, freeCallsPerAgentPerDay: null })).toBe("$0.12 per call");
+  });
+});
+
+describe("copy follows the tool's checks (ACTIVE / SHADOW / NONE, missing = NONE)", () => {
+  const two = priceRange(usd("30000"), [usd("20000"), usd("30000")]);
+  const one = priceRange(usd("20000"), [usd("0"), usd("20000")]);
+  const PASS_PROMISE = /passes the check|only if it passes|only if the result passes/;
+  const QUALITY_CLAIM = /quality rules before|relevance check/;
+
+  function allCopy(checks: string | undefined): string[] {
+    return [
+      priceSentence({ mode: "PAID", price: usd("20000"), checks }),
+      priceSentence({ mode: "FREEMIUM", price: usd("20000"), freeCallsPerDay: 10, checks }),
+      priceSentence({ mode: "FREEMIUM", price: usd("30000"), freeCallsPerDay: 10, from: usd("20000"), checks }),
+      costSentence({ mode: "PAID", price: usd("30000"), range: two, checks }),
+      costSentence({ mode: "FREEMIUM", price: usd("30000"), range: two, freeCallsPerDay: 10, checks }),
+      heldPriceSentence(two!, checks) ?? "",
+      offerSubLine("PAID", one, checks),
+      offerSubLine("FREEMIUM", one, checks),
+      offerSubLine("PAID", two, checks),
+      ...checkSentences("GUARANTEED", checks),
+      ...checkSentences("VERIFIED", checks),
+      ...checkSentences("UNVERIFIED", checks),
+    ];
+  }
+
+  it("reads a missing or unknown value as NONE", () => {
+    expect(toolChecks(undefined)).toBe("NONE");
+    expect(toolChecks(null)).toBe("NONE");
+    expect(toolChecks("weird")).toBe("NONE");
+    expect(toolChecks("shadow")).toBe("SHADOW");
+    expect(toolChecks("ACTIVE")).toBe("ACTIVE");
+  });
+
+  for (const checks of [undefined, "NONE", "SHADOW"]) {
+    it(`never promises a passing check when checks is ${checks ?? "missing"}`, () => {
+      for (const line of allCopy(checks)) {
+        expect(line).not.toMatch(PASS_PROMISE);
+        expect(line).not.toMatch(QUALITY_CLAIM);
+      }
+    });
+  }
+
+  it("ACTIVE keeps the pass promise and the relevance line by tier", () => {
+    const lines = allCopy("ACTIVE");
+    expect(lines.filter((line) => PASS_PROMISE.test(line)).length).toBeGreaterThan(0);
+    expect(heldPriceSentence(two!, "ACTIVE")).toMatch(/and only if the result passes\.$/);
+    expect(checkSentences("GUARANTEED", "ACTIVE")[1]).toMatch(/Every call also gets a relevance check/);
+    expect(checkSentences("VERIFIED", "ACTIVE")[1]).toMatch(/A sample of calls also gets a relevance check/);
+  });
+
+  it("NONE says the shape is checked and quality rules are not switched on", () => {
+    expect(checkSentences("GUARANTEED")).toEqual([
+      "The response's shape is checked on every paid call; a result in the wrong shape is not charged. Quality rules are not switched on for this tool yet.",
+    ]);
+    expect(heldPriceSentence(two!)).toMatch(/unless the response is in the wrong shape\.$/);
+  });
+
+  it("SHADOW says quality rules are in trial and do not affect the charge", () => {
+    expect(checkSentences("VERIFIED", "SHADOW")).toEqual([
+      "The response's shape is checked on every paid call; a result in the wrong shape is not charged. Quality rules are being trialled on real calls and do not affect the charge yet.",
+    ]);
+  });
+
+  it("never says free results are checked", () => {
+    expect(priceSentence({ mode: "FREE", price: usd("0") })).toBe("Free to call.");
+    expect(priceSentence({ mode: "FREE", price: usd("0"), checks: "ACTIVE" })).toBe("Free to call.");
   });
 });

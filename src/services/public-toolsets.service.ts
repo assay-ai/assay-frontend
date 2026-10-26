@@ -1,3 +1,5 @@
+import type { ToolChecks } from "@/interfaces/contracts";
+
 import { publicApi } from "./public-api";
 import type { Figure } from "./toolsets.service";
 
@@ -135,6 +137,8 @@ export interface PublicHandleTool {
   reviewed: boolean;
   /** The standard tool it points to, once promoted. */
   replacementName: string | null;
+  /** Whether quality rules decide the charge; missing is `NONE`. */
+  checks?: ToolChecks;
 }
 
 export interface PublicHandleProfile {

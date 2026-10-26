@@ -344,11 +344,14 @@ export const STATE_CARD_ORDER = [
  */
 export function chargedHeadline(receipt: Receipt): string {
   const amount = formatMoney(receipt.chargedPrice, { decimals: 4 });
+  const trial = receipt.policy?.lifecycle === "SHADOW" ? ` ${SHADOW_SENTENCE}` : "";
+  // The tool has no decision policy: its quality rules never ran on this call.
+  if (receipt.verdict?.reasonCode === NO_DECISION_POLICY) return `Charged ${amount}. ${NO_POLICY_SENTENCE}${trial}`;
   // No check result: say so, never "No result recorded" (which reads as "no data came back").
-  if (chargedCheck(receipt) === "UNCHECKED") return `Charged ${amount}. ${UNCHECKED_SENTENCE}`;
+  if (chargedCheck(receipt) === "UNCHECKED") return `Charged ${amount}. ${UNCHECKED_SENTENCE}${trial}`;
   const shown = presentVerdict(receipt.verdict?.status ?? null).shownAs;
   const sentence = shown.endsWith(".") ? shown : `${shown}.`;
-  return `Charged ${amount}. ${sentence}`;
+  return `Charged ${amount}. ${sentence}${trial}`;
 }
 
 /**
@@ -434,6 +437,12 @@ export function chargedCheck(receipt: Pick<Receipt, "verdict" | "stages">): Char
 }
 
 const UNCHECKED_SENTENCE = "Served; no check result was recorded for this call.";
+
+/** The verdict reason the backend writes when a tool has no decision policy at all. */
+const NO_DECISION_POLICY = "no_decision_policy";
+const NO_POLICY_SENTENCE = "Served. Quality checks are not switched on for this tool yet, so this call was charged without them.";
+/** A trial (SHADOW) policy judged the call, but its verdict never moves money. */
+const SHADOW_SENTENCE = "Checks for this tool are in trial; their result did not affect the charge.";
 
 /** The money strip's middle step on a charged call. */
 const CHARGED_STEP: Record<ChargedCheck, ReceiptFlowNode> = {
