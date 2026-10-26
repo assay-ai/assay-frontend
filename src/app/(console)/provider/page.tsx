@@ -26,11 +26,12 @@ import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { stakeStatus } from "@/features/provider-stake/stake-status";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { earningsSplit, homeUnpaidNotes } from "@/features/provider-earnings/earned-tile";
+import { providerMoney } from "@/features/provider-earnings/not-credited";
 import type { BindingStatus, Money, ProviderEarnings, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
 import { getProviderEarnings } from "@/services/provider-reports.service";
 import { getToolBinding } from "@/services/provider-tool-bindings.service";
-import { formatMoney, toDecimal } from "@/utils/money";
+import { toDecimal } from "@/utils/money";
 import { earningsKey, last30DaysWindow, monthWindow } from "@/features/provider-home/report-windows";
 
 /**
@@ -117,9 +118,16 @@ export default function ProviderHomePage() {
     blockedReason: step.blockedReason,
     content:
       step.state === "done" || step.state === "blocked" ? undefined : step.href ? (
-        <Button asChild size="sm">
-          <Link href={step.href}>{step.actionLabel}</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm">
+            <Link href={step.href}>{step.actionLabel}</Link>
+          </Button>
+          {step.secondary ? (
+            <Button asChild size="sm" variant="secondary">
+              <Link href={step.secondary.href}>{step.secondary.label}</Link>
+            </Button>
+          ) : null}
+        </div>
       ) : (
         <Button size="sm" onClick={() => setStakeOpen(true)}>
           {step.actionLabel}
@@ -132,7 +140,7 @@ export default function ProviderHomePage() {
   const subtitle = [
     live.length > 0 ? `${live.length} tool${live.length === 1 ? "" : "s"} live` : null,
     stake.staked && stake.required && stakeHealth.label
-      ? `stake ${formatMoney(stake.staked, { decimals: 2 })} · ${stakeHealth.label} (${formatMoney(stake.required, { decimals: 2 })} minimum)`
+      ? `stake ${providerMoney(stake.staked)} · ${stakeHealth.label} (${providerMoney(stake.required)} minimum)`
       : null,
   ]
     .filter(Boolean)
@@ -241,21 +249,21 @@ function EarningsPanel({
   const split = earningsSplit(totals);
   const unpaidNotes = homeUnpaidNotes(
     totals,
-    (money) => formatMoney(money, { decimals: 2 }),
+    providerMoney,
     { money: "/provider/money#passed-not-paid", stake: routes.stake() },
     stakeEnough,
   );
   const value = (money: Money | null) => (money ? toDecimal(money).toNumber() : 0);
   const segments = [
-    { label: "In your wallet", value: value(split.inWallet), amount: formatMoney(split.inWallet, { decimals: 2 }), tone: "success" as const },
-    split.fee ? { label: "Assay fee", value: value(split.fee), amount: formatMoney(split.fee, { decimals: 2 }), tone: "neutral" as const } : null,
+    { label: "In your wallet", value: value(split.inWallet), amount: providerMoney(split.inWallet), tone: "success" as const },
+    split.fee ? { label: "Assay fee", value: value(split.fee), amount: providerMoney(split.fee), tone: "neutral" as const } : null,
     split.notCredited
       ? {
           label: "Not credited",
           // Not every uncredited call failed the check (API errors and refusals earn nothing too); Money breaks it down by reason.
           note: `${split.notCreditedCalls.toLocaleString("en-US")} call${split.notCreditedCalls === 1 ? "" : "s"} earned nothing; see why in Money`,
           value: value(split.notCredited),
-          amount: formatMoney(split.notCredited, { decimals: 2 }),
+          amount: providerMoney(split.notCredited),
           tone: "danger" as const,
         }
       : null,
@@ -277,7 +285,7 @@ function EarningsPanel({
       <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
         <div className="flex flex-col gap-0.5">
           <span className="text-body-13 text-02">In your wallet this month</span>
-          <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
+          <span className="font-mono text-heading-md text-01">{providerMoney(split.inWallet)}</span>
         </div>
         {segments.length > 1 ? <MoneySplit segments={segments} /> : null}
         {/* Passed but not in the wallet: the same lines as Money (buyer debt, never collected, forfeits). */}
@@ -345,7 +353,7 @@ function ToolsPanel({
                   <span className="w-36 text-right text-body-13 text-02">{priceLine(binding)}</span>
                   {group ? (
                     <span className="w-36 text-right text-body-xs text-03">
-                      {group.calls.toLocaleString("en-US")} calls · {formatMoney(group.earned, { decimals: 2 })}
+                      {group.calls.toLocaleString("en-US")} calls · {providerMoney(group.earned)}
                     </span>
                   ) : null}
                 </Link>

@@ -243,6 +243,12 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
           <p>
             <span className="font-semibold text-01">{formatMoney(plan.free)}</span> is free to withdraw without pausing any tool.
           </p>
+          {!freeValue && pausedByAll.length > 0 ? (
+            <p className="text-body-13 text-warning-700" data-testid="withdraw-nothing-free">
+              Any amount you withdraw now pauses {pausedByAll.length <= 2 ? pausedByAll.join(" and ") : `all ${pausedByAll.length} paid tools`}.
+              Add stake first to keep {pausedByAll.length === 1 ? "it" : "them"} running.
+            </p>
+          ) : null}
           {freeHint ? <p className="text-body-xs text-03">{freeHint}</p> : null}
           {plan.reserved ? (
             <Link href={routes.penalties("needs-action")} className="text-body-xs text-03 underline underline-offset-2">
@@ -259,7 +265,9 @@ export function WithdrawSheet({ open, onOpenChange }: { open: boolean; onOpenCha
             label="Amount to withdraw"
             presets={[
               ...(freeValue ? [{ value: freeValue, label: `Max without pausing ${formatMoney(plan.free)}` }] : []),
-              ...(max && max !== freeValue
+              // With nothing free, the only chip would be one that pauses paid tools: not offered as a
+              // one-click choice (onboarding wave item 3); Custom still takes any amount, with the warning below.
+              ...(max && max !== freeValue && (freeValue || pausedByAll.length === 0)
                 ? [{ value: max, label: `Everything ${formatMoney(state.staked)}`, description: everythingNote }]
                 : []),
             ]}

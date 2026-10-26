@@ -27,6 +27,7 @@ import {
   callCount,
   notCreditedBreakdown,
   notCreditedReason,
+  providerMoney,
   settlementShown,
   shownReasonAmounts,
   toolsLine,
@@ -40,7 +41,7 @@ import { listProviderPayouts, payoutsInAsset } from "@/services/provider-payouts
 import { getProviderEarnings, getProviderReconciliation } from "@/services/provider-reports.service";
 import { chainIdOfAsset } from "@/utils/chain";
 import { cn } from "@/utils";
-import { formatMoney, toDecimal } from "@/utils/money";
+import { toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
 import { earningsKey, monthWindow } from "@/features/provider-home/report-windows";
 
@@ -110,15 +111,15 @@ export default function ProviderMoneyPage() {
     () => notCreditedBreakdown(earnings.data?.totals, earnings.data?.groups),
     [earnings.data],
   );
-  /* Each reason card's amount, adjusted by whole cents so the cards add up to their total on screen. */
+  /* Each reason card's amount, adjusted at the shown places so the cards add up to their total on screen. */
   const reasonAmounts = React.useMemo(() => shownReasonAmounts(notCredited.reasons), [notCredited.reasons]);
   const passedUnpaidCalls = (earnings.data?.totals.uncollectedCalls ?? 0) + (earnings.data?.totals.forfeitedCalls ?? 0);
-  /* The wallet figure and the fee come rounded once from cents: the same figures Home and the Explain drawer's Gross − fee = Net show. */
+  /* The wallet figure and the fee come rounded once, at the shown places: the same figures Home and the Explain drawer's Gross − fee = Net show. */
   const split = earningsSplit(earnings.data?.totals);
-  // Normal money format; a sub-cent amount still shows its own digits (see `formatMoney`).
-  const unpaid = unpaidLines(earnings.data?.totals, (value) => formatMoney(value, { decimals: 2 }));
+  // The provider money rule (`providerMoney`): the same places as every figure on this page.
+  const unpaid = unpaidLines(earnings.data?.totals, providerMoney);
   // Passed, still held while the buyer can dispute (lot 1 D15).
-  const heldInWindow = heldInWindowLine(earnings.data?.totals, (value) => formatMoney(value, { decimals: 2 }));
+  const heldInWindow = heldInWindowLine(earnings.data?.totals, providerMoney);
   const monthName = MONTH.format(now);
   // The home's "Details" link lands on the block, which renders only once the month has loaded.
   const hasUnpaid = unpaid.length > 0;
@@ -211,7 +212,7 @@ export default function ProviderMoneyPage() {
           <PanelBody className="flex flex-col gap-4 p-4 tablet:p-5">
             <div className="flex flex-col gap-0.5">
               <span className="text-body-13 text-02">In your wallet this month</span>
-              <span className="font-mono text-heading-md text-01">{formatMoney(split.inWallet, { decimals: 2 })}</span>
+              <span className="font-mono text-heading-md text-01">{providerMoney(split.inWallet)}</span>
             </div>
             {heldInWindow ? (
               <div className="flex flex-col gap-0.5" data-testid="money-held-in-window">
@@ -223,14 +224,14 @@ export default function ProviderMoneyPage() {
             <MoneySplit
               segments={
                 [
-                  { label: "In your wallet", value: amountOf(split.inWallet), amount: formatMoney(split.inWallet, { decimals: 2 }), tone: "success" },
-                  split.fee ? { label: "Assay fee", value: amountOf(split.fee), amount: formatMoney(split.fee, { decimals: 2 }), tone: "neutral" } : null,
+                  { label: "In your wallet", value: amountOf(split.inWallet), amount: providerMoney(split.inWallet), tone: "success" },
+                  split.fee ? { label: "Assay fee", value: amountOf(split.fee), amount: providerMoney(split.fee), tone: "neutral" } : null,
                   split.notCredited
                     ? {
                         label: "Not credited",
                         note: `${callCount(split.notCreditedCalls)}, see below`,
                         value: amountOf(split.notCredited),
-                        amount: formatMoney(split.notCredited, { decimals: 2 }),
+                        amount: providerMoney(split.notCredited),
                         tone: "danger",
                       }
                     : null,
@@ -242,7 +243,7 @@ export default function ProviderMoneyPage() {
                 <dt className="text-02">Locked as stake</dt>
                 <dd className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-mono text-mono-13 font-semibold text-01">
-                    {stake.isLoading ? "…" : formatMoney(stake.staked, { decimals: 2 })}
+                    {stake.isLoading ? "…" : providerMoney(stake.staked)}
                   </span>
                   <Link href={routes.stake()} className="text-body-xs text-03 underline underline-offset-2">
                     Still yours, not earnings. See Stake
@@ -253,7 +254,7 @@ export default function ProviderMoneyPage() {
                 <dt className="text-02">Taken by penalties, so far</dt>
                 <dd className="flex flex-wrap items-baseline gap-x-2">
                   <span className="font-mono text-mono-13 font-semibold text-01">
-                    {penalties.isLoading ? "…" : penalties.isError ? "Could not be read" : formatMoney(takenTotal, { decimals: 2 })}
+                    {penalties.isLoading ? "…" : penalties.isError ? "Could not be read" : providerMoney(takenTotal)}
                   </span>
                   <Link href={routes.penalties("closed")} className="text-body-xs text-03 underline underline-offset-2">
                     From your stake, not your earnings. See Penalties
@@ -312,7 +313,7 @@ export default function ProviderMoneyPage() {
           <PanelTitles>
             <PanelTitle>Not credited this month</PanelTitle>
             <PanelDescription>
-              {notCredited.calls > 0 ? `${callCount(notCredited.calls)} · ${formatMoney(notCredited.amount, { decimals: 2 })} · ` : ""}
+              {notCredited.calls > 0 ? `${callCount(notCredited.calls)} · ${providerMoney(notCredited.amount)} · ` : ""}
               calls that earned nothing, by reason · no stake is taken for these
             </PanelDescription>
           </PanelTitles>
@@ -332,7 +333,7 @@ export default function ProviderMoneyPage() {
                     {tools ? <p className="text-body-xs text-03">On {tools}</p> : null}
                   </div>
                   <div className="flex shrink-0 items-baseline gap-3 tablet:flex-col tablet:items-end tablet:gap-0.5">
-                    <span className="font-mono text-mono-sm font-semibold text-01">{formatMoney(reasonAmounts[index], { decimals: 2 })}</span>
+                    <span className="font-mono text-mono-sm font-semibold text-01">{providerMoney(reasonAmounts[index])}</span>
                     <span className="text-body-xs text-03">{callCount(bucket.calls)}</span>
                   </div>
                 </div>
@@ -343,8 +344,9 @@ export default function ProviderMoneyPage() {
               {/* No calls is not "every call credited" (BUG-R17-P-02). */}
               {(earnings.data?.totals.calls ?? 0) === 0
                 ? "No calls this month yet."
-                : passedUnpaidCalls > 0
-                  ? "No call failed this month."
+                : passedUnpaidCalls > 0 || (earnings.data?.totals.pendingInWindowCalls ?? 0) > 0
+                  ? // Calls still held in the dispute window are not credited yet (onboarding wave item 3).
+                    "No call failed this month."
                   : "Every call this month was credited."}
             </p>
           ) : (
@@ -355,7 +357,7 @@ export default function ProviderMoneyPage() {
                 <div key={group.key} className="flex w-full items-center justify-between gap-3 rounded-lg border border-01 bg-02 p-3.5">
                   <span className="text-label-13 text-01">{names.toolName(group.key) ?? "A tool no longer listed"}</span>
                   <span className="text-body-xs text-03">
-                    {callCount(group.withheldCalls)} · {formatMoney(group.withheld, { decimals: 2 })}
+                    {callCount(group.withheldCalls)} · {providerMoney(group.withheld)}
                   </span>
                 </div>
               ))
@@ -428,7 +430,7 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
           Sent to your wallet · <UtcTime value={payout.createdAt} />
         </span>
       </span>
-      <span className="font-mono text-mono-13 font-semibold text-01">{formatMoney(payout.amount, { decimals: 2 })}</span>
+      <span className="font-mono text-mono-13 font-semibold text-01">{providerMoney(payout.amount)}</span>
       {href ? (
         <a
           href={href}
@@ -447,10 +449,9 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
   );
 }
 
-/** A line's total: normal money format, a sub-cent amount still shows its own digits. */
-const unpaidMoney = (value: Money | null | undefined) => formatMoney(value, { decimals: 2 });
-/** One call in a drill-down: a per-call price, so up to four places ("$0.405"), trailing zeros dropped. */
-const unpaidCallMoney = (value: Money | null | undefined) => formatMoney(value, { decimals: 4 });
+/** A line's total and one call in a drill-down ("$0.405"): the page's one rule. */
+const unpaidMoney = providerMoney;
+const unpaidCallMoney = providerMoney;
 
 /**
  * "Passed, but not paid": one row per way a passed call can pay the provider
@@ -631,10 +632,10 @@ function ExplainSheet({
   loading: boolean;
 }) {
   const lines: { label: string; detail?: string; amount: string }[] = [
-    { label: "Paid to your wallet", amount: formatMoney(split.inWallet, { decimals: 2 }) },
-    ...(split.fee ? [{ label: "Assay fee", detail: "taken from each paid call", amount: formatMoney(split.fee, { decimals: 2 }) }] : []),
+    { label: "Paid to your wallet", amount: providerMoney(split.inWallet) },
+    ...(split.fee ? [{ label: "Assay fee", detail: "taken from each paid call", amount: providerMoney(split.fee) }] : []),
     ...(split.notCredited
-      ? [{ label: "Not credited", detail: callCount(split.notCreditedCalls), amount: formatMoney(split.notCredited, { decimals: 2 }) }]
+      ? [{ label: "Not credited", detail: callCount(split.notCreditedCalls), amount: providerMoney(split.notCredited) }]
       : []),
     // Passed, but not paid (yet): never part of the wallet figure, never paid by the platform.
     ...unpaid.map((line) => ({
@@ -677,7 +678,7 @@ function ExplainSheet({
                     <li key={reason.key} className="flex items-center justify-between gap-3 px-3 py-2.5">
                       <span className="min-w-0 flex-1 text-01">{reason.title}</span>
                       <span className="text-body-xs text-03">{callCount(reason.calls)}</span>
-                      <span className="w-20 text-right font-mono text-mono-12 text-01">{formatMoney(reason.amount, { decimals: 2 })}</span>
+                      <span className="w-20 text-right font-mono text-mono-12 text-01">{providerMoney(reason.amount)}</span>
                     </li>
                   ))}
                 </ul>
@@ -757,7 +758,7 @@ function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; 
                     // Nothing reached the provider yet: "$0.00" here would read as money lost. The amount is under Passed, but not paid.
                     <span className="w-20 shrink-0 text-right text-body-xs text-03">not paid</span>
                   ) : (
-                    <span className="w-20 shrink-0 text-right font-mono text-mono-12 text-01">{formatMoney(row.credited, { decimals: 2 })}</span>
+                    <span className="w-20 shrink-0 text-right font-mono text-mono-12 text-01">{providerMoney(row.credited)}</span>
                   )}
                 </div>
                 {note ? <span className="text-body-xs text-03">{note}</span> : null}
@@ -777,9 +778,9 @@ function ReconSection({ recon, loading, capped }: { recon: ReconSummary | null; 
       </p>
       <dl className="flex flex-col divide-y divide-01 rounded-lg border border-01">
         {[
-          { label: "Gross", note: "Price of the paid calls, before Assay's fee.", amount: formatMoney(settlement.gross, { decimals: 2 }), tone: "neutral" },
-          { label: take.label, note: take.note, amount: settlement.fee ? `−${formatMoney(settlement.fee, { decimals: 2 })}` : "—", tone: take.tone },
-          { label: "Net", note: "Gross minus the fee: what reached your wallet.", amount: formatMoney(settlement.net, { decimals: 2 }), tone: "neutral" },
+          { label: "Gross", note: "Price of the paid calls, before Assay's fee.", amount: providerMoney(settlement.gross), tone: "neutral" },
+          { label: take.label, note: take.note, amount: settlement.fee ? `−${providerMoney(settlement.fee)}` : "—", tone: take.tone },
+          { label: "Net", note: "Gross minus the fee: what reached your wallet.", amount: providerMoney(settlement.net), tone: "neutral" },
         ].map((line) => (
           <div key={line.label} className="flex items-start justify-between gap-3 px-3 py-2.5">
             <div className="flex min-w-0 flex-1 flex-col">

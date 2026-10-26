@@ -45,7 +45,7 @@ import { providerToolKeys } from "./queries";
 const CATEGORY_RE = /^[a-z][a-z0-9-]{1,63}$/;
 const SUMMARY_MAX = 200;
 
-function HandleClaim() {
+export function HandleClaim() {
   const queryClient = useQueryClient();
   const [name, setName] = React.useState("");
   const [error, setError] = React.useState<HandleErrorView | null>(null);
@@ -65,6 +65,8 @@ function HandleClaim() {
       else setError({ text: err instanceof Error ? err.message : "That name could not be claimed.", suggestions: [], action: null });
     },
   });
+  // Checked as it is typed, by the server's own rule (`handleProblem`), so Claim never sends a name that cannot be had.
+  const typedProblem = name.trim() === "" ? null : handleProblem(name);
   return (
     <section className="flex flex-col gap-2 rounded-lg border border-warning-20 bg-warning-10 p-3.5" data-testid="handle-claim">
       <p className="text-label-13 text-01">First, claim your public name</p>
@@ -77,15 +79,18 @@ function HandleClaim() {
         <Field
           label="Public name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            setError(null);
+          }}
           suffix={name ? `@${normaliseHandle(name)}` : undefined}
           hint="3–24 lowercase letters, digits or “-”, starting with a letter."
-          error={error?.text}
+          error={error?.text ?? typedProblem ?? undefined}
           wrapperClassName="tablet:max-w-[360px]"
           autoComplete="off"
           spellCheck={false}
         />
-        <Button className="tablet:mt-6" loading={claim.isPending} disabled={name.trim() === ""} onClick={() => claim.mutate(name)}>
+        <Button className="tablet:mt-6" loading={claim.isPending} disabled={name.trim() === "" || typedProblem !== null} onClick={() => claim.mutate(name)}>
           Claim
         </Button>
       </div>
@@ -285,7 +290,8 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         onChange={(e) => setLocalName(e.target.value)}
         onBlur={() => setTouched(true)}
         hint="Lowercase letters, digits and “_”, 2–40 characters, like search_posts. It can't change later."
-        error={touched && localName ? (nameProblem ?? undefined) : undefined}
+        // Its rules show as it is typed, before a public name is claimed too (onboarding wave item 4).
+        error={localName ? (nameProblem ?? undefined) : undefined}
         autoComplete="off"
         spellCheck={false}
       />
@@ -324,7 +330,9 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         </Button>
         {!ready ? (
           <p className="text-body-xs text-03">
-            {noHandle ? "Claim a public name first." : (nameProblem ?? categoryProblem ?? summaryProblem ?? "")}
+            {noHandle
+              ? `Claim a public name first.${localName && nameProblem ? ` Tool name: ${nameProblem}` : ""}`
+              : (nameProblem ?? categoryProblem ?? summaryProblem ?? "")}
           </p>
         ) : (
           <p className="text-body-xs text-03">Saved as a private draft: only your team can see it.</p>

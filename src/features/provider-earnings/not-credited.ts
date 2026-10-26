@@ -42,10 +42,25 @@ export function notCreditedReason(className: string): NotCreditedReason {
 }
 
 /**
+ * Decimal places of every amount on the provider's money screens (Home,
+ * Money and its Explain drawer). A provider's share of one call is often
+ * under a cent ($0.009 of a $0.01 call), so cents alone showed 0.045 as
+ * $0.04 next to $0.05 rounded the other way, and a 10% fee of $0.005 as
+ * $0.00 (BUG-PROD-PRV-MONEY-01). One rule instead: truncated to 1/100 of a
+ * cent, trailing zeros dropped down to whole cents ($0.045, $0.05, $6.76).
+ */
+export const PROVIDER_MONEY_PLACES = 4;
+
+/** An amount on a provider money screen, by the one rule above (`formatMoney`, truncated). */
+export function providerMoney(value: Money | null | undefined): string {
+  return formatMoney(value, { decimals: PROVIDER_MONEY_PLACES });
+}
+
+/**
  * Display amounts for a list of parts that add up to their displayed total.
  *
  * Every amount on screen is truncated to `places` decimals (see
- * `formatDecimal`). Truncating each part on its own can lose a cent per part,
+ * `formatDecimal`; on the provider screens {@link PROVIDER_MONEY_PLACES}). Truncating each part on its own can lose a cent per part,
  * so three reasons of $0.81, $0.405 and $0.405 would read $0.81 + $0.40 +
  * $0.40 = $1.61 under a "$1.62 not credited" headline. Here the total is
  * truncated once, each part is truncated, and the cents still missing go to
@@ -170,13 +185,13 @@ export function notCreditedBreakdown(
 }
 
 /**
- * The reasons' amounts as shown: whole cents that add up to the shown total
+ * The reasons' amounts as shown: amounts that add up to the shown total
  * (see {@link partsThatAddUp}), so the cards never sum to a cent more or less
  * than the summary above them.
  */
 export function shownReasonAmounts(reasons: readonly NotCreditedReasonRow[]): (Money | null)[] {
   const decimals = reasons.find((reason) => reason.amount)?.amount?.decimals ?? 6;
-  const shown = partsThatAddUp(reasons.map((reason) => reason.amount?.amount ?? "0"), decimals);
+  const shown = partsThatAddUp(reasons.map((reason) => reason.amount?.amount ?? "0"), decimals, PROVIDER_MONEY_PLACES);
   return reasons.map((reason, index) => (reason.amount ? { ...reason.amount, amount: shown[index] } : null));
 }
 
@@ -204,8 +219,8 @@ export function toolsLine(
 }
 
 /**
- * The settlement's three figures rounded once, from cents: the fee and the net
- * are whole cents that add up to the shown gross, so "Gross − fee = Net" holds
+ * The settlement's three figures rounded once, at {@link PROVIDER_MONEY_PLACES}:
+ * the fee and the net add up to the shown gross, so "Gross − fee = Net" holds
  * on screen ($6.76 − $0.68 = $6.08, not $6.76 − $0.67 = $6.08). Every place that
  * shows the fee or the net uses this, so the two read the same everywhere.
  */
@@ -215,7 +230,7 @@ export function settlementShown(
 ): { net: Money | null; fee: Money | null; gross: Money | null } {
   const denom = net ?? fee ?? null;
   if (!denom) return { net: null, fee: null, gross: null };
-  const [shownNet, shownFee] = partsThatAddUp([net?.amount ?? "0", fee?.amount ?? "0"], denom.decimals);
+  const [shownNet, shownFee] = partsThatAddUp([net?.amount ?? "0", fee?.amount ?? "0"], denom.decimals, PROVIDER_MONEY_PLACES);
   const gross = (BigInt(shownNet) + BigInt(shownFee)).toString();
   return {
     net: net ? { ...net, amount: shownNet } : null,

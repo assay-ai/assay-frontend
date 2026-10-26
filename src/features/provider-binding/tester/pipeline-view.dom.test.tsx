@@ -42,8 +42,9 @@ describe("TestPipelineView warnings", () => {
         report={report([{ code: "ACCEPTS_UNSIGNED", message: "Your API answered an unsigned request." }])}
       />,
     );
-    expect(screen.getByText("Signature not enforced · Warning (does not block Go live)")).toBeTruthy();
-    expect(screen.getByText("Your API answered an unsigned request.")).toBeTruthy();
+    // Fine for public data, said as information (onboarding wave item 3), with the backend's own sentence.
+    expect(screen.getByText("Signature not enforced · does not block Go live")).toBeTruthy();
+    expect(screen.getByText(/^Fine for public data: .*Your API answered an unsigned request\.$/)).toBeTruthy();
     expect(screen.getByText(/Test passed/)).toBeTruthy();
   });
 

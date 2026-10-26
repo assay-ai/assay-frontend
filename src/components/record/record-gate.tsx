@@ -33,6 +33,8 @@ export function MissingRecord({
   return (
     <PageState
       kind="empty"
+      // The whole page: its title is the page's one h1.
+      titleAsH1
       title={`No ${record} selected`}
       description={`This page shows one ${record}, and the link that opened it does not say which one. Pick a ${record} from the list.`}
       action={{ label: backLabel, href: backHref }}

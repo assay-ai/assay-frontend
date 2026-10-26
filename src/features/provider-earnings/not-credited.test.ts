@@ -10,6 +10,7 @@ import {
   notCreditedBreakdown,
   notCreditedReason,
   partsThatAddUp,
+  providerMoney,
   settlementShown,
   shownReasonAmounts,
   toolsLine,
@@ -130,7 +131,11 @@ describe("notCreditedBreakdown", () => {
   it("shows reason amounts that add up to the shown summary", () => {
     const breakdown = notCreditedBreakdown(figures(byClass([2, "810000"], [1, "405000"], [1, "405000"])));
     const shown = shownReasonAmounts(breakdown.reasons).map((m) => m?.amount);
-    expect(shown).toEqual(["810000", "410000", "400000"]);
+    // Exact at the provider money places ($0.81 + $0.405 + $0.405 = $1.62).
+    expect(shown).toEqual(["810000", "405000", "405000"]);
+    // Below them, the lost 1/100 cent goes to the largest remainder.
+    const finer = notCreditedBreakdown(figures(byClass([1, "333350"], [1, "333350"], [1, "333300"])));
+    expect(shownReasonAmounts(finer.reasons).map((m) => m?.amount)).toEqual(["333400", "333300", "333300"]);
   });
 
   it("drops reasons with no calls and names the tools each one happened on", () => {
@@ -177,12 +182,28 @@ describe("toolsLine", () => {
 });
 
 describe("settlementShown", () => {
-  it("rounds once, from cents, so Gross − fee = Net on screen", () => {
+  it("rounds once, at the provider money places, so Gross − fee = Net on screen", () => {
     // The review's month: $6.084 net, $0.676 fee, $6.76 gross.
     const shown = settlementShown(usd("6084000"), usd("676000"));
-    expect(shown.net?.amount).toBe("6080000");
-    expect(shown.fee?.amount).toBe("680000");
+    expect(shown.net?.amount).toBe("6084000");
+    expect(shown.fee?.amount).toBe("676000");
     expect(shown.gross?.amount).toBe("6760000");
+    // A sub-cent month (BUG-PROD-PRV-MONEY-01): $0.045 + $0.005 = $0.05, the fee never $0.00.
+    const small = settlementShown(usd("45000"), usd("5000"));
+    expect([small.net?.amount, small.fee?.amount, small.gross?.amount]).toEqual(["45000", "5000", "50000"]);
+    expect([providerMoney(small.gross), providerMoney(small.fee), providerMoney(small.net)]).toEqual(["$0.05", "$0.005", "$0.045"]);
+  });
+
+  it("shows every provider amount by one rule: truncated to 1/100 of a cent, at least cents", () => {
+    expect(["9000", "27000", "45000", "63000", "108000", "6760000", "1234567"].map((amount) => providerMoney(usd(amount)))).toEqual([
+      "$0.009",
+      "$0.027",
+      "$0.045",
+      "$0.063",
+      "$0.108",
+      "$6.76",
+      "$1.2345",
+    ]);
   });
 
   it("is all null when there is nothing to show", () => {

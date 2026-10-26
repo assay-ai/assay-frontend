@@ -119,12 +119,11 @@ export default function ProviderSetupPage() {
       { id: "paid", label: "Get paid" },
       { id: "api", label: "Your API" },
     ] as const
-  ).map((step, index, all) => {
-    // A step after the one on screen is never shown as done: the stepper says where you are, in order.
-    const current = all.findIndex((entry) => entry.id === stage);
-    const ahead = current !== -1 && index > current;
-    return { ...step, state: stage === step.id ? "current" : done[step.id] && !ahead ? "done" : "upcoming" };
-  });
+  ).map((step) => ({
+    ...step,
+    // Each step's real state (onboarding wave item 4): a finished step reads done wherever you are, before or after it.
+    state: stage === step.id ? "current" : done[step.id] ? "done" : "upcoming",
+  }));
 
   const price = params.get("price");
   const wizardHref = (() => {
@@ -520,7 +519,10 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
             {errorSentence(setup.checkError)}
           </Outcome>
         ) : null}
-        {error ? <p className="text-body-xs text-danger-600">{error}</p> : null}
+        {/* A refused save is already said above (checkError carries the save's error too): say it once. */}
+        {error && !(setup.checkError && errorSentence(setup.checkError) === error) ? (
+          <p className="text-body-xs text-danger-600">{error}</p>
+        ) : null}
       </div>
       {/* Not while a re-check runs: saving re-runs the check server-side, and one provider gets one connectivity check at a time. */}
       <Button

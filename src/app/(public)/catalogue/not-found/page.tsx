@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ConnectPanel } from "@/components/toolsets/connect-panel";
@@ -8,6 +9,9 @@ import { mcpEndpointUrl } from "@/features/connect/mcp-endpoint";
  * path it does not serve (design spec §7.4, "unknown path"). It says so, and
  * offers the one URL that always works: Everything.
  */
+/** Not the catalogue, so not its canonical address. */
+export const metadata: Metadata = { alternates: { canonical: null } };
+
 export default function McpNotFoundPage() {
   return (
     <div className="mx-auto flex w-full max-w-[880px] flex-col gap-5 px-4 py-6 tablet:px-7 tablet:py-8">

@@ -2,7 +2,7 @@
 
 import { freeFirstHint } from "@/features/provider-binding/free-first";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, Minus, Plus, Rocket } from "lucide-react";
+import { ChevronDown, Minus, Plus, Rocket, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import Decimal from "decimal.js";
 import * as React from "react";
@@ -72,11 +72,15 @@ export interface LiveForm {
   timeoutSeconds: string;
 }
 
+/**
+ * The form for a listing. A new draft starts Free (onboarding wave item 2):
+ * a free tool needs no stake, no money and no gas, so it is the way to a first
+ * live tool; Paid is an upgrade the provider opts into. A price hint only
+ * prefills the price for when they do.
+ */
 export function liveFormOf(binding: ToolBindingDetail, priceHint: string | null): LiveForm {
-  const fresh = binding.status === "DRAFT" && binding.pricingMode === "FREE";
-  const choice: PriceChoice = fresh && priceHint ? "paid" : choiceOfMode(binding.pricingMode);
   return {
-    choice,
+    choice: choiceOfMode(binding.pricingMode),
     price: binding.pricingMode !== "FREE" ? majorInputFromMoney(binding.price) : (priceHint ?? ""),
     freeCalls: String(binding.freeQuotaPerAgent ?? DEFAULT_FREE_CALLS_PER_AGENT),
     failurePercent: binding.slaFailureRate > 0 ? percentText(binding.slaFailureRate) : String(DEFAULT_FAILURE_PERCENT),
@@ -245,7 +249,9 @@ export function LiveStage({
   const [stakeOpen, setStakeOpen] = React.useState(false);
 
   const stake = useStakeStatus();
-  const { params: chainParams } = useChainTerms();
+  const { params: chainParams, chain } = useChainTerms();
+  // The stake is paid in the chain's settlement asset (USDG on Robinhood Chain), never a typed-in name.
+  const stakeSymbol = chain?.settlementAssetSymbol ?? null;
   const names = useProviderToolNames();
   const check = useQuery({
     queryKey: ["provider", "tool-binding", binding.id, "publish-check"],
@@ -365,7 +371,10 @@ export function LiveStage({
       </>
     );
 
-  const needsStake = mode !== "FREE" && shortfall !== null && stake.stake !== null;
+  // The publish check says the stake is short even when the page cannot work out by how much.
+  const stakeMissing = unmet.some((r) => r.requirement === "STAKE_AT_MINIMUM_ON_EVERY_CHAIN");
+  const needsStake = mode !== "FREE" && ((shortfall !== null && stake.stake !== null) || stakeMissing);
+  const shortText = shortfall ? formatMoney(shortfall) : null;
 
   const publish = async () => {
     setPublishError(null);
@@ -406,7 +415,13 @@ export function LiveStage({
             </Segmented>
             {/* What the choice means, then (free tiers) that free calls come before any paid provider. */}
             <p className="text-body-xs text-03">
-              {[PRICE_CHOICES.find((c) => c.value === form.choice)?.hint, freeFirstHint(mode)].filter(Boolean).join(" ")}
+              {[
+                mode === "FREE" ? "Start here: a free tool goes live as soon as it passes the test." : null,
+                PRICE_CHOICES.find((c) => c.value === form.choice)?.hint,
+                freeFirstHint(mode),
+              ]
+                .filter(Boolean)
+                .join(" ")}
             </p>
           </div>
 
@@ -505,6 +520,24 @@ export function LiveStage({
             ) : (
               <p className="text-body-13 text-03">Enter a price to see what you earn.</p>
             )}
+            {mode !== "FREE" ? (
+              <div className="flex flex-col gap-1 border-t border-01 pt-2" data-testid="paid-needs">
+                <span className="text-label-13 text-01">What paid needs</span>
+                <ul className="flex list-disc flex-col gap-0.5 pl-5 text-body-13 text-02">
+                  <li>
+                    Stake: {totalNeeded ? formatMoney(totalNeeded) : "the minimum for a paid tool"}
+                    {have ? `; you have ${formatMoney(have)}` : ""}.
+                  </li>
+                  <li>
+                    {shortText ? `${shortText} ` : ""}
+                    {stakeSymbol ?? "the settlement token"} in your stake wallet{shortText ? ", to add it" : " for any stake you add"}.
+                  </li>
+                  <li>
+                    A little {chain ? `${chain.displayName} ` : ""}ETH in that wallet for the gas of two transactions (approve, then stake); your wallet shows the exact fee before you sign.
+                  </li>
+                </ul>
+              </div>
+            ) : null}
             {mode !== "FREE" && summary ? (
               <>
                 <p className="text-body-13 text-01">{summary.perTool}</p>
@@ -538,6 +571,23 @@ export function LiveStage({
         </div>
       </div>
 
+      {needsStake && !blockReason ? (
+        <div role="status" data-testid="stake-short-banner" className="flex w-full flex-col gap-2 rounded-xl bg-warning-10 px-4 py-3 tablet:flex-row tablet:items-center tablet:justify-between">
+          <div className="flex min-w-0 gap-2.5">
+            <TriangleAlert aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-warning-600" />
+            <div className="flex min-w-0 flex-col gap-0.5">
+              <span className="text-label-13 text-01">{shortText ? `Your stake is ${shortText} short` : "Your stake does not cover paid calls yet"}</span>
+              <span className="text-body-13 text-02">
+                {`${mode === "PAID" ? "A paid" : "A free + paid"} tool goes live once your stake covers ${totalNeeded ? formatMoney(totalNeeded) : "the minimum"}. Add it in one sheet and we publish as soon as it lands, or choose Free to go live now without stake.`}
+              </span>
+            </div>
+          </div>
+          <Button size="sm" className="self-start tablet:self-center" disabled={readOnly} onClick={() => setStakeOpen(true)}>
+            Add stake
+          </Button>
+        </div>
+      ) : null}
+
       <div className="flex w-full flex-col gap-2 rounded-lg border border-01 bg-01 p-4 tablet:flex-row tablet:items-center tablet:justify-between">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="text-label-sm text-01">Publish {tool.name}</span>
@@ -562,7 +612,7 @@ export function LiveStage({
           <span className="text-body-xs text-03">
             {blockReason ??
               (needsStake
-                ? `Your stake is ${formatMoney(shortfall)} short. Add it in one sheet; we publish as soon as it lands.`
+                ? "Add the stake first; we publish as soon as it lands."
                 : "Agents can call it as soon as you publish. You can pause it any time.")}
           </span>
           {publishError ? (
@@ -578,7 +628,7 @@ export function LiveStage({
           onClick={() => (needsStake ? setStakeOpen(true) : void publish())}
           className="w-full tablet:w-auto"
         >
-          {needsStake ? `Add ${formatMoney(shortfall)} stake and publish` : "Publish"}
+          {needsStake ? (shortText ? `Add ${shortText} stake and publish` : "Add stake and publish") : "Publish"}
         </Button>
       </div>
 
@@ -586,7 +636,7 @@ export function LiveStage({
         open={stakeOpen}
         onOpenChange={setStakeOpen}
         amount={shortfall}
-        reason={`${tool.name} needs ${formatMoney(totalNeeded)} of stake to take paid calls.`}
+        reason={totalNeeded ? `${tool.name} needs ${formatMoney(totalNeeded)} of stake to take paid calls.` : `${tool.name} needs stake to take paid calls.`}
         onStaked={() => {
           setStakeOpen(false);
           void stake.refetch();
