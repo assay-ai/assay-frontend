@@ -57,7 +57,15 @@ export function localNameProblem(handle: string | null, raw: string): string | n
   if (!/^[a-z]/.test(name)) return "Start with a letter.";
   if (name.length < 2) return "Use at least 2 characters.";
   if (name.length > LOCAL_NAME_MAX) return `Use at most ${LOCAL_NAME_MAX} characters.`;
-  if (!LOCAL_NAME_RE.test(name)) return "Use lowercase letters, digits and “_” only.";
+  if (!LOCAL_NAME_RE.test(name)) {
+    // The public name's "-" typed here: say which rule is which, with the fixed name when it is a valid one.
+    if (/^[a-z0-9_-]+$/.test(name) && name.includes("-")) {
+      const fixed = name.replace(/-/g, "_");
+      const rule = "A tool name uses “_”, not “-” (that is the public name's rule)";
+      return LOCAL_NAME_RE.test(fixed) && !fixed.includes("__") ? `${rule}: try ${fixed}.` : `${rule}.`;
+    }
+    return "Use lowercase letters, digits and “_” only.";
+  }
   if (handle && fullToolName(handle, name).length > FULL_NAME_MAX) {
     return `The full name ${fullToolName(handle, name)} is ${fullToolName(handle, name).length} characters; the most is ${FULL_NAME_MAX}. Shorten the tool name.`;
   }

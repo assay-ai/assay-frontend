@@ -56,6 +56,9 @@ describe("the public name, claimed inline", () => {
     expect(handleProblem("9lives")).toMatch(/starting with a letter/);
     expect(handleProblem("support")).toBe("@support is reserved. Try another name.");
     expect(handleProblem("brightpath")).toBeNull();
+    // Onboarding wave 3: a tool name's "_" in a public name gets the public name's rule and a fix.
+    expect(handleProblem("acme_labs")).toBe("A public name uses “-”, not “_” (that is the tool name's rule): try acme-labs.");
+    expect(handleProblem("a_")).toBe("A public name uses “-”, not “_” (that is the tool name's rule).");
   });
 
   it("turns every refusal into what to do next, never a code", () => {

@@ -50,7 +50,15 @@ export function handleSuggestions(input: string): string[] {
 export function handleProblem(input: string): string | null {
   const handle = normaliseHandle(input);
   if (handle === "") return "Choose a public name first.";
-  if (!HANDLE_RE.test(handle)) return "Use 3–24 lowercase letters, digits or “-”, starting with a letter.";
+  if (!HANDLE_RE.test(handle)) {
+    // A tool name's "_" typed here: say which rule is which, with the fixed name when it is a valid one.
+    if (/^[a-z0-9_-]+$/.test(handle) && handle.includes("_")) {
+      const fixed = handle.replace(/_/g, "-");
+      const rule = "A public name uses “-”, not “_” (that is the tool name's rule)";
+      return HANDLE_RE.test(fixed) && !RESERVED.has(fixed) ? `${rule}: try ${fixed}.` : `${rule}.`;
+    }
+    return "Use 3–24 lowercase letters, digits or “-”, starting with a letter.";
+  }
   if (RESERVED.has(handle)) return `@${handle} is reserved. Try another name.`;
   return null;
 }

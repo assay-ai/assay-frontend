@@ -115,7 +115,7 @@ export function HandleClaim({ freeClaim = null }: { freeClaim?: boolean | null }
             setError(null);
           }}
           suffix={name ? `@${normaliseHandle(name)}` : undefined}
-          hint="3–24 lowercase letters, digits or “-”, starting with a letter."
+          hint="3–24 lowercase letters, digits or “-” (not “_”), starting with a letter. Tool names use “_” instead: “__” joins the two."
           error={(funding ? undefined : error?.text) ?? typedProblem ?? undefined}
           wrapperClassName="tablet:max-w-[360px]"
           autoComplete="off"
@@ -340,7 +340,7 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         value={localName}
         onChange={(e) => setLocalName(e.target.value)}
         onBlur={() => setTouched(true)}
-        hint="Lowercase letters, digits and “_”, 2–40 characters, like search_posts. It can't change later."
+        hint="Lowercase letters, digits and “_” (not “-”, unlike your public name), 2–40 characters, like search_posts. It can't change later."
         // Its rules show as it is typed, before a public name is claimed too (onboarding wave item 4).
         error={localName ? (nameProblem ?? undefined) : undefined}
         autoComplete="off"
