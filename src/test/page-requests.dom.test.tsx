@@ -58,7 +58,8 @@ const AGENT_A = "b71e05a3-2c48-4d90-9f61-38ca7d0b2e54";
 const AGENT_B = "9d4c1f80-6b2e-4a57-8c31-7e05b9a2d146";
 const BINDING = "b1f7c2d4-8e35-4a19-b6c0-2d9f4e71a830";
 /** The buyer shell's own reads, on every buyer page. */
-const BUYER_SHELL = ["GET /me/status", "GET /chains", "GET /escrow", "GET /spend-policy", "GET /tools", "GET /balances"];
+// The account menu's provider entry ("List your API" / "Provider console") is read once signed in (onboarding run 3).
+const BUYER_SHELL = ["GET /me/status", "GET /chains", "GET /escrow", "GET /spend-policy", "GET /tools", "GET /balances", "GET /providers/me/registration"];
 
 beforeEach(() => {
   resetRecorded();
@@ -98,8 +99,6 @@ describe("each endpoint is requested once when a heavy page mounts", { timeout: 
       "GET /catalogue/providers",
       "GET /catalogue/tools",
       "GET /tool-calls",
-      // The provider entry ("List your API" / "Provider console"), onboarding wave 2.
-      "GET /providers/me/registration",
     ]);
   });
 
