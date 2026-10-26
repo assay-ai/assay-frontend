@@ -117,9 +117,26 @@ export function providerTitleFor(pathname: string): string {
  */
 export const PROVIDER_EXPLAINER = { label: "How earning, stake and penalties work", href: "/provider/setup" } as const;
 
-/** Every href the provider chrome links to. */
+/**
+ * The way back to the buyer app, from the rail and the phone top bar: the
+ * mirror of the buyer app's "Provider console" entry (onboarding wave 3).
+ */
+export const PROVIDER_BUYER_APP = { label: "Back to buyer app", href: "/" } as const;
+
+/**
+ * "Add funds" from the console: the buyer app's deposit flow, the one place
+ * money is added (a public name is claimed once funded). Money links it.
+ */
+export const PROVIDER_ADD_FUNDS = { label: "Add funds", href: "/funding?action=deposit" } as const;
+
+/** Every href the provider chrome links to (paths only). */
 export function allProviderNavHrefs(): string[] {
-  return [...PROVIDER_NAV_ITEMS.map((item) => item.href), PROVIDER_EXPLAINER.href];
+  return [
+    ...PROVIDER_NAV_ITEMS.map((item) => item.href),
+    PROVIDER_EXPLAINER.href,
+    PROVIDER_BUYER_APP.href,
+    PROVIDER_ADD_FUNDS.href.split("?")[0],
+  ];
 }
 
 /** The tabs of the Listings section: your listings of catalogue tools, your APIs, and tool requests. */
