@@ -1,3 +1,4 @@
+import type { SubmittedOutcome } from "@/components/patterns/wallet-steps";
 import { delegationInvalidText } from "@/features/delegation/delegation-form";
 import { isUnsettledRefusal } from "@/features/delegation/unsettled";
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
@@ -10,6 +11,10 @@ import { knowsError, plainApiError, plainError } from "@/libs/plain-language";
 /** Said up front when `GET /escrow` reports `withdrawalsFrozen`, and on the refusal itself. */
 export const WITHDRAWALS_FROZEN_TEXT =
   "Withdrawals are paused for everyone while we check a reconciliation difference. Nothing was taken from your escrow. Try again later.";
+
+/** 422 PAYMENT_DEPOSIT_TRANSFER_NOT_OBSERVED: the backend watched the chain and saw no transfer for the intent. */
+export const DEPOSIT_NOT_OBSERVED_TEXT =
+  "We could not see your transfer on the chain yet. If your wallet shows it was sent, wait a minute and check Funding. You are never charged twice.";
 
 /**
  * One sentence for a failed money action (deposit, caps, withdraw, claim,
@@ -27,6 +32,7 @@ const ESCROW_REFUSALS: Record<string, string> = {
     "We could not read your escrow correctly, so nothing was built. Your money is untouched; please contact support.",
   PAYMENT_DEPOSIT_EXPIRED: "The deposit took too long to sign and expired. Nothing was taken. Try again.",
   PAYMENT_DEPOSIT_ACCOUNT_NOT_LINKED: "This wallet is not linked to your account on that chain. Nothing was sent.",
+  PAYMENT_DEPOSIT_TRANSFER_NOT_OBSERVED: DEPOSIT_NOT_OBSERVED_TEXT,
 };
 
 /** A wallet problem the person can fix, thrown from a step before any prompt. Its message is shown as is. */
@@ -52,4 +58,16 @@ export function describeMoneyError(error: unknown): string {
     return knowsError(error.code) ? plainApiError(error) : "That did not go through. Nothing was signed. Try again.";
   }
   return "That did not go through. You can try again.";
+}
+
+/**
+ * What a deposit step that failed AFTER it signed says instead of the generic
+ * "sent, but we could not confirm it" line, when the outcome is known: the
+ * backend saw no transfer. `null` keeps the generic line.
+ */
+export function describeSubmittedDepositError(error: unknown): SubmittedOutcome | null {
+  if (error instanceof ApiError && error.code === "PAYMENT_DEPOSIT_TRANSFER_NOT_OBSERVED") {
+    return { text: DEPOSIT_NOT_OBSERVED_TEXT, tone: "danger" };
+  }
+  return null;
 }

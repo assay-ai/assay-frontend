@@ -10,7 +10,7 @@ import { useAccountReadOnly } from "@/features/account-block/use-account-block";
 import { runApproveStep, runDepositStep, type DepositAttempt, type DepositRun } from "@/features/buyer-money/deposit-flow";
 import { DEPOSIT_CREDIT_TEXT } from "@/features/buyer-money/confirming";
 import { testTokenHelp } from "@/features/buyer-money/gas-help";
-import { describeMoneyError } from "@/features/buyer-money/money-errors";
+import { describeMoneyError, describeSubmittedDepositError } from "@/features/buyer-money/money-errors";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { depositChoiceFor } from "@/features/funding/deposit-chain";
 import { depositWalletView, useDepositWallet } from "@/features/funding/deposit-wallet";
@@ -236,6 +236,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
       disabledReason={disabledReason}
       trackerNoun="Step"
       describeError={describeMoneyError}
+      describeSubmittedError={describeSubmittedDepositError}
       successTitle="Deposit confirmed on chain"
       successDescription={
         needsCaps
