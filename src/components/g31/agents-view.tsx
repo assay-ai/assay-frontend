@@ -70,7 +70,7 @@ import {
  *   2. Servers in use — the MCP URLs it was handed or called through, and
  *      Connect (the Connect sheet).
  *   3. Payment key — made by `npx -y @goassay-ai/mcp@<V> enable-paid`, detected automatically.
- *      Without one, paid calls are by invitation during testnet (D14).
+ *      Without one, paid calls are by invitation for now (D14).
  *   4. Spending limits — the effective limit and what binds it, what it spent
  *      in the last 24 hours, and Change spending limits / Stop it paying.
  *   5. What this agent can use — its access and provider limits. The fix

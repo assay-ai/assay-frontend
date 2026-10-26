@@ -15,7 +15,7 @@ import {
   DEMO_PENALTY_REQUESTS,
 } from "@/libs/demo/demo-penalties";
 import { normaliseEvmAddress, type HexString } from "@/libs/chains/evm/stake-slashes/address";
-import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
+import { PINNED_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 import type { ChainSlashRow } from "@/libs/chains/evm/stake-slashes/rows";
 import { slashStatusOf } from "@/libs/chains/evm/stake-slashes/status";
 import { getSlashProposalCaseDetail } from "@/services/provider-slash-cases.service";
@@ -26,7 +26,7 @@ import { providerQueries } from "@/features/provider-home/queries";
 import { splitOfParams } from "@/features/provider-slash-case/distribution";
 import { useChainTerms } from "@/hooks/useChainTerms";
 
-export const PENALTY_DEPLOYMENT = ROBINHOOD_TESTNET_STAKE;
+export const PENALTY_DEPLOYMENT = PINNED_STAKE;
 
 /** The query key of one Assay case, shared with every surface that reads it. */
 export const caseKey = (proposalId: string) => ["provider", "slash-proposal-case", proposalId] as const;

@@ -21,11 +21,11 @@
  * CREATE2 landed in block `0x8743934` = 141,834,548). The RPC and explorer are
  * the ones `providers/index.tsx` already writes out for the same chain.
  *
- * ## Two stacks on the same chain
+ * ## Two stacks
  *
- * The develop and production backends both run on Robinhood testnet, each
- * with its own contracts. `NEXT_PUBLIC_EVM_DEPLOYMENT` picks the set at build
- * time; the deploy workflow derives it from the branch (`main` →
+ * The develop backend runs on Robinhood Chain testnet and production on
+ * Robinhood Chain mainnet (`eip155:4663`), each with its own contracts.
+ * `NEXT_PUBLIC_EVM_DEPLOYMENT` picks the set at build time; the deploy workflow derives it from the branch (`main` →
  * `production`), never from an environment variable the API could influence.
  * Unset (local and e2e builds) means the develop set.
  *
@@ -87,23 +87,34 @@ export const ROBINHOOD_TESTNET_DEV_STAKE: StakeDeployment = {
   configDeployBlock: BigInt(141_834_514),
 };
 
-/** The production trial stack's contracts (api), deployed from the same commit as develop's. */
-export const ROBINHOOD_TESTNET_PRODUCTION_STAKE: StakeDeployment = {
-  ...ROBINHOOD_TESTNET,
-  stakeContract: "0x33De8AD7a1A2Ce9817bB18Cc17b76C23f92B4cFd",
-  escrowContract: "0xE68A6E2810027dB5da48c2110bd3993eD8177115",
-  configContract: "0xB33Cdac203cC50099a64a9316C71A1c17C11C66C",
-  deployBlock: BigInt(141_936_083),
-  configDeployBlock: BigInt(141_936_054),
+const ROBINHOOD_MAINNET = {
+  chainId: "eip155:4663",
+  displayName: "Robinhood Chain",
+  rpcUrl: "https://rpc.mainnet.chain.robinhood.com",
+  explorerBaseUrl: "https://robinhoodchain.blockscout.com",
+  settlementToken: "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+  fallbackAssetDecimals: 6,
+  fallbackAssetSymbol: "USDG",
+} as const;
+
+/** The production stack's contracts (api), on Robinhood Chain mainnet. */
+export const ROBINHOOD_MAINNET_STAKE: StakeDeployment = {
+  ...ROBINHOOD_MAINNET,
+  stakeContract: "0x3799C7e0D932b907C0eB4bE955940e488A0e461a",
+  escrowContract: "0xe54E0142b1D0d34226498D563A16074C81Bc9A5e",
+  configContract: "0xD4025A66F7F76Ffa2f553141E86Fc47b84c15fd4",
+  deployBlock: BigInt(98_544_180),
+  configDeployBlock: BigInt(98_543_983),
 };
 
-export const ROBINHOOD_TESTNET_STAKE: StakeDeployment =
+/** The set this build checks: production (`main`) is mainnet, every other build the develop set. */
+export const PINNED_STAKE: StakeDeployment =
   process.env.NEXT_PUBLIC_EVM_DEPLOYMENT === "production"
-    ? ROBINHOOD_TESTNET_PRODUCTION_STAKE
+    ? ROBINHOOD_MAINNET_STAKE
     : ROBINHOOD_TESTNET_DEV_STAKE;
 
 /** Every chain this page can check. One today. */
-export const STAKE_DEPLOYMENTS: readonly StakeDeployment[] = [ROBINHOOD_TESTNET_STAKE];
+export const STAKE_DEPLOYMENTS: readonly StakeDeployment[] = [PINNED_STAKE];
 
 export function stakeDeploymentFor(chainId: string | null | undefined): StakeDeployment | null {
   if (!chainId) return null;

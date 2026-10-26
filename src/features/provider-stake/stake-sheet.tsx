@@ -23,7 +23,7 @@ import { short, useStakeWallet, walletBlocker } from "./use-stake-wallet";
 import { simulatedSteps } from "./wallet-readiness";
 import { useWalletChainType } from "@/hooks/useWalletChainType";
 
-/** The gas token of every pinned stake deployment (Robinhood Chain testnet; see `providers/index.tsx`). */
+/** The gas token of every pinned stake deployment (Robinhood Chain; see `deployments.ts`). */
 const NATIVE_SYMBOL = "ETH";
 
 /**

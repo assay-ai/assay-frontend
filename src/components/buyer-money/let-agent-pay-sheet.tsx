@@ -186,7 +186,7 @@ export function LetAgentPaySheet({
     : money.chainId && !servesPaidCalls(money.chainId)
       ? `${money.chainName ?? "This chain"} currently serves free calls only, so this agent makes free calls there and pays for none.`
       : !delegateAccount
-        ? "The agent has no payment key yet. Paid calls are by invitation during testnet."
+        ? "The agent has no payment key yet. Paid calls are by invitation for now."
         : !escrow?.exists && firstDepositOpensEscrow(money.chainId)
         ? "Add funds first: your first deposit opens your escrow."
         : !chosen

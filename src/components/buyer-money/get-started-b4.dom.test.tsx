@@ -120,10 +120,10 @@ describe("Get started, step 4 by invitation (D14)", { timeout: 30_000 }, () => {
       }),
     );
     expect(out).toContain("1 of 2");
-    expect(out).toContain("Paid calls: by invitation during testnet");
-    expect(out).toContain("Only needed for paid calls, which are by invitation during testnet.");
+    expect(out).toContain("Paid calls: by invitation for now");
+    expect(out).toContain("Only needed for paid calls, which are by invitation for now.");
     expect(out.match(/Optional/g)?.length).toBe(2);
-    expect(out).toContain("Free calls work after step 2. Paid calls are by invitation during testnet.");
+    expect(out).toContain("Free calls work after step 2. Paid calls are by invitation for now.");
   });
 
   it("offers Ask for access when this deployment has a support URL", async () => {

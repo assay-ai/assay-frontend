@@ -47,7 +47,7 @@ import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operat
 import type { AccountBlock, ApprovalQueued, BlockSubjectKind, OperatorApproval } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
-import { ROBINHOOD_TESTNET_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
+import { PINNED_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import {
   createAccountBlock,
   createArbiterBlockIntent,
@@ -692,7 +692,7 @@ function useBlockChains(enabled: boolean) {
   const ids = React.useMemo(() => {
     if (!health.data) return [];
     const reported = health.data.chainState.map((state) => state.chainId).filter((id) => stakeDeploymentFor(id) !== null);
-    return reported.length > 0 ? [...new Set(reported)] : [ROBINHOOD_TESTNET_STAKE.chainId];
+    return reported.length > 0 ? [...new Set(reported)] : [PINNED_STAKE.chainId];
   }, [health.data]);
   return { ids, isError: health.isError, isLoading: health.isLoading, refetch: health.refetch };
 }
