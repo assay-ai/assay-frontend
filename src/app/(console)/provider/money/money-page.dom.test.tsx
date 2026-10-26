@@ -77,9 +77,12 @@ const redemption = (id: string, amount: string, calls: number, minutes: number):
   createdAt: new Date(Date.UTC(2026, 9, 17, 0, 60 - minutes)).toISOString(),
 });
 
-function renderToStaticMarkupRaw(payments: ProviderPayout[] = [redemption("a1", "90000", 1, 1), redemption("b2", "180000", 2, 5)]): string {
+function renderToStaticMarkupRaw(
+  payments: ProviderPayout[] = [redemption("a1", "90000", 1, 1), redemption("b2", "180000", 2, 5)],
+  month: ProviderEarnings = earnings,
+): string {
   const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
-  client.setQueryData(["provider", "earnings", "tool", "2026-10-01T00:00:00.000Z", "2026-11-01T00:00:00.000Z"], earnings);
+  client.setQueryData(["provider", "earnings", "tool", "2026-10-01T00:00:00.000Z", "2026-11-01T00:00:00.000Z"], month);
   client.setQueryData(["provider", "payouts", "all"], {
     items: payments,
     pageInfo: { nextCursor: null, hasMore: false },
@@ -148,6 +151,26 @@ describe("provider Money", () => {
     expect(words).toMatch(/In your wallet this month \$6\.084 /);
     expect(words).toMatch(/Assay fee \d+% \$0\.676 /);
     expect(words).not.toMatch(/\$0\.6[78] /);
+  });
+
+  it("never says every call was credited while calls are still held in the dispute window (onboarding wave item 3)", () => {
+    const held: ProviderEarnings = {
+      ...earnings,
+      totals: {
+        calls: 12,
+        earned: usd("45000"),
+        platformFee: usd("5000"),
+        withheld: usd("0"),
+        withheldCalls: 0,
+        withheldByClass: [],
+        pendingInWindow: usd("63000"),
+        pendingInWindowCalls: 7,
+      },
+      groups: [],
+    };
+    const words = text(renderToStaticMarkupRaw(undefined, held));
+    expect(words).not.toMatch(/Every call this month was credited/);
+    expect(words).toMatch(/No call failed this month\./);
   });
 
   it("links only a real transaction, never an unobserved redemption (B13 review I1)", () => {

@@ -48,6 +48,19 @@ describe("slashHoldBanner", () => {
     expect(two?.lines[0]).toMatch(/Robinhood Chain testnet/);
   });
 
+  it("says the stake is below the minimum, not 'pending penalties', when no penalty is open (onboarding wave item 3)", () => {
+    const hold = { chainId: "eip155:46630", reasons: ["BONDED_BELOW_MINIMUM"], heldSince: "2026-10-15T07:30:00Z" };
+    const model = slashHoldBanner([hold], { penaltyPending: false, minimum: "$50.00" });
+    expect(model?.lines[0]).toMatch(/because your stake is below the \$50\.00 minimum\.$/);
+    expect(model?.lines[0]).not.toMatch(/penalt/);
+    expect(model?.penaltyRelated).toBe(false);
+    // With a penalty open, or not known yet, the backend's words stay.
+    expect(slashHoldBanner([hold], { penaltyPending: true })?.lines[0]).toMatch(/pending penalties/);
+    expect(slashHoldBanner([hold])?.penaltyRelated).toBe(true);
+    // A reason only a penalty causes is penalty-related whatever the list says.
+    expect(slashHoldBanner([{ ...hold, reasons: ["SLASH_WINDOW_FULL"] }], { penaltyPending: false })?.penaltyRelated).toBe(true);
+  });
+
   it("says what to do and that routing resumes by itself", () => {
     expect(HOLD_WHAT_TO_DO).toMatch(/wait.*add stake.*dispute/i);
     expect(HOLD_RESUMES).toMatch(/resumes automatically/);

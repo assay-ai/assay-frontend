@@ -344,8 +344,9 @@ export default function ProviderMoneyPage() {
               {/* No calls is not "every call credited" (BUG-R17-P-02). */}
               {(earnings.data?.totals.calls ?? 0) === 0
                 ? "No calls this month yet."
-                : passedUnpaidCalls > 0
-                  ? "No call failed this month."
+                : passedUnpaidCalls > 0 || (earnings.data?.totals.pendingInWindowCalls ?? 0) > 0
+                  ? // Calls still held in the dispute window are not credited yet (onboarding wave item 3).
+                    "No call failed this month."
                   : "Every call this month was credited."}
             </p>
           ) : (

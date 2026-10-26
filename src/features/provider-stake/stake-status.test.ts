@@ -27,6 +27,12 @@ describe("stakeStatus", () => {
     );
   });
 
+  it("is Covered, at the minimum, said calmly when the stake is exactly the minimum (onboarding wave item 3)", () => {
+    const reading = stakeStatus({ required, staked: usd("100"), recommended, enough: true });
+    expect(reading.label).toBe("Covered, at the minimum");
+    expect(reading.sentence).toMatch(/^Covered: your stake is at the \$100\.00 minimum\./);
+  });
+
   it("is Covered from 20% above the minimum", () => {
     expect(stakeStatus({ required, staked: usd("120"), recommended, enough: true }).health).toBe("covered");
     expect(stakeStatus({ required, staked: usd("160"), recommended, enough: true }).sentence).toBe(
