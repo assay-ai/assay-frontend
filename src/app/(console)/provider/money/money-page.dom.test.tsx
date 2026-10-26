@@ -115,9 +115,9 @@ describe("provider Money", () => {
     const words = render();
     expect(words).toMatch(/Not credited · 22 calls, see below \d+% \$0\.74/);
     expect(words).toMatch(/Not credited this month 22 calls · \$0\.74 ·/);
-    // The reasons below add up to it: 12 + 8 + 2 calls, $0.35 + $0.30 + $0.09.
-    expect(words).toMatch(/Failed our checks .*\$0\.35 12 calls/);
-    expect(words).toMatch(/Endpoint error .*\$0\.30 8 calls/);
+    // The reasons below add up to it: 12 + 8 + 2 calls, $0.353 + $0.297 + $0.09.
+    expect(words).toMatch(/Failed our checks .*\$0\.353 12 calls/);
+    expect(words).toMatch(/Endpoint error .*\$0\.297 8 calls/);
     expect(words).toMatch(/Request refused .*\$0\.09 2 calls/);
     expect(words).not.toMatch(/14 calls/);
   });
@@ -142,12 +142,12 @@ describe("provider Money", () => {
     expect(words).not.toMatch(/written off/i);
   });
 
-  it("rounds the wallet figure and the fee once, from cents", () => {
+  it("shows the wallet figure and the fee to 1/100 of a cent, by the page's one rule", () => {
     const words = render();
-    // $6.084 + $0.676 = $6.76: shown $6.08 + $0.68, never $6.08 beside $0.67.
-    expect(words).toMatch(/In your wallet this month \$6\.08/);
-    expect(words).toMatch(/Assay fee \d+% \$0\.68/);
-    expect(words).not.toMatch(/\$0\.67/);
+    // $6.084 + $0.676 = $6.76: shown as they are, never $6.08 beside $0.68 or $0.67.
+    expect(words).toMatch(/In your wallet this month \$6\.084 /);
+    expect(words).toMatch(/Assay fee \d+% \$0\.676 /);
+    expect(words).not.toMatch(/\$0\.6[78] /);
   });
 
   it("links only a real transaction, never an unobserved redemption (B13 review I1)", () => {

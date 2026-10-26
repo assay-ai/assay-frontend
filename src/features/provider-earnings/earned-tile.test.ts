@@ -96,11 +96,18 @@ describe("earningsSplit", () => {
     expect(split.notCredited).toBeNull();
   });
 
-  it("rounds the wallet figure and the fee once, from cents, for Home and Money alike", () => {
-    // $6.084 + $0.676 = $6.76: $6.08 + $0.68, never $6.08 beside $0.67.
+  it("rounds the wallet figure and the fee once, at the provider money places, for Home and Money alike", () => {
+    // $6.084 + $0.676 = $6.76, exact at 1/100 of a cent.
     const split = earningsSplit({ calls: 81, earned: usd("6084000"), platformFee: usd("676000"), withheld: null, withheldCalls: 0, withheldByClass: [] });
-    expect(split.inWallet?.amount).toBe("6080000");
-    expect(split.fee?.amount).toBe("680000");
+    expect(split.inWallet?.amount).toBe("6084000");
+    expect(split.fee?.amount).toBe("676000");
+  });
+
+  it("never moves a sub-cent fee into the wallet figure (BUG-PROD-PRV-MONEY-01)", () => {
+    // 5 calls at $0.01: $0.045 earned, $0.005 fee. Cents made it $0.05 in the wallet and a $0.00 fee.
+    const split = earningsSplit({ calls: 5, earned: usd("45000"), platformFee: usd("5000"), withheld: null, withheldCalls: 0, withheldByClass: [] });
+    expect(split.inWallet?.amount).toBe("45000");
+    expect(split.fee?.amount).toBe("5000");
   });
 
   it("says not credited as the sum of its reasons, so Home and Money read the same calls", () => {
