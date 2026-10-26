@@ -150,6 +150,13 @@ export interface Signer {
    * never resolve. Converting once, here, is what stops that.
    */
   readonly signAndSend: (tx: UnsignedChainTransaction, options?: WalletPromptOptions) => Promise<string>;
+  /**
+   * Resolves the wallet's provider without asking for anything, so a flow
+   * whose server-side clock starts on its first request (a deposit intent)
+   * can get the wallet ready BEFORE that request (BUG-PROD-DEPOSIT-01).
+   * Optional: a signer without it needs no warm-up.
+   */
+  readonly prepare?: () => Promise<void>;
 }
 
 /**
@@ -650,6 +657,10 @@ export function useSigner(options: { chainId: string | null; address?: string })
             address: wallet.address,
             kind: isEmbeddedWallet(wallet) ? "embedded" : "external",
             chainId: boundChainId,
+
+            prepare: async () => {
+              await wallet.getEthereumProvider();
+            },
 
             signMessage: async (message) => {
               /*

@@ -161,3 +161,53 @@ describe("POST /deposits with no answer", () => {
     expect(describeMoneyError(timeout())).not.toMatch(/timeout of/);
   });
 });
+
+describe("the wallet is warmed before the intent clock starts (BUG-PROD-DEPOSIT-01)", () => {
+  it("creates the intent only after a slow wallet warm-up resolved", async () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const slow = {
+      ...signer,
+      prepare: vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            release = () => {
+              order.push("wallet ready");
+              resolve();
+            };
+          }),
+      ),
+    } as unknown as Signer;
+    service.createDeposit.mockImplementation(async () => {
+      order.push("POST /deposits");
+      return { depositId: "dep-1", expiresAt: "", requirements: { namespace: "eip155", chainId: CHAIN } };
+    });
+    service.settleDeposit.mockResolvedValue({ id: "dep-1", status: "SETTLED", settledAmount: null, chainTxRef: null });
+    const step = runDepositStep(freshRun(), slow, hooks());
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(service.createDeposit).not.toHaveBeenCalled();
+    release();
+    await step;
+    expect(order).toEqual(["wallet ready", "POST /deposits"]);
+  });
+
+  it("does not hold the click for ever: the intent is created after the warm-up limit", async () => {
+    const stuck = { ...signer, prepare: vi.fn(() => new Promise<void>(() => undefined)) } as unknown as Signer;
+    service.settleDeposit.mockResolvedValue({ id: "dep-1", status: "SETTLED", settledAmount: null, chainTxRef: null });
+    const step = runDepositStep(freshRun(), stuck, hooks());
+    await vi.advanceTimersByTimeAsync(30_000);
+    await step;
+    expect(service.createDeposit).toHaveBeenCalledTimes(1);
+  });
+
+  it("Try again with a fresh intent reuses it: no second warm-up, no second POST /deposits", async () => {
+    const prepared = { ...signer, prepare: vi.fn(async () => undefined) } as unknown as Signer;
+    service.settleDeposit.mockRejectedValueOnce(new ApiError("PAYMENT_SETTLEMENT_FAILED", "x", 502));
+    service.settleDeposit.mockResolvedValue({ id: "dep-1", status: "SETTLED", settledAmount: null, chainTxRef: null });
+    const run = freshRun();
+    await expect(runDepositStep(run, prepared, hooks())).rejects.toBeInstanceOf(ApiError);
+    await runDepositStep(run, prepared, hooks());
+    expect(service.createDeposit).toHaveBeenCalledTimes(1);
+    expect(prepared.prepare).toHaveBeenCalledTimes(1);
+  });
+});

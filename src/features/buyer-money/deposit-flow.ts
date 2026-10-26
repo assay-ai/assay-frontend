@@ -1,7 +1,7 @@
 import { assertRequirementsChain } from "@/features/funding/deposit-chain";
 import { approveEvmDeposit, checkEvmDeposit, sendEvmDepositFor } from "@/features/funding/evm-deposit";
 import type { Signer } from "@/hooks/useSigner";
-import { ApiError } from "@/libs/ApiClient";
+import { ApiError, warmSessionToken } from "@/libs/ApiClient";
 import { waitForSuccess } from "@/libs/chains/evm/deposit-transaction";
 import { toBase64 } from "@/libs/chains/solana/base64";
 import { buildDepositTransaction } from "@/libs/chains/solana/deposit-transaction";
@@ -157,8 +157,34 @@ async function outcomeBeforeRetry(depositId: string): Promise<SettledDeposit | n
   return null;
 }
 
-async function freshIntent(run: DepositRun): Promise<CreatedDeposit> {
+/** The longest a warm-up may hold the click before the intent is created anyway. */
+export const WARM_UP_LIMIT_MS = 30_000;
+
+/**
+ * Gets the session and the wallet ready before anything starts the intent's
+ * clock. On a cold tab the Privy embedded-wallet session refresh took tens of
+ * seconds before the first prompt, all of it inside the intent's lifetime
+ * (BUG-PROD-DEPOSIT-01). Called when the drawer opens and again at the start
+ * of the click (a no-op by then). Never throws, and gives up after
+ * `WARM_UP_LIMIT_MS`: the wallet step reports any real problem itself.
+ */
+export async function warmWallet(signer: Signer | null | undefined): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, WARM_UP_LIMIT_MS);
+  });
+  const warm = Promise.allSettled([warmSessionToken(), signer?.prepare?.()]).then(() => undefined);
+  try {
+    await Promise.race([warm, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function freshIntent(run: DepositRun, signer: Signer): Promise<CreatedDeposit> {
   if (run.created && Date.now() - run.createdAt < INTENT_FRESH_MS) return run.created;
+  // The wallet first, then the intent: its lifetime starts with POST /deposits.
+  await warmWallet(signer);
   let created: CreatedDeposit;
   try {
     created = await createDeposit(run.amountAtomic, run.chainId);
@@ -183,7 +209,7 @@ export async function runApproveStep(
     await waitForSuccess(run.chainId, previousHash);
     return;
   }
-  const created = await freshIntent(run);
+  const created = await freshIntent(run, signer);
   if (!isEvmDepositRequirements(created.requirements)) return;
   const amountAtomic = BigInt(run.amountAtomic);
   const check = await checkEvmDeposit({ signer, requirements: created.requirements, amountAtomic });
@@ -262,7 +288,7 @@ export async function runDepositStep(
       throw error;
     }
   }
-  const created = await freshIntent(run);
+  const created = await freshIntent(run, signer);
   const requirements = created.requirements;
   if (isEvmDepositRequirements(requirements)) {
     hooks.onWallet();
