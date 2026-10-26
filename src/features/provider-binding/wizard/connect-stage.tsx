@@ -133,8 +133,16 @@ export function ConnectStage({
   const queryClient = useQueryClient();
   const router = useRouter();
   const [endpoint, setEndpoint] = React.useState(binding?.endpoint ?? initialEndpoint);
-  // No default (D10): a new listing starts with no choice, and nothing is saved until one is made.
-  const [authMode, setAuthMode] = React.useState<BindingAuthMode | null>(binding?.authMode ?? null);
+  // A new listing starts on the Assay signature (onboarding run 3; D10 had no default): it is the safest
+  // choice, needs no key stored, and a public API that does not check it still answers. The mode is
+  // still sent explicitly with the draft, and the provider can pick another before saving.
+  const [authMode, setAuthMode] = React.useState<BindingAuthMode | null>(binding?.authMode ?? "SIGNATURE");
+  // Whether the mode is the provider's own choice (a saved one counts), not only the default.
+  const [authPicked, setAuthPicked] = React.useState(binding !== null);
+  const pickAuthMode = (mode: BindingAuthMode) => {
+    setAuthPicked(true);
+    setAuthMode(mode);
+  };
   // Moved out of the address by "Move it to an API key header"; only ever handed to the write-only form.
   const [pendingHeaders, setPendingHeaders] = React.useState<CredentialHeaderInput[] | null>(null);
   const credentialSets = useBindingCredentials(binding?.id ?? null, authMode);
@@ -401,7 +409,9 @@ export function ConnectStage({
               const moved = moveQueryKeys(endpoint);
               if (!moved) return;
               setEndpoint(moved.endpoint);
-              setAuthMode((current) => (current === "SIGNATURE" || current === "BOTH" ? "BOTH" : "API_KEY"));
+              // A signature the provider chose stays; the default alone gives way to the key the address carried.
+              setAuthMode((current) => (authPicked && (current === "SIGNATURE" || current === "BOTH") ? "BOTH" : "API_KEY"));
+              setAuthPicked(true);
               setPendingHeaders(moved.headers);
             }}
           >
@@ -418,7 +428,7 @@ export function ConnectStage({
           savedEndpoint={binding?.endpoint ?? null}
           publishedEndpoint={binding?.publishedEndpoint ?? null}
           mode={authMode}
-          onModeChange={setAuthMode}
+          onModeChange={pickAuthMode}
           readOnly={readOnly}
           onSaveConnection={() => void saveOnly()}
           savingConnection={phase === "saving-only"}

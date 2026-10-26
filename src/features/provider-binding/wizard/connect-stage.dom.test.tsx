@@ -96,13 +96,14 @@ describe("ConnectStage run gate", () => {
 describe("ConnectStage new listing", () => {
   const addressInput = () => screen.getByLabelText(/Your API's address/) as HTMLInputElement;
 
-  it("saves nothing until an authentication choice is made (D10)", async () => {
-    const onSave = vi.fn();
+  it("starts a new listing on the Assay signature, and sends it explicitly (onboarding run 3)", async () => {
+    const onSave = vi.fn().mockResolvedValue(bindingWith("SIGNATURE"));
+    service.testToolBinding.mockReturnValue(new Promise(() => undefined));
     mount(null, onSave);
+    expect((screen.getByRole("radio", { name: /^Assay signature/ }) as HTMLInputElement).checked).toBe(true);
     await waitFor(() => expect(runButton().disabled).toBe(false));
     fireEvent.click(runButton());
-    expect(await screen.findByText("Choose how your API knows a call is from Assay, under Authentication.")).toBeTruthy();
-    expect(onSave).not.toHaveBeenCalled();
+    await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ authMode: "SIGNATURE" })));
   });
 
   it("sends the chosen mode with the draft", async () => {
@@ -149,7 +150,7 @@ describe("ConnectStage new listing", () => {
   it("Save draft and exit saves, then goes to the listings", async () => {
     const onSave = vi.fn().mockResolvedValue(bindingWith("NONE"));
     mount(null, onSave);
-    fireEvent.click(screen.getByRole("radio", { name: /^Neither/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^No check/ }));
     await waitFor(() => expect((screen.getByRole("button", { name: "Save draft and exit" }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole("button", { name: "Save draft and exit" }));
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/provider/bindings"));
