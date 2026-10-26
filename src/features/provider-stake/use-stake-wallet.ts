@@ -6,7 +6,7 @@ import * as React from "react";
 import { useChains } from "@/hooks/useChains";
 import { useConnectedAddresses, useSigner, type UseSignerResult } from "@/hooks/useSigner";
 import type { Chain } from "@/interfaces/chain";
-import { ROBINHOOD_TESTNET_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
+import { PINNED_STAKE, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { isEvmChain } from "@/libs/chains/registry";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { addressOfAccount, chainIdOfAccount } from "@/utils/chain";
@@ -34,7 +34,7 @@ export function useStakeWallet(status: StakeStatus) {
   const registration = useQuery(providerQueries.registration());
   const payout = registration.data?.registration.payoutAccounts ?? [];
   const payoutChain = chainIdOfAccount((payout.find((a) => a.status === "ACTIVE") ?? payout[0])?.accountId);
-  const chainId = status.chainId ?? payoutChain ?? ROBINHOOD_TESTNET_STAKE.chainId;
+  const chainId = status.chainId ?? payoutChain ?? PINNED_STAKE.chainId;
 
   const connected = useConnectedAddresses();
   const candidates = React.useMemo(() => candidateAddresses(connected, chainId), [connected, chainId]);
@@ -49,19 +49,19 @@ export function useStakeWallet(status: StakeStatus) {
   const { chains } = useChains();
   const chain: Chain | null =
     chains.find((c) => c.chainId === chainId) ??
-    (chainId === ROBINHOOD_TESTNET_STAKE.chainId && ROBINHOOD_TESTNET_STAKE.explorerBaseUrl
+    (chainId === PINNED_STAKE.chainId && PINNED_STAKE.explorerBaseUrl
       ? ({
           chainId,
           namespace: "eip155",
-          displayName: ROBINHOOD_TESTNET_STAKE.displayName,
-          explorerBaseUrl: ROBINHOOD_TESTNET_STAKE.explorerBaseUrl,
+          displayName: PINNED_STAKE.displayName,
+          explorerBaseUrl: PINNED_STAKE.explorerBaseUrl,
         } as Chain)
       : null);
 
   return {
     chainId,
     chain,
-    chainName: chain?.displayName ?? (chainId === ROBINHOOD_TESTNET_STAKE.chainId ? ROBINHOOD_TESTNET_STAKE.displayName : "your chain"),
+    chainName: chain?.displayName ?? (chainId === PINNED_STAKE.chainId ? PINNED_STAKE.displayName : "your chain"),
     isEvm: isEvmChain(chainId),
     /** The stake token's symbol on a pinned deployment (USDG), for balance lines. */
     tokenSymbol: stakeDeploymentFor(chainId)?.fallbackAssetSymbol ?? "stake token",

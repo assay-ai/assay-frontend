@@ -14,7 +14,7 @@ import type {
   PlatformHealth,
 } from "@/interfaces/operator";
 import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
-import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
+import { PINNED_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 import { readOperatorSession } from "@/libs/operator-session";
 
 import { DEMO_NOW_MS } from "./demo-clock";
@@ -116,8 +116,8 @@ const LATTICE = "48e1b60c-d573-4a92-bf08-6c3d95e12a7b";
 
 const ARBITER = "0x5B38Da6a701c568545dCfcB03FcB875f56beddC4";
 /* The pinned contracts: the signing guard refuses a call to anything else, demo or not. */
-const STAKE_CONTRACT = ROBINHOOD_TESTNET_STAKE.stakeContract;
-const CONFIG_CONTRACT = ROBINHOOD_TESTNET_STAKE.configContract;
+const STAKE_CONTRACT = PINNED_STAKE.stakeContract;
+const CONFIG_CONTRACT = PINNED_STAKE.configContract;
 
 // ── The team ────────────────────────────────────────────────────────────────
 

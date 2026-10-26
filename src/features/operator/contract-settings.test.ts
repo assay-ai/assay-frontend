@@ -10,7 +10,7 @@ import {
   type VerifierKeyRow,
 } from "@/libs/chains/evm/contract-config";
 import { assertContractCall, decodePinnedCall } from "@/libs/chains/evm/signing-guard";
-import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
+import { PINNED_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 
 import { callAction } from "./call-summary";
 import {
@@ -202,14 +202,14 @@ describe("the admin's calls", () => {
       { functionName: "setSlashDelay", args: [BigInt(600)] },
     ] as const;
     for (const chosen of calls) {
-      const { call, expected } = buildConfigCall(ROBINHOOD_TESTNET_STAKE, ADMIN, chosen as never);
-      expect(call).toMatchObject({ to: ROBINHOOD_TESTNET_STAKE.configContract, value: "0", signer: ADMIN, signerRole: "ADMIN" });
+      const { call, expected } = buildConfigCall(PINNED_STAKE, ADMIN, chosen as never);
+      expect(call).toMatchObject({ to: PINNED_STAKE.configContract, value: "0", signer: ADMIN, signerRole: "ADMIN" });
       expect(assertContractCall(call, expected).functionName).toBe(chosen.functionName);
     }
   });
 
   it("refuses a ParamSet that differs in one field", () => {
-    const { call } = buildConfigCall(ROBINHOOD_TESTNET_STAKE, ADMIN, {
+    const { call } = buildConfigCall(PINNED_STAKE, ADMIN, {
       functionName: "updateConfig",
       args: [PARAMS],
     });

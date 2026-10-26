@@ -19,7 +19,7 @@ vi.mock("@/libs/chains/evm/deposit-transaction", () => ({
 import type { Signer } from "@/hooks/useSigner";
 import type { StakeIntent } from "@/interfaces/provider-stake";
 import { encodeCall } from "@/libs/chains/evm/calldata-fixtures";
-import { ROBINHOOD_TESTNET_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
+import { PINNED_STAKE } from "@/libs/chains/evm/stake-slashes/deployments";
 
 import { depositSteps, unstakeStep, withdrawStep } from "./stake-steps";
 
@@ -28,12 +28,12 @@ const OWNER = "0x2222222222222222222222222222222222222222";
 function intent(kind: StakeIntent["kind"], signature: string, amount: string, to: string): StakeIntent {
   return {
     kind,
-    account: `${ROBINHOOD_TESTNET_STAKE.chainId}:${OWNER}`,
-    amount: { amount, asset: `${ROBINHOOD_TESTNET_STAKE.chainId}/erc20:0x1`, decimals: 6 },
+    account: `${PINNED_STAKE.chainId}:${OWNER}`,
+    amount: { amount, asset: `${PINNED_STAKE.chainId}/erc20:0x1`, decimals: 6 },
     transaction: {
       namespace: "eip155",
       kind: "transaction",
-      chainId: ROBINHOOD_TESTNET_STAKE.chainId,
+      chainId: PINNED_STAKE.chainId,
       from: OWNER,
       to,
       data: encodeCall(signature, [BigInt(amount)]),
@@ -46,7 +46,7 @@ function intent(kind: StakeIntent["kind"], signature: string, amount: string, to
 }
 
 function signer() {
-  return { address: OWNER, chainId: ROBINHOOD_TESTNET_STAKE.chainId, kind: "external", signAndSend: vi.fn(async () => "0xhash") };
+  return { address: OWNER, chainId: PINNED_STAKE.chainId, kind: "external", signAndSend: vi.fn(async () => "0xhash") };
 }
 
 const run = (step: ReturnType<typeof unstakeStep>) => step.run({ report: () => undefined } as never);
@@ -59,19 +59,19 @@ describe("stake steps send only the chosen stake call", () => {
   });
 
   it("sends requestUnstake(amount) to the pinned stake contract", async () => {
-    services.unstake.mockResolvedValue(intent("UNSTAKE", "requestUnstake(uint64)", "5000000", ROBINHOOD_TESTNET_STAKE.stakeContract));
+    services.unstake.mockResolvedValue(intent("UNSTAKE", "requestUnstake(uint64)", "5000000", PINNED_STAKE.stakeContract));
     const s = signer();
     await run(unstakeStep({ amountAtomic: "5000000", amountLabel: "$5", signer: s as unknown as Signer, chain: null }));
     expect(s.signAndSend).toHaveBeenCalledTimes(1);
   });
 
   it("forces Privy's confirmation screen, titled with the amount, for unstake and withdraw", async () => {
-    services.unstake.mockResolvedValue(intent("UNSTAKE", "requestUnstake(uint64)", "5000000", ROBINHOOD_TESTNET_STAKE.stakeContract));
+    services.unstake.mockResolvedValue(intent("UNSTAKE", "requestUnstake(uint64)", "5000000", PINNED_STAKE.stakeContract));
     const s = signer();
     await run(unstakeStep({ amountAtomic: "5000000", amountLabel: "$5", signer: s as unknown as Signer, chain: null }));
     expect(s.signAndSend).toHaveBeenCalledWith(expect.anything(), { showWalletUIs: true, title: "Start withdrawing $5" });
 
-    services.withdraw.mockResolvedValue(intent("WITHDRAW", "withdrawStake(uint64)", "5000000", ROBINHOOD_TESTNET_STAKE.stakeContract));
+    services.withdraw.mockResolvedValue(intent("WITHDRAW", "withdrawStake(uint64)", "5000000", PINNED_STAKE.stakeContract));
     const w = signer();
     await run(withdrawStep({ amountAtomic: "5000000", amountLabel: "$5", signer: w as unknown as Signer, chain: null }));
     expect(w.signAndSend).toHaveBeenCalledWith(expect.anything(), { showWalletUIs: true, title: "Withdraw $5 to your wallet" });
@@ -81,10 +81,10 @@ describe("stake steps send only the chosen stake call", () => {
     const s = signer();
     const step = (amount: string) => withdrawStep({ amountAtomic: amount, amountLabel: "$5", signer: s as unknown as Signer, chain: null });
 
-    services.withdraw.mockResolvedValue(intent("WITHDRAW", "withdrawStake(uint64)", "9000000", ROBINHOOD_TESTNET_STAKE.stakeContract));
+    services.withdraw.mockResolvedValue(intent("WITHDRAW", "withdrawStake(uint64)", "9000000", PINNED_STAKE.stakeContract));
     await expect(run(step("5000000"))).rejects.toThrow(/another amount/);
 
-    services.withdraw.mockResolvedValue(intent("WITHDRAW", "requestUnstake(uint64)", "5000000", ROBINHOOD_TESTNET_STAKE.stakeContract));
+    services.withdraw.mockResolvedValue(intent("WITHDRAW", "requestUnstake(uint64)", "5000000", PINNED_STAKE.stakeContract));
     await expect(run(step("5000000"))).rejects.toThrow(/not withdrawStake/);
 
     services.withdraw.mockResolvedValue(
@@ -99,10 +99,10 @@ describe("stake steps send only the chosen stake call", () => {
 /* Merge audit L1: the approve step refuses, as main did, instead of quietly skipping. */
 describe("approve step", () => {
   it("refuses a deposit whose asset is not an ERC-20, before the wallet is asked", async () => {
-    const deposit = intent("DEPOSIT", "depositStake(uint64)", "5000000", ROBINHOOD_TESTNET_STAKE.stakeContract);
+    const deposit = intent("DEPOSIT", "depositStake(uint64)", "5000000", PINNED_STAKE.stakeContract);
     services.deposit.mockResolvedValue({
       ...deposit,
-      amount: { ...deposit.amount!, asset: `${ROBINHOOD_TESTNET_STAKE.chainId}/slip44:60` },
+      amount: { ...deposit.amount!, asset: `${PINNED_STAKE.chainId}/slip44:60` },
     });
     const s = signer();
     const approve = depositSteps({ amountAtomic: "5000000", amountLabel: "$5", isEvm: true, signer: s as unknown as Signer, chain: null })

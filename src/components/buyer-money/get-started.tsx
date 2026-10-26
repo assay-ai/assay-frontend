@@ -54,7 +54,7 @@ import { useAgentsAndKeys } from "./use-agents";
  *   4. Let the agent pay — its spending limits (and the account ceiling,
  *      raised to fit if needed) in one drawer; the payment key is detected,
  *      never typed. Until a payment key is bound this step reads "Paid
- *      calls: by invitation during testnet" (D14) and is not counted.
+ *      calls: by invitation for now" (D14) and is not counted.
  *
  * A done step shows only its summary (what was achieved, where to change it),
  * never the active-state buttons or "waiting" lines.
@@ -344,7 +344,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
       description: facts.freeOnly
         ? "This chain serves free calls only, so there is nothing to fund."
         : invitation
-          ? "Only needed for paid calls, which are by invitation during testnet."
+          ? "Only needed for paid calls, which are by invitation for now."
           : "Only for paid calls. Free calls already work. Minimum $5.00.",
       state: states.funds,
       // A deposit buys nothing while paying is by invitation (D14): not counted.
@@ -424,7 +424,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
           facts.freeOnly
             ? "Two steps to your agent's first call. This chain serves free calls only, so adding funds and letting your agent pay are not needed."
             : invitation
-              ? "Free calls work after step 2. Paid calls are by invitation during testnet."
+              ? "Free calls work after step 2. Paid calls are by invitation for now."
               : "Four steps to your agent's first paid call. Free calls work after step 2."
         }
         steps={steps}
@@ -465,7 +465,7 @@ export function GetStarted({ placement }: { placement: "overview" | "page" }) {
 
 /**
  * Step 4 while no payment key is bound (D14): paid calls are by invitation
- * during testnet. "Ask for access" goes to SUPPORT_URL when this deployment
+ * for now. "Ask for access" goes to SUPPORT_URL when this deployment
  * has one. An invited buyer still finds the payment-key command, folded away,
  * and the step ticks on by itself once the key is bound.
  */
