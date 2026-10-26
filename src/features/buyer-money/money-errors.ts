@@ -1,4 +1,5 @@
 import type { SubmittedOutcome } from "@/components/patterns/wallet-steps";
+import { DepositNoAnswer, DepositStillChecking, isNoAnswer } from "@/features/buyer-money/deposit-flow";
 import { delegationInvalidText } from "@/features/delegation/delegation-form";
 import { isUnsettledRefusal } from "@/features/delegation/unsettled";
 import { isRelayedRefusal, relayedRefusal } from "@/features/escrow/relayed-refusal";
@@ -41,6 +42,9 @@ export class WalletNotReady extends Error {}
 export function describeMoneyError(error: unknown): string {
   if (error instanceof WalletNotReady) return error.message;
   if (error instanceof EvmDepositRefused) return error.message;
+  if (error instanceof DepositNoAnswer || error instanceof DepositStillChecking) return error.message;
+  // Never the raw "timeout of 30000ms exceeded".
+  if (isNoAnswer(error)) return "Assay took too long to answer. Check Funding before you try again.";
   if (isUnsettledRefusal(error)) {
     return "Some payments are still being settled and these new limits would block them. Wait a minute and try again.";
   }
@@ -63,9 +67,11 @@ export function describeMoneyError(error: unknown): string {
 /**
  * What a deposit step that failed AFTER it signed says instead of the generic
  * "sent, but we could not confirm it" line, when the outcome is known: the
- * backend saw no transfer. `null` keeps the generic line.
+ * backend saw no transfer, or the answer was lost and the deposit is still
+ * being checked (not a failure). `null` keeps the generic line.
  */
 export function describeSubmittedDepositError(error: unknown): SubmittedOutcome | null {
+  if (error instanceof DepositStillChecking) return { text: error.message, tone: "warning" };
   if (error instanceof ApiError && error.code === "PAYMENT_DEPOSIT_TRANSFER_NOT_OBSERVED") {
     return { text: DEPOSIT_NOT_OBSERVED_TEXT, tone: "danger" };
   }

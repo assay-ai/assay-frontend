@@ -7,10 +7,12 @@ import { toBase64 } from "@/libs/chains/solana/base64";
 import { buildDepositTransaction } from "@/libs/chains/solana/deposit-transaction";
 import {
   createDeposit,
+  getDeposit,
   isEvmDepositRequirements,
   settleDeposit,
   settleDepositByBroadcast,
   type CreatedDeposit,
+  type Deposit,
   type SettledDeposit,
 } from "@/services/funding.service";
 
@@ -35,9 +37,135 @@ export interface DepositRun {
   nativeWei?: bigint;
 }
 
+/**
+ * A request that got no readable answer: the axios timeout ("timeout of
+ * 30000ms exceeded"), a dropped connection, or a response the browser could
+ * not read ("Failed to fetch"). The server may still have done the work.
+ */
+export function isNoAnswer(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    if (error.status !== 0) return false;
+    return (
+      ["ECONNABORTED", "ETIMEDOUT", "ERR_NETWORK", "NETWORK_ERROR", "ECONNRESET"].includes(error.code) ||
+      /timeout of \d+ms exceeded|network error|failed to fetch/i.test(error.message)
+    );
+  }
+  return error instanceof TypeError && /failed to fetch|network/i.test(error.message);
+}
+
+/** Before anything was signed: Assay did not answer in time. Its message is shown as is. */
+export class DepositNoAnswer extends Error {
+  constructor() {
+    super("Assay took too long to answer. Nothing was signed or sent. Try again.");
+    this.name = "DepositNoAnswer";
+  }
+}
+
+/**
+ * After the transaction was signed or sent, the settle answer was lost and
+ * re-reading the deposit did not settle it either way. Not a failure: the
+ * deposit may still land. Its message is shown as is.
+ */
+export class DepositStillChecking extends Error {
+  constructor() {
+    super(
+      "Your deposit was sent and we are still checking it. Watch Funding for it; Try again checks it rather than sending it twice.",
+    );
+    this.name = "DepositStillChecking";
+  }
+}
+
+/** Pauses between re-reads of a deposit whose settle answer was lost (~26 s, past the backend's ~20 s chain wait). */
+export const RECHECK_DELAYS_MS: readonly number[] = [2_000, 4_000, 8_000, 12_000];
+
+const pause = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+function asSettled(deposit: Deposit): SettledDeposit {
+  return {
+    id: deposit.id,
+    status: deposit.status,
+    settledAmount: deposit.settledAmount,
+    chainTxRef: deposit.chainTxRef,
+  };
+}
+
+function notObserved(deposit: Deposit): ApiError {
+  return new ApiError(
+    "PAYMENT_DEPOSIT_TRANSFER_NOT_OBSERVED",
+    deposit.statusReason ?? "No transfer was observed for this deposit.",
+    422,
+  );
+}
+
+/** `null` when the deposit could not be read. */
+async function readDeposit(depositId: string): Promise<Deposit | null> {
+  try {
+    return await getDeposit(depositId);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Re-reads a deposit whose settle answer was lost, a few times with a short
+ * backoff. Only ever a GET: a payload that may have landed is never sent
+ * again (the backend refuses a second settle of a `SETTLING` intent anyway).
+ *
+ * SETTLED → the deposit; FAILED → not observed; still CREATED / SETTLING or
+ * unreadable at the end → `DepositStillChecking`.
+ */
+export async function recheckDeposit(depositId: string): Promise<SettledDeposit> {
+  for (const delay of RECHECK_DELAYS_MS) {
+    await pause(delay);
+    const deposit = await readDeposit(depositId);
+    if (deposit?.status === "SETTLED") return asSettled(deposit);
+    if (deposit?.status === "FAILED") throw notObserved(deposit);
+    if (deposit?.status === "EXPIRED") {
+      throw new ApiError("PAYMENT_DEPOSIT_EXPIRED", deposit.statusReason ?? "The deposit expired.", 409);
+    }
+  }
+  throw new DepositStillChecking();
+}
+
+/** One settle request; a lost answer is resolved by re-reading the deposit, never by sending again. */
+async function settleOrRecheck<T>(depositId: string, send: () => Promise<T>): Promise<T | SettledDeposit> {
+  try {
+    return await send();
+  } catch (error) {
+    if (!isNoAnswer(error)) throw error;
+    return recheckDeposit(depositId);
+  }
+}
+
+/**
+ * A retry of a submitted deposit step reads where the intent stands first.
+ * Returns the outcome when it is known (or still settling), or `null` when
+ * the intent was never settled (CREATED / EXPIRED) and the caller may hand
+ * the same payload back.
+ */
+async function outcomeBeforeRetry(depositId: string): Promise<SettledDeposit | null> {
+  let deposit: Deposit;
+  try {
+    deposit = await getDeposit(depositId);
+  } catch (error) {
+    if (isNoAnswer(error)) throw new DepositStillChecking();
+    throw error;
+  }
+  if (deposit.status === "SETTLED") return asSettled(deposit);
+  if (deposit.status === "FAILED") throw notObserved(deposit);
+  if (deposit.status === "SETTLING") return recheckDeposit(depositId);
+  return null;
+}
+
 async function freshIntent(run: DepositRun): Promise<CreatedDeposit> {
   if (run.created && Date.now() - run.createdAt < INTENT_FRESH_MS) return run.created;
-  const created = await createDeposit(run.amountAtomic, run.chainId);
+  let created: CreatedDeposit;
+  try {
+    created = await createDeposit(run.amountAtomic, run.chainId);
+  } catch (error) {
+    if (isNoAnswer(error)) throw new DepositNoAnswer();
+    throw error;
+  }
   assertRequirementsChain(run.chainId, created.requirements.chainId);
   run.created = created;
   run.createdAt = Date.now();
@@ -77,13 +205,13 @@ export async function settleByHash(
   hash: string,
 ): Promise<SettledDeposit | "already-credited"> {
   try {
-    return await settleDepositByBroadcast(depositId, hash);
+    return await settleOrRecheck(depositId, () => settleDepositByBroadcast(depositId, hash));
   } catch (caught) {
     if (isAlreadyClaimed(caught)) return "already-credited";
     if (!(caught instanceof ApiError) || caught.code !== "PAYMENT_DEPOSIT_EXPIRED") throw caught;
     const fresh = await createDeposit(run.amountAtomic, run.chainId);
     try {
-      return await settleDepositByBroadcast(fresh.depositId, hash);
+      return await settleOrRecheck(fresh.depositId, () => settleDepositByBroadcast(fresh.depositId, hash));
     } catch (again) {
       if (isAlreadyClaimed(again)) return "already-credited";
       throw again;
@@ -114,14 +242,21 @@ export async function runDepositStep(
     previous?: DepositAttempt;
   },
 ): Promise<SettledDeposit | "already-credited"> {
-  // A retry after submission re-checks what was sent instead of signing again.
+  // A retry after submission re-checks what was sent instead of signing again:
+  // where the intent stands first, and the same payload again only when it
+  // was never settled.
   if (hooks.previous?.kind === "hash") {
+    const known = await outcomeBeforeRetry(hooks.previous.depositId);
+    if (known) return known;
     await waitForSuccess(run.chainId, hooks.previous.hash);
     return settleByHash(run, hooks.previous.depositId, hooks.previous.hash);
   }
   if (hooks.previous?.kind === "signed") {
+    const { depositId, raw } = hooks.previous;
+    const known = await outcomeBeforeRetry(depositId);
+    if (known) return known;
     try {
-      return await settleDeposit(hooks.previous.depositId, run.chainId, hooks.previous.raw);
+      return await settleOrRecheck(depositId, () => settleDeposit(depositId, run.chainId, raw));
     } catch (error) {
       if (isAlreadyClaimed(error)) return "already-credited";
       throw error;
@@ -140,7 +275,9 @@ export async function runDepositStep(
     });
     if (submission.kind === "signed") {
       hooks.onSigned?.({ kind: "signed", raw: submission.rawTransaction, depositId: created.depositId });
-      return settleDeposit(created.depositId, run.chainId, submission.rawTransaction);
+      return settleOrRecheck(created.depositId, () =>
+        settleDeposit(created.depositId, run.chainId, submission.rawTransaction),
+      );
     }
     return settleByHash(run, created.depositId, submission.transactionHash);
   }
@@ -168,5 +305,5 @@ export async function runDepositStep(
     lastValidBlockHeight: requirements.lastValidBlockHeight,
   }, { showWalletUIs: true });
   if (signed.namespace !== "solana") throw new Error(`Expected a Solana signature, got ${signed.namespace}.`);
-  return settleDeposit(created.depositId, run.chainId, signed.transactionBase64);
+  return settleOrRecheck(created.depositId, () => settleDeposit(created.depositId, run.chainId, signed.transactionBase64));
 }
