@@ -1,3 +1,5 @@
+"use client";
+
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import * as React from "react";
@@ -47,6 +49,11 @@ export interface ButtonProps
    * Not drawn in the design (the bench has no loading row) — added so that
    * every reachable interaction state has a prop. Swaps the
    * leading icon for a spinner and disables the button.
+   *
+   * A button that has the prop (an action that sends something) also takes
+   * one click until it re-arms: `loading` only turns true on the render after
+   * the click, so a double click used to start the action twice and send two
+   * requests (BUG-PROD-PRV-DISPUTES-01).
    */
   loading?: boolean;
   /** Leading icon. Sized by the button's `size` via `[&_svg]:size-*`; pass any `currentColor`-aware icon. */
@@ -55,10 +62,35 @@ export interface ButtonProps
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   (
-    { className, variant, size, asChild = false, loading, icon, children, disabled, ...props },
+    { className, variant, size, asChild = false, loading, icon, children, disabled, onClick, ...props },
     ref
   ) => {
     const Comp = asChild ? Slot : "button";
+
+    // Cleared by the click itself, before `loading` can be rendered true.
+    const armed = React.useRef(true);
+    // A render after the click re-arms it: the click changed the screen (a
+    // confirm step, a validation message), or a started action is rendered
+    // `loading` and the button is disabled anyway.
+    React.useEffect(() => {
+      armed.current = true;
+    });
+    const guarded = loading === undefined || asChild || !onClick
+      ? onClick
+      : (event: React.MouseEvent<HTMLButtonElement>) => {
+          if (!armed.current) return;
+          armed.current = false;
+          try {
+            onClick(event);
+          } finally {
+            // Re-armed after the work the click queued: by then a started action
+            // has rendered `loading` (the button is disabled), and a click that
+            // started nothing (a form that did not validate) is not left dead.
+            setTimeout(() => {
+              armed.current = true;
+            }, 0);
+          }
+        };
 
     const ornament = loading ? (
       <svg
@@ -94,6 +126,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         disabled={asChild ? undefined : disabled || loading}
         aria-disabled={asChild && (disabled || loading) ? true : undefined}
         aria-busy={loading || undefined}
+        onClick={guarded}
         {...props}
       >
         {/*

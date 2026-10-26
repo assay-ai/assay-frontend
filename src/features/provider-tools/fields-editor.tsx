@@ -159,7 +159,7 @@ export function TryPanel({ onUse, disabled = false, compact = false }: { onUse: 
                   </option>
                 ))}
               </select>
-              <Button variant="secondary" size="sm" className="touch-target self-start" disabled={!operationId || run.isPending} onClick={() => run.mutate()}>
+              <Button variant="secondary" size="sm" className="touch-target self-start" loading={run.isPending} disabled={!operationId} onClick={() => run.mutate()}>
                 Try this operation
               </Button>
             </div>
