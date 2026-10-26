@@ -83,6 +83,20 @@ export function nameLengthWarning(handle: string, localName: string): string | n
 export const TAG_RE = /^[a-z0-9][a-z0-9-]{0,31}$/;
 export const TAGS_MAX = 10;
 
+/**
+ * The topics a new tool can take: the server accepts only a category the
+ * catalogue's own tools use, so the choice is a list, never free text. A
+ * neutral one ("other", "general", "uncategorised") is the default when the
+ * catalogue has one; today it has none, so the choice stays explicit.
+ */
+const NEUTRAL_TOPICS = ["other", "general", "uncategorised", "uncategorized"];
+
+export function topicChoices(categories: readonly string[], current: string): { options: string[]; neutral: string | null } {
+  const options = [...new Set(categories)].sort();
+  if (current && !options.includes(current)) options.unshift(current);
+  return { options, neutral: NEUTRAL_TOPICS.find((t) => options.includes(t)) ?? null };
+}
+
 /** "posts, Social" → ["posts", "social"]; with what is wrong, if anything. */
 export function parseTags(text: string): { tags: string[]; problem: string | null } {
   const tags = [...new Set(text.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))];

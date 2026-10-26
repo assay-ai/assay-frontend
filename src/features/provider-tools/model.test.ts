@@ -19,6 +19,7 @@ import {
   resumeStep,
   showsNotReviewed,
   suggestLocalName,
+  topicChoices,
   versionRows,
 } from "./model";
 
@@ -273,5 +274,15 @@ describe("imported schemas", () => {
   it("every field an import brings is required or optional", async () => {
     const { optionalFromSchema } = await import("./schema-fields");
     expect(optionalFromSchema({ type: "object", properties: { results: { type: "array" }, total: { type: "integer" } }, required: ["results"] })).toEqual(["total"]);
+  });
+});
+
+/* Onboarding wave 3: the topic is a choice from the catalogue's, with a neutral default only when one exists. */
+describe("topicChoices", () => {
+  it("lists the catalogue's topics, keeps the current one, and defaults to a neutral one only when the catalogue has it", () => {
+    expect(topicChoices(["weather", "finance"], "")).toEqual({ options: ["finance", "weather"], neutral: null });
+    expect(topicChoices(["weather", "other", "finance"], "")).toEqual({ options: ["finance", "other", "weather"], neutral: "other" });
+    expect(topicChoices(["weather", "uncategorised"], "").neutral).toBe("uncategorised");
+    expect(topicChoices(["weather"], "social").options).toEqual(["social", "weather"]);
   });
 });

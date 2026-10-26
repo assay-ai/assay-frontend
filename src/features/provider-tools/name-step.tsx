@@ -11,6 +11,7 @@ import { isTestnet, testnetDepositLine } from "@/features/buyer-money/gas-help";
 import { DEPOSIT_MINIMUM_USD } from "@/features/explorer/buyer-costs";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
+import { Select } from "@/components/ui/select";
 import { STARTER_INPUT, STARTER_OUTPUT } from "@/features/operator/contract-editor";
 import { useProviderEntry } from "@/features/provider-entry/use-provider-entry";
 import { handleErrorView, handleProblem, normaliseHandle, type HandleErrorView } from "@/features/toolsets/sharing";
@@ -36,6 +37,7 @@ import {
   nameLengthWarning,
   parseTags,
   providerToolErrorView,
+  topicChoices,
   type ProviderToolErrorView,
 } from "./model";
 import { providerToolKeys } from "./queries";
@@ -294,6 +296,48 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
     </datalist>
   );
 
+  // The server takes only a topic the catalogue's tools use: a list to pick from, with a neutral
+  // default only when the catalogue has one (onboarding wave 3). Free text only if the list is unavailable.
+  const topics = topicChoices((categories.data?.categories ?? []).map((c) => c.category), tool?.category ?? "");
+  React.useEffect(() => {
+    if (!tool && category === "" && topics.neutral) setCategory(topics.neutral);
+  }, [tool, category, topics.neutral]);
+  const topicField = (showError: boolean) =>
+    topics.options.length > 0 ? (
+      <Select
+        label="Topic"
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        required
+        aria-invalid={showError && categoryProblem !== null ? true : undefined}
+        className="font-sans"
+        data-testid="topic-select"
+        hint={
+          showError && categoryProblem ? (
+            <span className="text-danger-700">{categoryProblem}</span>
+          ) : (
+            "Required. Search and the catalogue group tools by it; new tools take one of the catalogue's topics."
+          )
+        }
+      >
+        {category === "" ? <option value="">Choose a topic</option> : null}
+        {topics.options.map((t) => (
+          <option key={t} value={t}>
+            {t}
+          </option>
+        ))}
+      </Select>
+    ) : (
+      <Field
+        label="Topic"
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        list={listId}
+        error={showError ? (categoryProblem ?? undefined) : undefined}
+        hint="Required. Search and the catalogue group tools by it."
+      />
+    );
+
   if (tool) {
     const tagsChanged = tags !== tool.tags.join(", ") || category !== tool.category;
     const tagProblem = parseTags(tags).problem;
@@ -303,7 +347,7 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         <NamePreview handle={tool.handle} localName={tool.localName} />
         <p className="text-body-13 text-03">A tool&apos;s name can&apos;t change. To use another name, publish a new tool.</p>
         <div className="grid grid-cols-1 gap-3 tablet:grid-cols-2">
-          <Field label="Topic" value={category} onChange={(e) => setCategory(e.target.value)} list={listId} error={categoryProblem ?? undefined} hint="Search and the catalogue group tools by it." />
+          {topicField(true)}
           <Field label="Tags (optional)" value={tags} onChange={(e) => setTags(e.target.value)} hint="Up to 10, separated by commas." error={tagProblem ?? undefined} className="font-sans" />
         </div>
         {datalist}
@@ -347,7 +391,7 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         spellCheck={false}
       />
       {owner ? <NamePreview handle={owner} localName={localName.trim()} /> : null}
-      <Field label="Topic" value={category} onChange={(e) => setCategory(e.target.value)} list={listId} placeholder="social" error={touched && category ? (categoryProblem ?? undefined) : undefined} hint="Search and the catalogue group tools by it." />
+      {topicField(touched)}
       {datalist}
       <Field
         label="What it does, in one line"
