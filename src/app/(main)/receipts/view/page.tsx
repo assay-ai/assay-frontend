@@ -54,6 +54,7 @@ import { owedCallState } from "@/features/buyer-debt/debt-summary";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import type { Receipt } from "@/features/g30/wire";
 import { ApiError } from "@/libs/ApiClient";
+import { isRecordMissing } from "@/libs/record-missing";
 import { getReceipt } from "@/services";
 import { getProviderVerification } from "@/services/providers.service";
 import { getVerdictEvidence, resolveVerdictIdForIntent } from "@/services/verdicts.service";
@@ -199,9 +200,10 @@ function ReceiptPageContent() {
     return (
       <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:px-7 tablet:py-[22px]">
         <BackButton />
-        {err?.status === 404 || !intentId ? (
+        {isRecordMissing(err) || !intentId ? (
           <PageState
             kind="empty"
+            titleAsH1
             title="We could not find this call"
             description="The link may be incomplete. Your calls are all listed under Calls."
             action={{ label: "Open Calls", href: routes.calls() }}
@@ -209,6 +211,7 @@ function ReceiptPageContent() {
         ) : (
           <PageState
             kind="error"
+            titleAsH1
             title="This receipt could not be loaded"
             description={(err ? <ApiErrorSentence error={err} /> : plainError("ERR_NETWORK"))}
             onRetry={() => void receiptQuery.refetch()}

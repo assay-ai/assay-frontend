@@ -43,6 +43,7 @@ import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-
 import { CaseContext } from "@/features/provider-slash-case/context";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { ApiError } from "@/libs/ApiClient";
+import { isRecordMissing } from "@/libs/record-missing";
 import { createConfigChainReader } from "@/libs/chains/evm/contract-config";
 import { explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { formatDateTime } from "@/libs/utc-time";
@@ -198,7 +199,7 @@ export default function OperatorCasePage() {
     return (
       <>
         <BackToPenalties />
-        <PageState kind="empty" title="No penalty chosen" description="Open a penalty from Home or from Penalties." action={{ label: "Go to Penalties", href: "/operator/cases" }} />
+        <PageState kind="empty" titleAsH1 title="No penalty chosen" description="Open a penalty from Home or from Penalties." action={{ label: "Go to Penalties", href: "/operator/cases" }} />
       </>
     );
   }
@@ -206,15 +207,16 @@ export default function OperatorCasePage() {
   if (caseQuery.isError) {
     const error = caseQuery.error;
     // An unknown id and another organisation's case answer the same 404, on purpose.
-    const notFound = error instanceof ApiError && error.status === 404;
+    const notFound = isRecordMissing(error);
     return (
       <>
         <BackToPenalties />
         {notFound ? (
-          <PageState kind="empty" title="No such penalty" description="Check the link, or find the penalty from Home or Penalties." />
+          <PageState kind="empty" titleAsH1 title="No such penalty" description="Check the link, or find the penalty from Home or Penalties." />
         ) : (
           <PageState
             kind="error"
+            titleAsH1
             description="The penalty could not be loaded."
             onRetry={() => void caseQuery.refetch()}
             code={error instanceof ApiError ? error.code : null}

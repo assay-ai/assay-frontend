@@ -51,6 +51,7 @@ import { failRateShort, formatCallPrice } from "@/features/explorer/explorer-tex
 import { useChainName } from "@/hooks/useChainName";
 import { getCatalogueProvider } from "@/services/catalogue.service";
 import { ApiError } from "@/libs/ApiClient";
+import { isRecordMissing } from "@/libs/record-missing";
 import { plainError } from "@/libs/plain-language";
 import {
   deleteToolset,
@@ -101,6 +102,7 @@ export function ToolsetPage({ id, slug, free, version }: { id: string | null; sl
     return frame(
       <PageState
         kind="empty"
+        titleAsH1
         title="Not found"
         description="No tool set of yours has this address. It may have been deleted, or it belongs to another account."
         action={{ label: "Your tool sets", href: "/toolsets/mine" }}
@@ -109,10 +111,11 @@ export function ToolsetPage({ id, slug, free, version }: { id: string | null; sl
   }
   if (query.isPending) return frame(<PageState kind="loading" rows={4} label="Loading the tool set" />);
   if (query.isError || !query.data) {
-    const notFound = query.error instanceof ApiError && query.error.status === 404;
+    const notFound = isRecordMissing(query.error);
     return frame(
       <PageState
         kind={notFound ? "empty" : "error"}
+        titleAsH1
         title={notFound ? "Not found" : "This tool set could not be loaded"}
         description={notFound ? "No tool set of yours has this address." : query.error instanceof ApiError ? <ApiErrorSentence error={query.error} /> : plainError("ERR_NETWORK")}
         {...(notFound ? { action: { label: "Your tool sets", href: "/toolsets/mine" } } : { onRetry: () => void query.refetch() })}
