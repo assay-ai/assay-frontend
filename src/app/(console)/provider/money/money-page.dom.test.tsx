@@ -114,6 +114,13 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("provider Money", () => {
+  /* Onboarding wave 3: a provider looks for Add funds under Money; it opens the buyer app's deposit flow. */
+  it("offers Add funds, to the deposit flow, and says what it is for", () => {
+    const html = renderToStaticMarkupRaw();
+    expect(html).toMatch(/<a[^>]*href="\/funding\?action=deposit"[^>]*data-testid="money-add-funds"|<a[^>]*data-testid="money-add-funds"[^>]*href="\/funding\?action=deposit"/);
+    expect(text(html)).toContain("Add funds tops up your balance for paid calls and a public name; it is not stake and not earnings.");
+  });
+
   it("says not credited once: the split, the summary and the reasons read 22 calls / $0.74", () => {
     const words = render();
     expect(words).toMatch(/Not credited · 22 calls, see below \d+% \$0\.74/);

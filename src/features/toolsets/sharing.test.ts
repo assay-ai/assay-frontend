@@ -56,6 +56,9 @@ describe("the public name, claimed inline", () => {
     expect(handleProblem("9lives")).toMatch(/starting with a letter/);
     expect(handleProblem("support")).toBe("@support is reserved. Try another name.");
     expect(handleProblem("brightpath")).toBeNull();
+    // Onboarding wave 3: a tool name's "_" in a public name gets the public name's rule and a fix.
+    expect(handleProblem("acme_labs")).toBe("A public name uses “-”, not “_” (that is the tool name's rule): try acme-labs.");
+    expect(handleProblem("a_")).toBe("A public name uses “-”, not “_” (that is the tool name's rule).");
   });
 
   it("turns every refusal into what to do next, never a code", () => {
@@ -69,8 +72,21 @@ describe("the public name, claimed inline", () => {
     expect(handleErrorView("TOOLSET_HANDLE_TAKEN", {}, "acme").text).toBe("@acme is taken. Try another name.");
     expect(handleErrorView("TOOLSET_HANDLE_LOCKED", undefined, "x").text).toMatch(/Ask support to rename it/);
     const notVerified = handleErrorView("TOOLSET_HANDLE_CLAIM_REFUSED", { reason: "NOT_VERIFIED" }, "acme");
-    expect(notVerified.text).toMatch(/Add funds once/);
+    expect(notVerified.text).toMatch(/in funds once/);
     expect(notVerified.action).toEqual({ label: "Add funds", href: "/funding?action=deposit" });
+    expect(notVerified.minimumDepositUsd).toBe("5");
+    expect(notVerified.text).toMatch(/at least \$5/);
+    // The server's funding refusal (onboarding wave 3): its own minimum, and what a set-up provider is told.
+    const unfunded = handleErrorView("TOOLSET_HANDLE_CLAIM_REFUSED", { reason: "NOT_VERIFIED", fundingRequired: true, minimumDepositUsd: 7, providerSetUp: false }, "acme");
+    expect(unfunded.text).toBe("Add at least $7 in funds once, or finish provider setup, before you choose a public name. It keeps names from being grabbed in bulk.");
+    expect(unfunded.minimumDepositUsd).toBe("7");
+    expect(unfunded.action).toEqual({ label: "Add funds", href: "/funding?action=deposit" });
+    expect(unfunded.secondaryAction).toEqual({ label: "Finish provider setup", href: "/provider/setup" });
+    const used = handleErrorView("TOOLSET_HANDLE_CLAIM_REFUSED", { reason: "NOT_VERIFIED", fundingRequired: true, minimumDepositUsd: 5, providerSetUp: true }, "acme");
+    expect(used.text).toBe("Your free public name is already used. Add at least $5 in funds once to choose another.");
+    expect(used.secondaryAction).toBeUndefined();
+    // A minimum that is not a plain amount is never echoed.
+    expect(handleErrorView("TOOLSET_HANDLE_CLAIM_REFUSED", { reason: "NOT_VERIFIED", minimumDepositUsd: "<b>" }, "acme").minimumDepositUsd).toBe("5");
     expect(handleErrorView("TOOLSET_HANDLE_CLAIM_REFUSED", { reason: "CLAIM_LIMIT" }, "acme").text).toMatch(/3 teams in the last 30 days/);
     for (const code of ["TOOLSET_HANDLE_INVALID", "TOOLSET_HANDLE_TAKEN", "TOOLSET_HANDLE_LOCKED", "TOOLSET_HANDLE_CLAIM_REFUSED", null]) {
       expect(handleErrorView(code, {}, "acme").text).not.toMatch(/TOOLSET|HANDLE|handle/);

@@ -19,6 +19,7 @@ import {
   resumeStep,
   showsNotReviewed,
   suggestLocalName,
+  topicChoices,
   versionRows,
 } from "./model";
 
@@ -115,7 +116,11 @@ describe("tool names", () => {
     expect(localNameProblem("acme", "search__posts")).toMatch(/two underscores/);
     expect(localNameProblem("acme", "Search")).toMatch(/lowercase/);
     expect(localNameProblem("acme", "1search")).toMatch(/Start with a letter/);
-    expect(localNameProblem("acme", "search-posts")).toMatch(/digits and “_”/);
+    expect(localNameProblem("acme", "search-posts")).toMatch(/uses “_”, not “-”.*try search_posts/);
+    // Onboarding wave 3: the public name's "-" in a tool name gets the tool name's rule and a fix.
+    expect(localNameProblem("acme", "e2e-onb3-kdpw")).toBe("A tool name uses “_”, not “-” (that is the public name's rule): try e2e_onb3_kdpw.");
+    expect(localNameProblem("acme", "a--b")).toBe("A tool name uses “_”, not “-” (that is the public name's rule).");
+    expect(localNameProblem("acme", "a-b!")).toMatch(/digits and “_” only/);
     expect(localNameProblem("acme", "a".repeat(41))).toMatch(/at most 40/);
     expect(localNameProblem("acme", "search_posts")).toBeNull();
   });
@@ -269,5 +274,15 @@ describe("imported schemas", () => {
   it("every field an import brings is required or optional", async () => {
     const { optionalFromSchema } = await import("./schema-fields");
     expect(optionalFromSchema({ type: "object", properties: { results: { type: "array" }, total: { type: "integer" } }, required: ["results"] })).toEqual(["total"]);
+  });
+});
+
+/* Onboarding wave 3: the topic is a choice from the catalogue's, with a neutral default only when one exists. */
+describe("topicChoices", () => {
+  it("lists the catalogue's topics, keeps the current one, and defaults to a neutral one only when the catalogue has it", () => {
+    expect(topicChoices(["weather", "finance"], "")).toEqual({ options: ["finance", "weather"], neutral: null });
+    expect(topicChoices(["weather", "other", "finance"], "")).toEqual({ options: ["finance", "other", "weather"], neutral: "other" });
+    expect(topicChoices(["weather", "uncategorised"], "").neutral).toBe("uncategorised");
+    expect(topicChoices(["weather"], "social").options).toEqual(["social", "weather"]);
   });
 });
