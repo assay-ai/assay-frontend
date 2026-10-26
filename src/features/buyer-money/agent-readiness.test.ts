@@ -57,6 +57,6 @@ describe("agent readiness while its data loads", () => {
     const r = agentReadiness({ agentAccount: evm, credentials: [key()], delegates: [] as EscrowDelegate[], escrow, paused: false }, now);
     expect(r.next).toBe("bind");
     expect(r.status).toBe("ready");
-    expect(r.sentence).toBe("Free calls work. Paid calls are by invitation during testnet.");
+    expect(r.sentence).toBe("Free calls work. Paid calls are by invitation for now.");
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Signer } from "@/hooks/useSigner";
 import type { BuyerDebt, DebtVoucherIntent } from "@/interfaces/buyer-debt";
-import { ROBINHOOD_TESTNET_STAKE as PINNED } from "@/libs/chains/evm/stake-slashes/deployments";
+import { PINNED_STAKE as PINNED } from "@/libs/chains/evm/stake-slashes/deployments";
 import { voucherResourceHash } from "@/libs/chains/evm/voucher-hash";
 
 import { DEBT_SIGNING_REFUSED, debtSigningRequest, requestHashBytes32, settleDebt } from "./settle-debt";

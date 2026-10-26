@@ -100,7 +100,7 @@ export interface AgentReadiness {
 const RECENT_MS = 24 * 3600 * 1000;
 
 /** The agent card's line while it has no payment key (owner decision D14). */
-export const PAID_BY_INVITATION_SENTENCE = "Free calls work. Paid calls are by invitation during testnet.";
+export const PAID_BY_INVITATION_SENTENCE = "Free calls work. Paid calls are by invitation for now.";
 
 function positive(money: Money | null | undefined): boolean {
   return Boolean(money && BigInt(money.amount || "0") > 0n);
@@ -226,7 +226,7 @@ export function agentReadiness(input: ReadinessInput, nowMs: number = Date.now()
   }
   if (!bound) {
     // D14: the payment key needs assay-mcp, which is not published; paying is
-    // by invitation during testnet. Not a warning: nothing here is the
+    // by invitation for now. Not a warning: nothing here is the
     // person's to fix.
     return {
       ...base,

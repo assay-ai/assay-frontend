@@ -152,7 +152,7 @@ describe("the agent card while its keys load", () => {
   it("states paid calls as by invitation when the agent has a key but no payment key (D14)", () => {
     const key = { id: "k1", agentId: AGENT, name: "Key 1", issuedVia: "API_KEY", oauthClient: null, hint: "assay_sk_live_…ab12", scopes: ["tools:call", "payments", "activity:read"], lastUsedAt: null, expiresAt: null, revokedAt: null, delegateAccount: null, createdAt: "2026-10-17T00:00:00Z" };
     const out = text(render((client) => client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: [key] }))));
-    expect(out).toContain("Paid calls are by invitation during testnet");
+    expect(out).toContain("Paid calls are by invitation for now");
     expect(out).not.toContain("Needs authorisation");
   });
 

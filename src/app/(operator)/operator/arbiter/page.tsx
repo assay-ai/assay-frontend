@@ -77,7 +77,7 @@ import type { ArbiterDispute, ArbiterRuling, ArbiterTerms, ChainStateHealth } fr
 import { ApiError } from "@/libs/ApiClient";
 import { sameEvmAddress } from "@/libs/chains/evm/contract-call";
 import { assertContractCall, formatCallArg, type DecodedCall, type ExpectedCall } from "@/libs/chains/evm/signing-guard";
-import { ROBINHOOD_TESTNET_STAKE, explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
+import { PINNED_STAKE, explorerTxLink, stakeDeploymentFor } from "@/libs/chains/evm/stake-slashes/deployments";
 import { routes } from "@/libs/routes";
 import { createArbiterRulingIntent } from "@/services/operator.service";
 import { cn } from "@/utils";
@@ -109,7 +109,7 @@ import { operatorQueries } from "@/features/operator/queries";
  * endpoint; each one is reachable from its penalty page meanwhile.
  */
 
-const FALLBACK_CHAIN = ROBINHOOD_TESTNET_STAKE.chainId;
+const FALLBACK_CHAIN = PINNED_STAKE.chainId;
 
 function ArbiterScreen() {
   const me = useOperatorSession();

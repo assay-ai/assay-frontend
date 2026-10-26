@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { Eip155TypedDataRequest } from "@/interfaces/chain-transaction";
 
 import { assertContractCall, assertTypedData, decodePinnedCall, SIGNING_REFUSED } from "./signing-guard";
-import { ROBINHOOD_TESTNET_STAKE as PINNED } from "./stake-slashes/deployments";
+import { PINNED_STAKE as PINNED } from "./stake-slashes/deployments";
 
 const CHAIN = "eip155:46630";
 const BUYER = "0x7FD9A17dE9fd64b35081FbAbaa9f3bb85e59F8d1" as const;

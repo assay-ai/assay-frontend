@@ -1,7 +1,7 @@
 import type { Hex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 
-import { ROBINHOOD_TESTNET_STAKE } from "./deployments";
+import { PINNED_STAKE } from "./deployments";
 import {
   PROVIDER,
   cancelledLog,
@@ -16,7 +16,7 @@ import {
 import { loadChainSlashes, type StakeChainReader } from "./load";
 import { SlashLogCache, type RawLog } from "./scan";
 
-const DEPLOY = ROBINHOOD_TESTNET_STAKE.deployBlock;
+const DEPLOY = PINNED_STAKE.deployBlock;
 
 function reader(
   logs: RawLog[],
@@ -58,10 +58,10 @@ describe("loadChainSlashes", () => {
         [requestId(3)]: record({ status: 3 }),
       },
     );
-    const result = await loadChainSlashes(r, ROBINHOOD_TESTNET_STAKE, PROVIDER, { cache: new SlashLogCache() });
+    const result = await loadChainSlashes(r, PINNED_STAKE, PROVIDER, { cache: new SlashLogCache() });
 
     expect(vi.mocked(r.getLogs).mock.calls[0][0]).toMatchObject({
-      address: ROBINHOOD_TESTNET_STAKE.stakeContract,
+      address: PINNED_STAKE.stakeContract,
       fromBlock: DEPLOY,
     });
     expect(r.readSlashRecord).toHaveBeenCalledTimes(3);
@@ -75,14 +75,14 @@ describe("loadChainSlashes", () => {
 
   it("still lists a penalty whose record read failed, from its events", async () => {
     const r = reader([proposedLog(1, { block: at(1) })], { [requestId(1)]: new Error("eth_call reverted") });
-    const result = await loadChainSlashes(r, ROBINHOOD_TESTNET_STAKE, PROVIDER, { cache: new SlashLogCache() });
+    const result = await loadChainSlashes(r, PINNED_STAKE, PROVIDER, { cache: new SlashLogCache() });
     expect(result.recordReadFailures).toBe(1);
     expect(result.rows[0]).toMatchObject({ status: { key: "pending" }, stateSource: "events" });
   });
 
   it("uses the pinned decimals when the token cannot be read, and says so", async () => {
     const r = reader([], {}, { asset: new Error("nope") });
-    const result = await loadChainSlashes(r, ROBINHOOD_TESTNET_STAKE, PROVIDER, { cache: new SlashLogCache() });
+    const result = await loadChainSlashes(r, PINNED_STAKE, PROVIDER, { cache: new SlashLogCache() });
     expect(result.asset).toEqual({ decimals: 6, symbol: "USDG", fromChain: false });
   });
 
@@ -90,12 +90,12 @@ describe("loadChainSlashes", () => {
     const r = reader([], {});
     vi.mocked(r.getLogs).mockRejectedValue(new Error("fetch failed"));
     await expect(
-      loadChainSlashes(r, ROBINHOOD_TESTNET_STAKE, PROVIDER, { cache: new SlashLogCache() }),
+      loadChainSlashes(r, PINNED_STAKE, PROVIDER, { cache: new SlashLogCache() }),
     ).rejects.toThrow("fetch failed");
   });
 
   it("answers an empty list when the chain has nothing for this provider", async () => {
-    const result = await loadChainSlashes(reader([], {}), ROBINHOOD_TESTNET_STAKE, PROVIDER, {
+    const result = await loadChainSlashes(reader([], {}), PINNED_STAKE, PROVIDER, {
       cache: new SlashLogCache(),
     });
     expect(result.rows).toEqual([]);
@@ -112,7 +112,7 @@ describe("loadChainSlashes — when a dispute was upheld", () => {
       ),
       readBlockTimestamp: vi.fn(async () => BigInt(1_150_000)),
     };
-    const result = await loadChainSlashes(r, ROBINHOOD_TESTNET_STAKE, PROVIDER, { cache: new SlashLogCache() });
+    const result = await loadChainSlashes(r, PINNED_STAKE, PROVIDER, { cache: new SlashLogCache() });
     expect(r.readBlockTimestamp).toHaveBeenCalledTimes(1);
     expect(r.readBlockTimestamp).toHaveBeenCalledWith(BigInt(at(3)));
     expect(result.rows[0]).toMatchObject({ status: { key: "upheld" }, upheldAt: 1_150_000 });
@@ -128,7 +128,7 @@ describe("loadChainSlashes — when a dispute was upheld", () => {
         throw new Error("rpc down");
       }),
     };
-    const result = await loadChainSlashes(r, ROBINHOOD_TESTNET_STAKE, PROVIDER, { cache: new SlashLogCache() });
+    const result = await loadChainSlashes(r, PINNED_STAKE, PROVIDER, { cache: new SlashLogCache() });
     expect(result.rows[0]).toMatchObject({ status: { key: "upheld" }, upheldAt: null });
   });
 });
