@@ -358,6 +358,17 @@ export function tryProviderTool(body: TryProviderToolBody): Promise<ProviderTool
   return api.post<ProviderToolTryResult>("/provider/tools/try", body);
 }
 
+/** `GET /provider/tools/topics`: the topics a provider tool may take, a fixed list ending in "other", then any already in use. */
+export interface ProviderToolTopics {
+  topics: string[];
+  /** The topic for an API that fits no other ("other"). */
+  neutral: string | null;
+}
+
+export function listProviderToolTopics(): Promise<ProviderToolTopics> {
+  return api.get<ProviderToolTopics>("/provider/tools/topics");
+}
+
 export function listPromotionInvitations(): Promise<{ invitations: PromotionInvitation[] }> {
   return api.get<{ invitations: PromotionInvitation[] }>("/provider/tools/invitations");
 }

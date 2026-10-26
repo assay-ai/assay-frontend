@@ -61,7 +61,7 @@ describe("AuthenticationPanel choice (D10)", () => {
     expect(screen.getByText(/Your API checks the signature and refuses anything else/)).toBeTruthy();
     expect(screen.getByText(/Assay sends headers you store here/)).toBeTruthy();
     expect(screen.getByText(/A signature and your API key headers/)).toBeTruthy();
-    expect(screen.getByText(/Your API accepts any call/)).toBeTruthy();
+    expect(screen.getByText(/Your API answers any call, like a public API does/)).toBeTruthy();
   });
 
   it("explains the signature inline, with a snippet and the full guide (D23)", () => {
@@ -80,15 +80,21 @@ describe("AuthenticationPanel choice (D10)", () => {
 });
 
 describe("AuthenticationPanel", () => {
-  it("warns under Neither", () => {
+  it("warns under No check, in words that fit free public data (onboarding run 3)", () => {
     mount({ mode: "NONE" });
-    expect(screen.getByText("Anyone who learns your endpoint URL can call it directly, without paying.")).toBeTruthy();
+    expect(screen.getByText(/Anyone who learns your endpoint URL can call it directly, without going through Assay\. Fine for free public data; to charge for calls, choose the Assay signature or an API key\./)).toBeTruthy();
+    expect(screen.queryByRole("radio", { name: /^Neither/ })).toBeNull();
+  });
+
+  it("says the signature was chosen for a new listing", () => {
+    mount({ mode: "SIGNATURE", bindingId: null, savedEndpoint: null });
+    expect(screen.getByTestId("auth-default-note").textContent).toMatch(/An API that does not check the signature still answers/);
   });
 
   it("reports the picked mode", () => {
     const onModeChange = vi.fn();
     mount({ mode: "API_KEY", onModeChange });
-    fireEvent.click(screen.getByRole("radio", { name: /^Neither/ }));
+    fireEvent.click(screen.getByRole("radio", { name: /^No check \(public API\)/ }));
     expect(onModeChange).toHaveBeenCalledWith("NONE");
   });
 

@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosInstance, AxiosRequestConfig, InternalAxiosRequ
 
 import type { ApiEnvelope, ApiErrorBody } from "@/interfaces";
 import { clearKeptTestInputs } from "@/features/provider-binding/wizard/test-input-store";
+import { clearTriedEndpoints } from "@/features/provider-tools/tried-endpoint";
 import { debtRefusalSentence } from "@/libs/buyer-debt";
 import { demoEnabled, demoResponse } from "@/libs/demo/demo-api";
 import { SLASH_HOLD_ERROR_CODES, slashHoldAudienceOf, slashHoldErrorText } from "@/libs/slash-hold";
@@ -172,6 +173,7 @@ export function clearSessionToken(): void {
     /* nothing to do */
   }
   clearKeptTestInputs();
+  clearTriedEndpoints();
 }
 
 /**

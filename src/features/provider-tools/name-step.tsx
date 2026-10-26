@@ -20,12 +20,13 @@ import { ApiError } from "@/libs/ApiClient";
 import { isEvmChain } from "@/libs/chains/registry";
 import { routes } from "@/libs/routes";
 import { listPublicCategories } from "@/services/public-toolsets.service";
-import { createProviderTool, listProviderTools, updateProviderTool, type ProviderTool } from "@/services/provider-tools.service";
+import { createProviderTool, listProviderTools, listProviderToolTopics, updateProviderTool, type ProviderTool } from "@/services/provider-tools.service";
 import { claimOrgHandle } from "@/services/toolsets.service";
 import { toast } from "@/utils/toast";
 
 import { TryPanel, type TryOutcome } from "./fields-editor";
 import { optionalFromSchema } from "./schema-fields";
+import { rememberTriedEndpoint } from "./tried-endpoint";
 
 import {
   createBody,
@@ -37,6 +38,7 @@ import {
   nameLengthWarning,
   parseTags,
   providerToolErrorView,
+  serverTopicChoices,
   topicChoices,
   type ProviderToolErrorView,
 } from "./model";
@@ -245,6 +247,8 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
   // A finished provider setup claims its first public name free (the server decides; this says it up front).
   const providerEntry = useProviderEntry({ enabled: !tool });
   const categories = useQuery({ queryKey: ["public-categories"], queryFn: listPublicCategories, retry: 0, staleTime: 5 * 60_000 });
+  // The server's own topic list, with "other"; an API without it (404) falls back to the catalogue's topics.
+  const serverTopics = useQuery({ queryKey: providerToolKeys.topics, queryFn: listProviderToolTopics, retry: 0, staleTime: 5 * 60_000 });
   const [localName, setLocalName] = React.useState("");
   const [category, setCategory] = React.useState(tool?.category ?? "");
   const [tags, setTags] = React.useState((tool?.tags ?? []).join(", "));
@@ -252,6 +256,26 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
   const [touched, setTouched] = React.useState(false);
   // What a try run of the endpoint worked out: the new tool starts from it instead of a placeholder schema.
   const [tried, setTried] = React.useState<TryOutcome | null>(null);
+  // The one line as the box shows it. A value put in without an input event (autofill, a form-filling
+  // tool) never reached `summary`, and the next render wiped it (onboarding run 3): read it back first.
+  const summaryRef = React.useRef<HTMLInputElement>(null);
+  const keepTypedSummary = () => {
+    const shown = summaryRef.current?.value;
+    if (shown !== undefined && shown !== summary) setSummary(shown);
+  };
+  // Such tools still send an input event, which React drops (its own value tracker already holds the
+  // new value): a plain listener takes it, before any render puts the old value back.
+  React.useEffect(() => {
+    const box = summaryRef.current;
+    if (!box) return;
+    const take = () => setSummary((current) => (box.value !== current ? box.value : current));
+    box.addEventListener("input", take);
+    box.addEventListener("change", take);
+    return () => {
+      box.removeEventListener("input", take);
+      box.removeEventListener("change", take);
+    };
+  }, [tool]);
   const listId = React.useId();
 
   // A provider that already publishes tools holds its public name: never ask it to claim it again.
@@ -275,6 +299,8 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         }),
       ),
     onSuccess: (created) => {
+      // The connect step starts from where it was tried, path included (onboarding run 3).
+      rememberTriedEndpoint(created.id, tried?.endpoint);
       queryClient.setQueryData(providerToolKeys.one(created.id), created);
       void queryClient.invalidateQueries({ queryKey: providerToolKeys.list });
       toast.success(`${created.name} saved. Only your team can see it.`);
@@ -303,10 +329,13 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
 
   // The server takes only a topic the catalogue's tools use: a list to pick from, with a neutral
   // default only when the catalogue has one (onboarding wave 3). Free text only if the list is unavailable.
-  const topics = topicChoices((categories.data?.categories ?? []).map((c) => c.category), tool?.category ?? "");
+  const fromServer = serverTopicChoices(serverTopics.data, tool?.category ?? "");
+  const topics = fromServer ?? topicChoices((categories.data?.categories ?? []).map((c) => c.category), tool?.category ?? "");
+  // The default waits for the server's list, so a catalogue topic never wins over its "other".
+  const topicsSettled = !serverTopics.isPending;
   React.useEffect(() => {
-    if (!tool && category === "" && topics.neutral) setCategory(topics.neutral);
-  }, [tool, category, topics.neutral]);
+    if (!tool && topicsSettled && category === "" && topics.neutral) setCategory(topics.neutral);
+  }, [tool, topicsSettled, category, topics.neutral]);
   const topicField = (showError: boolean) =>
     topics.options.length > 0 ? (
       <Select
@@ -321,7 +350,9 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
           showError && categoryProblem ? (
             <span className="text-danger-700">{categoryProblem}</span>
           ) : (
-            "Required. Search and the catalogue group tools by it; new tools take one of the catalogue's topics."
+            fromServer
+              ? `Required. Search and the catalogue group tools by it. Pick the closest${fromServer.neutral ? `, or “${fromServer.neutral}” if none fits` : ""}.`
+              : "Required. Search and the catalogue group tools by it; new tools take one of the catalogue's topics."
           )
         }
       >
@@ -401,7 +432,9 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
       <Field
         label="What it does, in one line"
         value={summary}
+        ref={summaryRef}
         onChange={(e) => setSummary(e.target.value)}
+        onBlur={keepTypedSummary}
         suffix={`${summary.length}/${SUMMARY_MAX}`}
         hint="The only text agents see in their tool list. Say what it does and when to use it."
         error={touched && summary ? (summaryProblem ?? undefined) : undefined}
@@ -413,7 +446,13 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
           Inputs, outputs and an example come from your endpoint&apos;s answer; you can change them in step 2.
         </p>
       ) : (
-        <TryPanel compact onUse={(outcome) => setTried(outcome)} />
+        <TryPanel
+          compact
+          onUse={(outcome) => {
+            keepTypedSummary();
+            setTried(outcome);
+          }}
+        />
       )}
       {create.isError ? <ErrorBox view={providerToolErrorView(create.error)} onSuggestion={(s) => setLocalName(s.includes("__") ? s.split("__").pop()! : s)} /> : null}
       <div className="flex flex-col gap-1">
