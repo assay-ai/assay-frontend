@@ -158,6 +158,52 @@ describe("ConnectStage new listing", () => {
   });
 });
 
+/* Onboarding run 3: the curl `https://api.frankfurter.app/latest?from=GBP&to=JPY` was tried at
+   `https://api.frankfurter.app/latest`, but the connect step started from the setup's base address. */
+describe("ConnectStage endpoint path", () => {
+  const TRIED = "https://api.frankfurter.app/latest";
+  const addressInput = () => screen.getByLabelText(/Your API's address/) as HTMLInputElement;
+  const mountTried = (initialEndpoint: string, testedEndpoint: string | null, source: "setup" | "try") => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ConnectStage
+          tool={TOOL}
+          binding={null}
+          initialEndpoint={initialEndpoint}
+          initialEndpointSource={source}
+          testedEndpoint={testedEndpoint}
+          readOnly={false}
+          testPassedBefore={false}
+          onSave={() => Promise.reject(new Error("not used"))}
+          onContinue={() => undefined}
+        />
+      </QueryClientProvider>,
+    );
+  };
+
+  it("starts from the tried address, path included, and says so", () => {
+    mountTried(TRIED, TRIED, "try");
+    expect(addressInput().value).toBe(TRIED);
+    expect(screen.getByText(/Filled in from the call you tried for this tool, path included/)).toBeTruthy();
+    expect(screen.getByText("GET https://api.frankfurter.app/latest")).toBeTruthy();
+    expect(screen.queryByTestId("endpoint-path-warning")).toBeNull();
+  });
+
+  it("warns when the address drops the path the tool was tried at", () => {
+    mountTried(TRIED, TRIED, "try");
+    fireEvent.change(addressInput(), { target: { value: "https://api.frankfurter.app" } });
+    expect(screen.getByTestId("endpoint-path-warning").textContent).toMatch(/You tried this tool at https:\/\/api\.frankfurter\.app\/latest/);
+  });
+
+  it("warns that a base address with no path is called as it is", () => {
+    mountTried("https://api.frankfurter.app", null, "setup");
+    expect(screen.getByTestId("endpoint-path-warning").textContent).toMatch(/This address has no path/);
+    fireEvent.change(addressInput(), { target: { value: "https://api.frankfurter.app/latest" } });
+    expect(screen.queryByTestId("endpoint-path-warning")).toBeNull();
+  });
+});
+
 describe("test input kept with the draft", () => {
   it("round-trips per listing in this tab, and ignores anything that is not text", () => {
     writeTestInput("b-keep", { ids: "bitcoin", vsCurrency: "" });

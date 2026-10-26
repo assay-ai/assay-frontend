@@ -26,6 +26,7 @@ import { toast } from "@/utils/toast";
 
 import { TryPanel, type TryOutcome } from "./fields-editor";
 import { optionalFromSchema } from "./schema-fields";
+import { rememberTriedEndpoint } from "./tried-endpoint";
 
 import {
   createBody,
@@ -275,6 +276,8 @@ export function NameStep({ tool, onContinue }: { tool: ProviderTool | null; onCo
         }),
       ),
     onSuccess: (created) => {
+      // The connect step starts from where it was tried, path included (onboarding run 3).
+      rememberTriedEndpoint(created.id, tried?.endpoint);
       queryClient.setQueryData(providerToolKeys.one(created.id), created);
       void queryClient.invalidateQueries({ queryKey: providerToolKeys.list });
       toast.success(`${created.name} saved. Only your team can see it.`);

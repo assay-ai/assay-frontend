@@ -516,10 +516,10 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
   return (
     <Card
       title="Your API"
-      description="The HTTPS address Assay calls for your tools. Any JSON API works: you map it onto the tool when you list it, and change nothing on your side. Each tool you list can use a different address; this one is filled in for you."
+      description="The HTTPS base address of your API, like https://api.acme.example. Any JSON API works: you map it onto the tool when you list it, and change nothing on your side. Each tool you list starts from this address and adds its own path, like /latest, when you connect it."
     >
       <Field
-        label="API address"
+        label="Base URL"
         className="font-sans text-body-sm"
         placeholder="https://api.acme.example/v1"
         inputMode="url"

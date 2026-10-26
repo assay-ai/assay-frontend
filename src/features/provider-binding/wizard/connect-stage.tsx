@@ -38,6 +38,8 @@ import { TestPipelineView } from "../tester/pipeline-view";
 import { isStaleRun } from "../tester/report-view";
 import { createRunGuard } from "../tester/run-guard";
 
+import { cleanEndpoint, endpointPath } from "@/features/provider-tools/tried-endpoint";
+
 import { previewRequest } from "./request-preview";
 import { canPickInto, pickInto, sampleAnswer } from "./response-pick";
 import { ResponsePicker } from "./response-picker";
@@ -85,10 +87,30 @@ export function parseEndpoint(text: string): { value: string | null; error: stri
  * draft and runs a real test call. The test result is a 4-step pipeline that
  * says whose fault a failure is.
  */
+/**
+ * A warning when the address would not call what was tried: a path other than
+ * the one the provider's curl used, or no path at all when nothing was tried
+ * (the account's base address). We call exactly the address typed here.
+ */
+export function endpointPathWarning(endpoint: string, testedEndpoint: string | null): string | null {
+  const typed = cleanEndpoint(endpoint);
+  if (!typed) return null;
+  const path = endpointPath(typed);
+  if (testedEndpoint) {
+    const tested = endpointPath(testedEndpoint);
+    if (path === tested) return null;
+    return `You tried this tool at ${testedEndpoint}, but this address calls ${typed} instead. We call exactly this address, with the tool's inputs added.`;
+  }
+  if (path !== "") return null;
+  return "This address has no path. If your API answers this tool at a path, like https://api.example.com/latest, add it here: we call exactly this address, with the tool's inputs added.";
+}
+
 export function ConnectStage({
   tool,
   binding,
   initialEndpoint,
+  initialEndpointSource = "setup",
+  testedEndpoint = null,
   readOnly,
   testPassedBefore,
   onSave,
@@ -97,6 +119,10 @@ export function ConnectStage({
   tool: CatalogueTool;
   binding: ToolBindingDetail | null;
   initialEndpoint: string;
+  /** Where `initialEndpoint` came from: the account setup's base address, or the call tried for this tool. */
+  initialEndpointSource?: "setup" | "try";
+  /** Where this tool was tried (origin and path), if it was: a different path here is warned about. */
+  testedEndpoint?: string | null;
   readOnly: boolean;
   /** The stored listing already has a passing test at its current version. */
   testPassedBefore: boolean;
@@ -315,6 +341,7 @@ export function ConnectStage({
   const passed = gate ? gate.passed : testPassedBefore && !dirty;
   const multi = versioned && (runs?.length ?? terms.majors.length) > 1;
   const preview = previewRequest(endpoint, mappings.request, args);
+  const pathWarning = endpointPathWarning(endpoint, testedEndpoint);
   // The real answer of the latest test call, for clicking values into output fields.
   const answer = sampleAnswer(report);
   const pickResponse = (field: string, path: string) => {
@@ -350,13 +377,20 @@ export function ConnectStage({
           // A public API that needs a fixed query (?current=...) has no other place for it (onboarding wave item 4).
           hint={[
             initialEndpoint && !binding && endpoint === initialEndpoint
-              ? "Filled in from your account setup. Change it if this tool is served elsewhere."
+              ? initialEndpointSource === "try"
+                ? "Filled in from the call you tried for this tool, path included."
+                : "Filled in from your account setup. Change it if this tool is served elsewhere."
               : null,
             "Put fixed query parameters in the address, like ?units=metric; the tool's inputs are added to them.",
           ]
             .filter(Boolean)
             .join(" ")}
         />
+        {pathWarning ? (
+          <p className="text-body-xs text-warning-700" data-testid="endpoint-path-warning">
+            {pathWarning}
+          </p>
+        ) : null}
         {urlKeys.length > 0 && !readOnly ? (
           <Button
             type="button"
