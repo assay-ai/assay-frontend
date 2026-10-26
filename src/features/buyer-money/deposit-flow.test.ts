@@ -19,6 +19,9 @@ vi.mock("@/features/funding/evm-deposit", async (importOriginal) => ({
   ...evm,
 }));
 vi.mock("@/libs/chains/evm/deposit-transaction", () => ({ waitForSuccess: vi.fn(async () => undefined) }));
+vi.mock("@/libs/chains/solana/deposit-transaction", () => ({
+  buildDepositTransaction: vi.fn(async () => ({ transactionBytes: new Uint8Array([1, 2, 3]) })),
+}));
 
 import type { Signer } from "@/hooks/useSigner";
 
@@ -209,5 +212,73 @@ describe("the wallet is warmed before the intent clock starts (BUG-PROD-DEPOSIT-
     await runDepositStep(run, prepared, hooks());
     expect(service.createDeposit).toHaveBeenCalledTimes(1);
     expect(prepared.prepare).toHaveBeenCalledTimes(1);
+  });
+});
+
+const SOLANA = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+const HASH = "0xhash" as `0x${string}`;
+
+describe("Solana: a lost settle answer never leads to a second signed transfer (review I1)", () => {
+  const solanaSigner = () =>
+    ({
+      address: "BuyerSol",
+      kind: "embedded",
+      chainId: SOLANA,
+      signTransaction: vi.fn(async () => ({ namespace: "solana", chainId: SOLANA, transactionBase64: "AQID" })),
+    }) as unknown as Signer & { signTransaction: ReturnType<typeof vi.fn> };
+  const solanaRun = (): DepositRun => ({ chainId: SOLANA, amountAtomic: "5000000", created: null, createdAt: 0 });
+
+  beforeEach(() => {
+    service.createDeposit.mockResolvedValue({
+      depositId: "dep-1",
+      expiresAt: "",
+      requirements: {
+        namespace: "solana",
+        chainId: SOLANA,
+        payTo: "Ata",
+        asset: "Mint",
+        amount: "5000000",
+        decimals: 6,
+        feePayer: "Fee",
+        memo: "dep-1",
+        blockhash: "Hash",
+        lastValidBlockHeight: "100",
+      },
+    });
+  });
+
+  it("reports the signed payload, so Try again re-reads the intent instead of signing again", async () => {
+    const wallet = solanaSigner();
+    const run = solanaRun();
+    const first = hooks();
+    service.settleDeposit.mockRejectedValue(timeout());
+    service.getDeposit.mockResolvedValue(deposit("SETTLING"));
+    const error = await settle(runDepositStep(run, wallet, first)).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DepositStillChecking);
+    expect(first.onSigned).toHaveBeenCalledWith({ kind: "signed", raw: "AQID", depositId: "dep-1" });
+
+    // Past INTENT_FRESH_MS: without the reported payload this minted a new intent and signed a second transfer.
+    vi.setSystemTime(Date.now() + 120_000);
+    service.getDeposit.mockReset().mockResolvedValue(deposit("SETTLED"));
+    const previous = first.onSigned.mock.calls[0]![0];
+    const result = await settle(runDepositStep(run, wallet, { ...hooks(), previous }));
+    expect(result).toMatchObject({ status: "SETTLED" });
+    expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
+    expect(service.createDeposit).toHaveBeenCalledTimes(1);
+    expect(service.settleDeposit).toHaveBeenCalledTimes(1);
+  });
+
+  it("signs afresh only for an EXPIRED intent, whose payload never reached the chain", async () => {
+    const wallet = solanaSigner();
+    service.getDeposit.mockResolvedValue(deposit("EXPIRED"));
+    service.settleDeposit.mockResolvedValue({ id: "dep-1", status: "SETTLED", settledAmount: null, chainTxRef: "sig" });
+    const run = solanaRun();
+    run.created = await service.createDeposit();
+    run.createdAt = Date.now();
+    await settle(
+      runDepositStep(run, wallet, { ...hooks(), previous: { kind: "signed", raw: "AQID", depositId: "dep-1" } }),
+    );
+    expect(wallet.signTransaction).toHaveBeenCalledTimes(1);
+    expect(service.createDeposit).toHaveBeenCalledTimes(2);
   });
 });

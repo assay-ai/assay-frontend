@@ -139,11 +139,16 @@ async function settleOrRecheck<T>(depositId: string, send: () => Promise<T>): Pr
 
 /**
  * A retry of a submitted deposit step reads where the intent stands first.
- * Returns the outcome when it is known (or still settling), or `null` when
- * the intent was never settled (CREATED / EXPIRED) and the caller may hand
- * the same payload back.
+ * Returns the outcome when it is known (or still settling, re-read until it
+ * is), else the status of an intent that never settled:
+ *
+ * - `CREATED` — nothing reached the chain through it; the same payload may go back.
+ * - `EXPIRED` — reachable only from CREATED, so its payload was never broadcast by us.
+ * - `FAILED` — the backend watched the chain and saw no transfer.
  */
-async function outcomeBeforeRetry(depositId: string): Promise<SettledDeposit | null> {
+async function outcomeBeforeRetry(
+  depositId: string,
+): Promise<SettledDeposit | { unsettled: "CREATED" | "EXPIRED" | "FAILED"; deposit: Deposit }> {
   let deposit: Deposit;
   try {
     deposit = await getDeposit(depositId);
@@ -152,9 +157,8 @@ async function outcomeBeforeRetry(depositId: string): Promise<SettledDeposit | n
     throw error;
   }
   if (deposit.status === "SETTLED") return asSettled(deposit);
-  if (deposit.status === "FAILED") throw notObserved(deposit);
   if (deposit.status === "SETTLING") return recheckDeposit(depositId);
-  return null;
+  return { unsettled: deposit.status, deposit };
 }
 
 /** The longest a warm-up may hold the click before the intent is created anyway. */
@@ -253,7 +257,8 @@ export function isAlreadyClaimed(error: unknown): boolean {
 /** What a submitted deposit step hands back to a retry, so it never signs twice. */
 export type DepositAttempt =
   | { kind: "hash"; hash: `0x${string}`; depositId: string }
-  | { kind: "signed"; raw: `0x${string}`; depositId: string };
+  /** `raw`: the `0x` signed transaction on eip155, base64 on solana. */
+  | { kind: "signed"; raw: string; depositId: string };
 
 /** Step 2 (EVM), or the only step (Solana). */
 export async function runDepositStep(
@@ -272,21 +277,29 @@ export async function runDepositStep(
   // where the intent stands first, and the same payload again only when it
   // was never settled.
   if (hooks.previous?.kind === "hash") {
-    const known = await outcomeBeforeRetry(hooks.previous.depositId);
-    if (known) return known;
-    await waitForSuccess(run.chainId, hooks.previous.hash);
-    return settleByHash(run, hooks.previous.depositId, hooks.previous.hash);
+    const { depositId, hash } = hooks.previous;
+    const read = await outcomeBeforeRetry(depositId);
+    if (!("unsettled" in read)) return read;
+    if (read.unsettled === "FAILED") throw notObserved(read.deposit);
+    await waitForSuccess(run.chainId, hash);
+    return settleByHash(run, depositId, hash);
   }
   if (hooks.previous?.kind === "signed") {
     const { depositId, raw } = hooks.previous;
-    const known = await outcomeBeforeRetry(depositId);
-    if (known) return known;
-    try {
-      return await settleOrRecheck(depositId, () => settleDeposit(depositId, run.chainId, raw));
-    } catch (error) {
-      if (isAlreadyClaimed(error)) return "already-credited";
-      throw error;
+    const read = await outcomeBeforeRetry(depositId);
+    if (!("unsettled" in read)) return read;
+    if (read.unsettled === "FAILED") throw notObserved(read.deposit);
+    if (read.unsettled === "CREATED") {
+      try {
+        return await settleOrRecheck(depositId, () => settleDeposit(depositId, run.chainId, raw));
+      } catch (error) {
+        if (isAlreadyClaimed(error)) return "already-credited";
+        throw error;
+      }
     }
+    // EXPIRED: reachable only from CREATED, so these bytes were never handed
+    // to the chain. They cannot settle any more; sign afresh on a new intent.
+    run.created = null;
   }
   const created = await freshIntent(run, signer);
   const requirements = created.requirements;
@@ -331,5 +344,8 @@ export async function runDepositStep(
     lastValidBlockHeight: requirements.lastValidBlockHeight,
   }, { showWalletUIs: true });
   if (signed.namespace !== "solana") throw new Error(`Expected a Solana signature, got ${signed.namespace}.`);
+  // Reported like the eip155 signed bytes: a retry re-reads this intent and
+  // never signs a second transfer for a payload that may have landed.
+  hooks.onSigned?.({ kind: "signed", raw: signed.transactionBase64, depositId: created.depositId });
   return settleOrRecheck(created.depositId, () => settleDeposit(created.depositId, run.chainId, signed.transactionBase64));
 }
