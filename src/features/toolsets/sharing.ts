@@ -69,6 +69,8 @@ export interface HandleErrorView {
   suggestions: string[];
   /** A next step that lives elsewhere ("Add funds"). */
   action: { label: string; href: string } | null;
+  /** A second way out, next to `action`: "Finish provider setup" when that would make the first name free. */
+  secondaryAction?: { label: string; href: string };
   /** On a refusal for funding: the least deposit that opens the claim, in whole dollars ("5"). */
   minimumDepositUsd?: string;
 }
@@ -110,6 +112,7 @@ export function handleErrorView(code: string | null, context: Readonly<Record<st
             : `Add at least $${minimumDepositUsd} in funds once, or finish provider setup, before you choose a public name. It keeps names from being grabbed in bulk.`,
         suggestions: [],
         action: { label: "Add funds", href: "/funding?action=deposit" },
+        ...(context?.providerSetUp === true ? {} : { secondaryAction: { label: "Finish provider setup", href: "/provider/setup" } }),
         minimumDepositUsd,
       };
     }

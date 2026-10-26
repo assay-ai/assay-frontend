@@ -137,6 +137,11 @@ export function HandleClaim({ freeClaim = null }: { freeClaim?: boolean | null }
                 {funding.action.label} (new tab)
               </a>
             </Button>
+            {funding.secondaryAction ? (
+              <Button asChild size="sm" variant="secondary">
+                <Link href={funding.secondaryAction.href}>{funding.secondaryAction.label}</Link>
+              </Button>
+            ) : null}
             <Button size="sm" variant="secondary" loading={claim.isPending} onClick={() => claim.mutate(name)}>
               I&apos;ve done it: try again
             </Button>

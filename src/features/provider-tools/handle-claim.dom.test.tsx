@@ -65,10 +65,25 @@ describe("HandleClaim", () => {
     const link = screen.getByRole("link", { name: /Add funds/ }) as HTMLAnchorElement;
     expect(link.getAttribute("href")).toBe("/funding?action=deposit");
     expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(screen.getByRole("link", { name: "Finish provider setup" }).getAttribute("href")).toBe("/provider/setup");
     await waitFor(() => expect(box.textContent).toMatch(/at least \$5 in USDG plus a little ETH for gas.*Robinhood Chain testnet faucet/));
     claimOrgHandle.mockResolvedValueOnce({ handle: "acme-labs", status: "ACTIVE", lockedAt: null, canChange: true });
     fireEvent.click(screen.getByRole("button", { name: /try again/ }));
     await waitFor(() => expect(claimOrgHandle).toHaveBeenCalledTimes(2));
     expect(claimOrgHandle).toHaveBeenLastCalledWith("acme-labs");
+  });
+
+  it("offers only Add funds once a set-up provider's free name is used", async () => {
+    claimOrgHandle.mockReset();
+    claimOrgHandle.mockRejectedValueOnce(
+      new ApiError("TOOLSET_HANDLE_CLAIM_REFUSED", "x", 403, "/org/handle", { reason: "NOT_VERIFIED", fundingRequired: true, minimumDepositUsd: 5, providerSetUp: true }),
+    );
+    const { input, claim } = mount(true);
+    fireEvent.change(input, { target: { value: "acme-two" } });
+    fireEvent.click(claim());
+    const box = await screen.findByTestId("handle-claim-funding");
+    expect(box.textContent).toMatch(/Your free public name is already used\. Add at least \$5 in funds once/);
+    expect(screen.getByRole("link", { name: /Add funds/ })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Finish provider setup" })).toBeNull();
   });
 });
