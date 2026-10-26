@@ -122,8 +122,9 @@ export default function ProviderHomePage() {
           <Button asChild size="sm">
             <Link href={step.href}>{step.actionLabel}</Link>
           </Button>
+          {/* An equal choice, not a fallback: same weight as the first button. */}
           {step.secondary ? (
-            <Button asChild size="sm" variant="secondary">
+            <Button asChild size="sm">
               <Link href={step.secondary.href}>{step.secondary.label}</Link>
             </Button>
           ) : null}

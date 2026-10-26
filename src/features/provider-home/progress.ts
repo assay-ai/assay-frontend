@@ -92,10 +92,10 @@ export function listingProgress(input: ListingProgressInput): ListingProgress {
     {
       id: "tool",
       title: "List your first tool",
-      description: "Pick the tool your API answers and give us your API's URL. None fits, or the catalogue is empty? Publish your API as a tool of its own.",
+      description: "Two equal ways: pick a tool from the catalogue that your API answers, or publish your own API as a new tool.",
       href: routes.bindingWizard(),
-      actionLabel: "List a tool",
-      secondary: { label: "Publish your API", href: "/provider/apis/new" },
+      actionLabel: "Pick a tool from the catalogue",
+      secondary: { label: "Publish your own API as a new tool", href: "/provider/apis/new" },
     },
     {
       id: "test",
