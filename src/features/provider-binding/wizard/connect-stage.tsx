@@ -335,11 +335,15 @@ export function ConnectStage({
           onChange={(event) => setEndpoint(event.target.value)}
           onBlur={() => setEndpointTouched(true)}
           error={urlKeys.length > 0 || endpointTouched ? (endpointError ?? undefined) : undefined}
-          hint={
+          // A public API that needs a fixed query (?current=...) has no other place for it (onboarding wave item 4).
+          hint={[
             initialEndpoint && !binding && endpoint === initialEndpoint
               ? "Filled in from your account setup. Change it if this tool is served elsewhere."
-              : undefined
-          }
+              : null,
+            "Put fixed query parameters in the address, like ?units=metric; the tool's inputs are added to them.",
+          ]
+            .filter(Boolean)
+            .join(" ")}
         />
         {urlKeys.length > 0 && !readOnly ? (
           <Button

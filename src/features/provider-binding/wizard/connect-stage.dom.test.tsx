@@ -122,6 +122,13 @@ describe("ConnectStage new listing", () => {
     expect(screen.queryByText(/Filled in from your account setup/)).toBeNull();
   });
 
+  it("says where fixed query parameters go, whatever the address (onboarding wave item 4)", () => {
+    mount(null);
+    expect(screen.getByText(/Put fixed query parameters in the address, like \?units=metric/)).toBeTruthy();
+    fireEvent.change(addressInput(), { target: { value: "https://other.test/v1" } });
+    expect(screen.getByText(/Put fixed query parameters in the address/)).toBeTruthy();
+  });
+
   it("previews the request live, with no trailing slash", () => {
     mount(null);
     expect(screen.getByText("GET https://p.test/v1")).toBeTruthy();
