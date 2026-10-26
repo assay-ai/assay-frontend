@@ -471,6 +471,8 @@ function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void 
 function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }) {
   const { endpoint, setEndpoint, probe, checking } = setup;
   const [saving, setSaving] = React.useState(false);
+  // A click on Finish while the blur's reachability check runs: finish as soon as it ends (one click, not two).
+  const [finishQueued, setFinishQueued] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const trimmed = endpoint.trim();
   const checkedThis = probe && probe.endpoint === trimmed ? probe : null;
@@ -486,6 +488,11 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
       onNext();
       return;
     }
+    // One connectivity check at a time per provider: wait for the running one, then save.
+    if (checking) {
+      setFinishQueued(true);
+      return;
+    }
     setSaving(true);
     try {
       const result = await setup.declareAsync(trimmed);
@@ -497,6 +504,14 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
       setSaving(false);
     }
   };
+
+  const finishRef = React.useRef(finish);
+  finishRef.current = finish;
+  React.useEffect(() => {
+    if (!finishQueued || checking) return;
+    setFinishQueued(false);
+    void finishRef.current();
+  }, [finishQueued, checking]);
 
   return (
     <Card
@@ -542,12 +557,16 @@ function ApiStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void }
           <p className="text-body-xs text-danger-600">{error}</p>
         ) : null}
       </div>
-      {/* Not while a re-check runs: saving re-runs the check server-side, and one provider gets one connectivity check at a time. */}
+      {/*
+        Never disabled by the re-check the field's blur starts: that blur lands
+        between the press and the click, so a disabled button swallowed the
+        first click. A click during the check is queued instead (saving re-runs
+        the check server-side, one connectivity check at a time per provider).
+      */}
       <Button
         className="self-stretch tablet:self-end"
         icon={<ArrowRight />}
-        loading={saving}
-        disabled={checking}
+        loading={saving || finishQueued}
         onClick={() => void finish()}
       >
         Finish setup
@@ -571,10 +590,12 @@ function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
   // With listings already, this screen is the explainer, and its button lists another tool.
   const listings = useQuery({
     queryKey: ["provider", "tool-bindings", "setup-done"],
-    queryFn: () => listToolBindings({ limit: 1 }),
+    queryFn: () => listToolBindings({ limit: 50 }),
     retry: 0,
   });
   const hasListings = (listings.data?.items.length ?? 0) > 0;
+  // No paid listing yet: stake and penalties do not apply, so they are one short line and the rest folds away.
+  const freeOnly = (listings.data?.items ?? []).every((binding) => binding.pricingMode === "FREE");
   const basics: [string, string][] = [
     [
       "Price",
@@ -592,6 +613,15 @@ function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
     ["Penalty", definitionOf("stake-rule", chainTerms)],
     ["Example", definitionOf("penalty-example", chainTerms)],
   ];
+  const shown: [string, string][] = freeOnly
+    ? [
+        basics[0]!,
+        [
+          "Free tools",
+          "No stake, no money and no penalties: penalties only ever come out of stake. If you charge later, we explain stake and penalties before you do.",
+        ],
+      ]
+    : basics;
   return (
     <section className="flex w-full flex-col gap-5 rounded-xl border border-success-20 bg-01 p-5 tablet:p-8">
       <div className="flex items-start gap-3">
@@ -607,13 +637,26 @@ function DoneScreen({ href, setup }: { href: string; setup: ProviderSetup }) {
         </div>
       </div>
       <dl className="flex w-full flex-col rounded-lg border border-01 bg-02 px-3.5 py-1">
-        {basics.map(([label, body]) => (
+        {shown.map(([label, body]) => (
           <div key={label} className="flex flex-col gap-0.5 border-t border-01 py-2.5 first:border-t-0 tablet:flex-row tablet:gap-3">
             <dt className="text-label-13 text-01 tablet:w-20 tablet:shrink-0">{label}</dt>
             <dd className="text-body-13 text-02">{body}</dd>
           </div>
         ))}
       </dl>
+      {freeOnly ? (
+        <details className="w-full text-body-13" data-testid="paid-terms">
+          <summary className="cursor-pointer select-none text-label-13 text-primary-600">How paid tools work: stake and penalties</summary>
+          <dl className="mt-2 flex w-full flex-col">
+            {basics.slice(1).map(([label, body]) => (
+              <div key={label} className="flex flex-col gap-0.5 border-t border-01 py-2 tablet:flex-row tablet:gap-3">
+                <dt className="text-label-13 text-01 tablet:w-20 tablet:shrink-0">{label}</dt>
+                <dd className="text-body-13 text-02">{body}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      ) : null}
       <ol className="flex flex-col gap-3">
         {[
           ["Pick the tool your API answers", "and point it at your API. We fill in what we can."],

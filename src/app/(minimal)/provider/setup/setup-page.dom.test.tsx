@@ -106,6 +106,46 @@ describe("provider setup", () => {
     expect(screen.getAllByText(/resolves to a private network/)).toHaveLength(1);
   });
 
+  /* Onboarding wave 2 item 6: the blur's reachability check must not swallow the first click on Finish setup. */
+  it("finishes on one click even while the blur's check is running", async () => {
+    step = "api";
+    const declareAsync = vi.fn(async () => ({ outcome: "REACHABLE", endpoint: "https://api.frankfurter.app" }));
+    const apiTodo = {
+      steps: [
+        { key: "account", status: "DONE" },
+        { key: "payoutWallet", status: "DONE" },
+        { key: "endpoint", status: "TODO" },
+      ],
+      savedEndpoint: null,
+      endpoint: "https://api.frankfurter.app",
+      declareAsync,
+    };
+    allDone({ ...apiTodo, checking: true });
+    const tree = () => (
+      <QueryClientProvider client={new QueryClient()}>
+        <ProviderSetupPage />
+      </QueryClientProvider>
+    );
+    const view = render(tree());
+    fireEvent.click(screen.getByRole("button", { name: /Finish setup/ }));
+    expect(declareAsync).not.toHaveBeenCalled();
+    allDone({ ...apiTodo, checking: false });
+    view.rerender(tree());
+    await waitFor(() => expect(declareAsync).toHaveBeenCalledWith("https://api.frankfurter.app"));
+  });
+
+  /* Onboarding wave 2 item 6: a provider with no paid listing gets one line about penalties, the rest folded. */
+  it("keeps the penalty text short for a free-only provider", async () => {
+    step = "";
+    allDone();
+    mount();
+    expect(await screen.findByText(/no penalties: penalties only ever come out of stake/)).toBeTruthy();
+    const folded = screen.getByTestId("paid-terms");
+    expect(folded.tagName).toBe("DETAILS");
+    expect(folded.hasAttribute("open")).toBe(false);
+    expect(folded.textContent).toContain("Penalty");
+  });
+
   /* Onboarding wave 2 item 4: only wallets a served chain can pay, picked for you when one fits. */
   it("hides a Solana wallet when only EVM chains are served, and names the one payout address", () => {
     step = "wallet";
