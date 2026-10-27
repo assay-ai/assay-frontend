@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/patterns/page-state";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { usePublicTools } from "@/features/explorer/use-public-explorer";
+import { mcpHost } from "@/features/connect/mcp-endpoint";
 import { buildMcpUrl, parseMcpUrl, type ToolsetChoice } from "@/features/connect/mcp-url";
 import { moveLockBody } from "@/features/toolsets/access-result";
 import { priceOfTool } from "@/features/toolsets/public";
@@ -181,17 +182,18 @@ export function UpdateBody({ target, onDone }: { target: UpdateTarget; onDone: (
 /**
  * The update alert's landing: `/agents?update=1&from=2&to=3#url=<the v3 URL>`
  * opens the update in place, in the signed-in app (the URL rides in the
- * fragment, so a link-only token never reaches a server log).
+ * fragment, so a link-only token never reaches a server log). Only a URL on
+ * this deployment's MCP host opens it: a crafted link must not make the app
+ * hand out another server's URL.
  */
-export function readUpdateLink(search: string, hash: string): UpdateTarget | null {
+export function readUpdateLink(search: string, hash: string, host: string = mcpHost()): UpdateTarget | null {
   const query = new URLSearchParams(search);
   if (query.get("update") !== "1") return null;
   const from = Number(query.get("from"));
   const to = Number(query.get("to"));
   const url = new URLSearchParams(hash.replace(/^#/, "")).get("url");
   if (!Number.isInteger(from) || !Number.isInteger(to) || to <= from || !url) return null;
-  const origin = url.replace(/^([a-z][a-z0-9+.-]*:\/\/[^/?#]+).*$/i, "$1");
-  const choice = parseMcpUrl(url, origin)?.choice;
+  const choice = parseMcpUrl(url, host)?.choice;
   if (!choice || (choice.kind !== "shared" && choice.kind !== "link")) return null;
   const name = choice.kind === "shared" ? `@${choice.handle}/${choice.slug}` : "This tool set";
   return { choice: { ...choice, version: from }, name, from, to, toUrl: url };

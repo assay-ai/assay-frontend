@@ -41,15 +41,21 @@ describe("pasting a tool-set link into the Connect sheet", () => {
 describe("the update alert opens in the app", () => {
   it("reads /agents?update=1&from&to#url= into the update sheet's target", () => {
     const url = `${HOST}/@marketkit/crypto-research@3`;
-    expect(readUpdateLink("?update=1&from=2&to=3", `#url=${encodeURIComponent(url)}`)).toEqual({
+    expect(readUpdateLink("?update=1&from=2&to=3", `#url=${encodeURIComponent(url)}`, HOST)).toEqual({
       choice: { kind: "shared", handle: "marketkit", slug: "crypto-research", version: 2 },
       name: "@marketkit/crypto-research",
       from: 2,
       to: 3,
       toUrl: url,
     });
-    expect(readUpdateLink("?update=1&from=3&to=2", `#url=${encodeURIComponent(url)}`)).toBeNull();
-    expect(readUpdateLink("", "")).toBeNull();
+    expect(readUpdateLink("?update=1&from=3&to=2", `#url=${encodeURIComponent(url)}`, HOST)).toBeNull();
+    expect(readUpdateLink("", "", HOST)).toBeNull();
+  });
+
+  it("opens nothing for a URL on another host", () => {
+    const foreign = "https://evil.example/@assay/web-research@2";
+    expect(readUpdateLink("?update=1&from=1&to=2", `#url=${encodeURIComponent(foreign)}`, HOST)).toBeNull();
+    expect(readUpdateLink("?update=1&from=1&to=2", `#url=${encodeURIComponent("https://mcp.example.com.evil.example/@assay/web-research@2")}`, HOST)).toBeNull();
   });
 });
 
