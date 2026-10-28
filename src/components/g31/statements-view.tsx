@@ -259,7 +259,7 @@ function StatementsContent() {
           <Panel>
             <PanelHeader className="flex-col items-start gap-3 tablet:flex-row tablet:items-center">
               <PanelTitles>
-                <PanelTitle>{period.label}</PanelTitle>
+                <PanelTitle as="h2">{period.label}</PanelTitle>
                 {matches ? (
                   <PanelDescription className="whitespace-normal">{MATCHES_SENTENCE}</PanelDescription>
                 ) : null}
@@ -281,7 +281,7 @@ function StatementsContent() {
             <Panel>
               <PanelHeader>
                 <PanelTitles>
-                  <PanelTitle>Money in and out</PanelTitle>
+                  <PanelTitle as="h2">Money in and out</PanelTitle>
                   <PanelDescription className="whitespace-normal">
                     Opening balance + deposits − withdrawals − paid = closing balance
                   </PanelDescription>
@@ -307,7 +307,7 @@ function StatementsContent() {
             <Panel>
               <PanelHeader>
                 <PanelTitles>
-                  <PanelTitle>By tool</PanelTitle>
+                  <PanelTitle as="h2">By tool</PanelTitle>
                   <PanelDescription className="whitespace-normal">The same rows as the CSV</PanelDescription>
                 </PanelTitles>
               </PanelHeader>

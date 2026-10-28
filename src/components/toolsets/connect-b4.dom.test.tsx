@@ -21,8 +21,8 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => undefined, r
 
 const AGENT = "11111111-1111-1111-1111-111111111111";
 
-function render(node: React.ReactNode, keys: unknown[] = []): string {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function render(node: React.ReactNode, keys: unknown[] = [], seed?: (client: QueryClient) => void): string {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount: false } } });
   client.setQueryData(["catalogue", "providers"], { providers: [] });
   client.setQueryData(["catalogue", "tools"], { tools: [] });
   client.setQueryData(["tool-calls", "catalogue"], { items: [], pageInfo: { nextCursor: null, hasMore: false } });
@@ -30,6 +30,7 @@ function render(node: React.ReactNode, keys: unknown[] = []): string {
   client.setQueryData(AGENTS_WITH_KEYS_KEY, withDemoKeys({ [AGENT]: keys }));
   client.setQueryData(toolsetKeys.all, { items: [], pageInfo: { nextCursor: null, hasMore: false } });
   client.setQueryData(["spend-policy"], null);
+  seed?.(client);
   return renderToStaticMarkup(<QueryClientProvider client={client}>{node}</QueryClientProvider>);
 }
 
@@ -145,5 +146,38 @@ describe("the config tabs", () => {
 
   it("say Claude Desktop requires Node.js", () => {
     expect(pasteHint("claude-desktop")).toMatch(/^Requires Node\.js/);
+  });
+});
+
+describe("One topic: an empty list is not an error (BUG-DEV-BUY-CONNECT-04)", () => {
+  const sheet = (seed: (client: QueryClient) => void) => {
+    vi.stubEnv("NEXT_PUBLIC_MCP_URL", "https://mcp.example.com/");
+    return text(render(<Sheet open><ConnectBody agentProp={AGENT} initialUrl="https://mcp.example.com/c/weather" changing={false} onDone={() => undefined} /></Sheet>, [KEY], seed));
+  };
+
+  it("says there are no topics yet, with no try-again hint", () => {
+    const out = sheet((client) => client.setQueryData(toolsetKeys.categories, { categories: [] }));
+    expect(out).toContain("No topics yet.");
+    expect(out).not.toContain("could not be loaded");
+  });
+
+  it("keeps the error text for a real failure", () => {
+    const out = sheet((client) =>
+      client.getQueryCache().build(client, { queryKey: toolsetKeys.categories }).setState({ status: "error", error: new Error("down"), fetchStatus: "idle", errorUpdatedAt: Date.now() })
+    );
+    expect(out).toContain("Topics could not be loaded");
+    expect(out).not.toContain("No topics yet.");
+  });
+});
+
+describe("the config tabs' step headings follow the page outline (BUG-DEV-NF-01)", () => {
+  it("are h3 by default and h2 when asked (the Connect page, straight under its h1)", () => {
+    const local = { token: null, url: "https://mcp.example.com/", client: "claude-code" as const, guide: true };
+    expect(render(<McpConfigTabs {...local} />)).toMatch(/<h3[^>]*>Add Assay to /);
+    const page = render(<McpConfigTabs {...local} heading="h2" />);
+    expect(page).toMatch(/<h2[^>]*>Add Assay to /);
+    expect(page).toMatch(/<h2[^>]*>What happens next/);
+    expect(page).not.toContain("<h3");
+    expect(render(<McpConfigTabs token={null} url="https://mcp.example.com/" client="claude-ai" heading="h2" />)).toMatch(/<h2[^>]*>Add Assay to /);
   });
 });

@@ -53,9 +53,13 @@ const PanelTitles = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDi
 );
 PanelTitles.displayName = "PanelTitles";
 
-const PanelTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => (
-    <h3 ref={ref} className={cn("truncate text-label-md text-01", className)} {...props} />
+/**
+ * An h3 by default; `as="h2"` for a panel that sits straight under the page's
+ * h1, so the outline does not skip a level (the look stays the same).
+ */
+const PanelTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement> & { as?: "h2" | "h3" }>(
+  ({ className, as: Heading = "h3", ...props }, ref) => (
+    <Heading ref={ref} className={cn("truncate text-label-md text-01", className)} {...props} />
   )
 );
 PanelTitle.displayName = "PanelTitle";

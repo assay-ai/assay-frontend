@@ -116,6 +116,7 @@ export function ConnectView() {
 
         <McpConfigTabs
           guide
+          heading="h2"
           token={created?.token ?? null}
           keyHint={created?.hint ?? keyForHint(live)?.hint ?? null}
           url={url}

@@ -459,8 +459,11 @@ export function ConnectBody({
             {kind === "topic" ? (
               categories.isPending ? (
                 <Skeleton className="h-10 w-full" />
-              ) : categories.isError || !categories.data?.categories.length ? (
+              ) : categories.isError ? (
                 <p className="text-body-13 text-02">Topics could not be loaded. Pick another answer, or try again later.</p>
+              ) : !categories.data.categories.some((c) => c.tools > 0) ? (
+                // An empty list is not a failure: say so, with no "try again".
+                <p className="text-body-13 text-02" data-testid="connect-no-topics">No topics yet. Pick another answer.</p>
               ) : (
                 <select
                   aria-label="Topic"

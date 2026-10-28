@@ -57,3 +57,18 @@ describe("Customise: provider-side events only for a provider (review m9)", () =
     expect(render({ id: "org-1" })).toContain("Penalty decided");
   });
 });
+
+describe("headings do not skip a level (BUG-DEV-NF-01)", () => {
+  it("puts the panel titles at h2, straight under the page's h1", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <AlertsView />
+      </QueryClientProvider>,
+    );
+    const levels = [...html.matchAll(/<h([1-6])\b/g)].map((m) => Number(m[1]));
+    expect(levels[0]).toBe(1);
+    expect(html).toMatch(/<h2[^>]*>Where alerts go<\/h2>/);
+    levels.forEach((level, i) => expect(level - (levels[i - 1] ?? 0)).toBeLessThanOrEqual(1));
+  });
+});

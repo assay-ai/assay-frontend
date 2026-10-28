@@ -387,7 +387,7 @@ export function AlertsView() {
       <Panel>
         <PanelHeader>
           <PanelTitles>
-            <PanelTitle>Where alerts go</PanelTitle>
+            <PanelTitle as="h2">Where alerts go</PanelTitle>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="gap-2.5 p-4 tablet:p-5">
@@ -441,7 +441,7 @@ export function AlertsView() {
       <Panel>
         <PanelHeader>
           <PanelTitles>
-            <PanelTitle>What you are told about</PanelTitle>
+            <PanelTitle as="h2">What you are told about</PanelTitle>
           </PanelTitles>
         </PanelHeader>
         <PanelBody>
