@@ -345,10 +345,11 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
   const signedIn = useSignedIn() || demoEnabled();
   const [copying, setCopying] = React.useState(false);
   const [reporting, setReporting] = React.useState(false);
-  const shownVersion = v ?? page.version;
+  // What the API served, not what the link asked for: a version that is not published comes back as the newest.
+  const shownVersion = page.version;
   const latestUrl = page.mcpUrls.latest;
   // Another person's set is always handed out pinned (spec 9.3), also an Official one.
-  const url = v ? `${latestUrl}@${v}` : page.mcpUrls.pinned;
+  const url = page.mcpUrls.pinned;
   const official = page.badge === "OFFICIAL";
   // Link-only: "Start free" comes back without the token in any URL; it waits in this tab.
   const nextPath = token ? "/toolsets/view?resume=1" : undefined;
@@ -386,6 +387,11 @@ export function ToolsetPublicBody({ page, token, v, from }: { page: PublicToolse
             </>
           ) : null}
         </p>
+        {v && v !== page.version ? (
+          <p className="text-body-xs text-03" data-testid="version-shown-instead">
+            Version {v} is not available. Showing v{page.version} instead.
+          </p>
+        ) : null}
         {page.description ? <p className="text-body-md text-02">{page.description}</p> : null}
         {page.forkedFrom ? (
           <p className="text-body-xs text-03">
