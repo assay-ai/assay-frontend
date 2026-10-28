@@ -4,7 +4,7 @@ import { Check, Copy, ExternalLink } from "lucide-react";
 import * as React from "react";
 
 import { chainBalances, type FullBalance } from "@/features/g30/balance";
-import { useSigner } from "@/hooks/useSigner";
+import { isEmbeddedWallet, useMenuWallets, type SelectableWallet } from "@/hooks/useSigner";
 import type { Chain } from "@/interfaces/chain";
 import { explorerAddressUrl } from "@/libs/chains/explorer";
 import { shortAddress } from "@/libs/chains/format";
@@ -43,23 +43,14 @@ export function Row({ label, value }: { label: string; value: React.ReactNode })
   );
 }
 
-/**
- * One chain's wallet row: both addresses, grouped by chain, each with its own
- * explorer link — never one "your wallet".
- *
- * A component per chain, not a loop inside the parent: `useSigner` is a hook
- * and a hook cannot be called per element of a list. It also makes the signer
- * state "evaluated per chain" for free — this row can be `hydrating` while the row
- * above it is `ready`, and neither can collapse the other into "no wallet".
- *
- * The explorer link comes from `explorerAddressUrl(chain, address)` with the
- * chain the API served. It used to be a template literal pinned to
- * `explorer.solana.com` and `cluster=devnet`, which is a link that is wrong on
- * every row that is not this one deployment's Solana.
- */
-export function ChainWalletRow({ chain }: { chain: Chain }) {
-  const state = useSigner({ chainId: chain.chainId });
-  const address = state.status === "ready" ? state.signer.address : null;
+/** Each displayed address owns its copy state and explorer link. */
+function WalletAddressRow({ chain, wallet }: { chain: Chain; wallet: SelectableWallet }) {
+  const address = wallet.address;
+  const label = isEmbeddedWallet(wallet)
+    ? "Privy wallet"
+    : wallet.walletClientType === "metamask"
+      ? "MetaMask"
+      : wallet.walletClientType || "External wallet";
   const [copied, setCopied] = React.useState(false);
   const resetTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -84,43 +75,52 @@ export function ChainWalletRow({ chain }: { chain: Chain }) {
   }, [address]);
 
   return (
+    <div className="mt-1.5">
+      <p className="text-body-xs text-03">{label}</p>
+      <div className="mt-0.5 flex items-center gap-1.5">
+        <a
+          href={explorerAddressUrl(chain, address)}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={address}
+          className="flex flex-1 items-center gap-1.5 truncate text-mono-13 font-mono text-01"
+        >
+          {shortAddress(chain.chainId, address)}
+          <ExternalLink className="h-3.5 w-3.5 text-03" aria-hidden="true" />
+        </a>
+        <button
+          type="button"
+          onClick={() => void copy()}
+          className="rounded-md p-1 outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
+        >
+          {copied ? (
+            <Check className="h-3.5 w-3.5 text-success-500" aria-hidden="true" />
+          ) : (
+            <Copy className="h-3.5 w-3.5 text-03" aria-hidden="true" />
+          )}
+          <span className="sr-only">
+            {copied ? `${label} ${chain.displayName} address copied` : `Copy the ${label} ${chain.displayName} address`}
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Show every connected wallet in the chain's namespace, including external wallets. */
+export function ChainWalletRow({ chain }: { chain: Chain }) {
+  const { ready, wallets } = useMenuWallets(chain.chainId);
+  return (
     <div data-testid="wallet-row" data-chain-id={chain.chainId} className="px-2.5 py-1.5">
       <span className="text-label-xs uppercase tracking-[0.4px] text-03">{chain.displayName}</span>
-      {address ? (
-        <div className="mt-0.5 flex items-center gap-1.5">
-          <a
-            href={explorerAddressUrl(chain, address)}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={address}
-            className="flex flex-1 items-center gap-1.5 truncate text-mono-13 font-mono text-01"
-          >
-            {shortAddress(chain.chainId, address)}
-            <ExternalLink className="h-3.5 w-3.5 text-03" aria-hidden="true" />
-          </a>
-          <button
-            type="button"
-            onClick={() => void copy()}
-            className="rounded-md p-1 outline-none focus-visible:ring-1 focus-visible:ring-primary-500"
-          >
-            {copied ? (
-              <Check className="h-3.5 w-3.5 text-success-500" aria-hidden="true" />
-            ) : (
-              <Copy className="h-3.5 w-3.5 text-03" aria-hidden="true" />
-            )}
-            <span className="sr-only">
-              {copied ? `${chain.displayName} address copied` : `Copy the ${chain.displayName} address`}
-            </span>
-          </button>
-        </div>
-      ) : (
+      {wallets.length > 0 ? wallets.map((wallet) => (
+        <WalletAddressRow key={wallet.address} chain={chain} wallet={wallet} />
+      )) : (
         <p className="mt-0.5 text-body-xs text-02">
           {demoEnabled()
             ? "Demo: no wallet is connected. On a live site your wallet shows here."
-            : state.status === "hydrating"
-            ? "Connecting…"
-            : state.status === "chain-unknown"
-              ? "Preparing…"
+            : !ready
+              ? "Connecting…"
               : "No wallet connected on this chain."}
         </p>
       )}

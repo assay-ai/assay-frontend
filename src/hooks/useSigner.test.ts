@@ -1178,9 +1178,9 @@ describe("rowWalletAddresses: the account label counts the rows the menu shows (
     expect(rowWalletAddresses([EVM], { solana, evm })).toEqual([EVM_ADDRESS]);
   });
 
-  it("counts one address shown on two chains once, and one row per namespace, not every wallet", () => {
+  it("counts all displayed wallets and counts an address shown on two chains once", () => {
     const two = { ready: true, wallets: [...evm.wallets, { address: "0x1111111111111111111111111111111111111111", walletClientType: "metamask" }] };
-    expect(rowWalletAddresses([EVM, EVM_TWO], { solana: { ready: true, wallets: [] }, evm: two })).toEqual([EVM_ADDRESS]);
+    expect(rowWalletAddresses([EVM, EVM_TWO], { solana: { ready: true, wallets: [] }, evm: two })).toEqual([EVM_ADDRESS, "0x1111111111111111111111111111111111111111"]);
   });
 
   it("counts both namespaces when both have a chain, and nothing while a list hydrates", () => {
