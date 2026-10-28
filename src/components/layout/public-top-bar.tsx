@@ -57,6 +57,7 @@ const DEFAULT_NAV_ITEMS: PublicTopBarNavItem[] = [
   { id: "tools", label: "Tools", href: "/catalogue" },
   { id: "demo", label: "Demo", href: "/demo" },
   { id: "providers", label: "For providers", href: "/why-list-here" },
+  { id: "analytics", label: "Analytics", href: "/analytics" },
   ...(DOCS_URL ? [{ id: "docs", label: "Docs", href: DOCS_URL, external: true }] : []),
 ];
 

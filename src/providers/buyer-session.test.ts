@@ -262,6 +262,8 @@ describe("unauthorizedTarget", () => {
 describe("isPublicPath", () => {
   it("matches the public pages and the pages under the catalogue", () => {
     for (const path of [
+      "/analytics",
+      "/analytics/",
       "/how-it-works",
       "/why-list-here",
       "/catalogue",
