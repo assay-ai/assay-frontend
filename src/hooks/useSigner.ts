@@ -940,15 +940,32 @@ export function useConnectedAddresses(): readonly string[] {
   );
 }
 
-/**
- * The addresses the account menu's wallet rows show, one per chain, distinct.
- *
- * Each row is `useSigner({ chainId })` with no requested address, so it shows
- * `pickWallet` over that chain's namespace list. The header's "N wallets" is
- * counted from the same rule: counting every connected address said
- * "2 wallets" over a menu listing one (a wallet of a namespace no enabled
- * chain uses, BUG-DEV-NEW-01). A list that is not ready shows no address.
- */
+/** Wallets displayed in an account-menu chain group, independent of signer selection. */
+export function menuWallets<W extends SelectableWallet>(
+  chainId: string,
+  wallets: readonly W[],
+): W[] {
+  const seen = new Set<string>();
+  return wallets.filter((wallet) => {
+    const key = isEvmChain(chainId) ? wallet.address.toLowerCase() : wallet.address;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/** Read all connected wallets for display without changing which wallet signs. */
+export function useMenuWallets(chainId: string) {
+  const solana = useWallets();
+  const evm = useEvmWallets();
+  const list = isEvmChain(chainId) ? evm : solana;
+  return {
+    ready: list.ready,
+    wallets: list.ready ? menuWallets<SelectableWallet>(chainId, list.wallets) : [],
+  };
+}
+
+/** Distinct addresses actually displayed across the enabled chains. */
 export function rowWalletAddresses(
   chainIds: readonly string[],
   lists: {
@@ -956,11 +973,11 @@ export function rowWalletAddresses(
     readonly evm: { readonly ready: boolean; readonly wallets: readonly SelectableWallet[] };
   },
 ): string[] {
-  const shown = chainIds.map((chainId) => {
+  const shown = chainIds.flatMap((chainId) => {
     const list = isEvmChain(chainId) ? lists.evm : lists.solana;
-    return list.ready ? (pickWallet(list.wallets)?.address ?? null) : null;
+    return list.ready ? menuWallets(chainId, list.wallets).map((wallet) => wallet.address) : [];
   });
-  return [...new Set(shown.filter((address): address is string => address !== null))];
+  return [...new Set(shown)];
 }
 
 /** `rowWalletAddresses` over Privy's two live lists. */
