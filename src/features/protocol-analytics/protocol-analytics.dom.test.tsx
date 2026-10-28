@@ -13,70 +13,86 @@ import { ProtocolAnalytics } from "./protocol-analytics";
 
 afterEach(cleanup);
 
-describe("protocol analytics sample", () => {
-  it("identifies fictional figures and renders the supplied sample payments", () => {
-    render(<ProtocolAnalytics />);
-    expect(screen.getByText("Sample data.")).toBeDefined();
-    expect(
-      screen.getByText(/These are not Assay’s real figures/),
-    ).toBeDefined();
-    const figures = screen.getByRole("region", { name: "Headline figures" });
-    expect(within(figures).getByText("$2,498")).toBeDefined();
-    expect(within(figures).getByText("8,223")).toBeDefined();
-    expect(
-      screen
-        .getByRole("table", { name: /Top tools/ })
-        .querySelectorAll("tbody tr"),
-    ).toHaveLength(12);
-    expect(
-      screen
-        .getByRole("table", { name: /Latest payments/ })
-        .querySelectorAll("tbody tr"),
-    ).toHaveLength(12);
-  });
+function expectEmptyDashboard(container: HTMLElement) {
+  const figures = screen.getByRole("region", { name: "Headline figures" });
+  expect(within(figures).getAllByText("—")).toHaveLength(6);
+  expect(container.textContent).not.toMatch(
+    /\$[\d,.]+|\d+(\.\d+)?%|0x[a-f0-9]+|Assay earned|sample|fictional|fixture|preview|undefined|NaN|Infinity|vs previous|Oct 27/i,
+  );
+  expect(container.querySelector("svg rect, svg path")).toBeNull();
+}
 
-  it("updates the range and metric and handles All without a previous period", () => {
+describe("protocol analytics empty state", () => {
+  it("keeps all sections and shows absent values without placeholder activity or notices", () => {
     const { container } = render(<ProtocolAnalytics />);
-    fireEvent.click(screen.getByRole("radio", { name: "7D" }));
     expect(
-      screen.getByRole("radio", { name: "7D" }).getAttribute("aria-checked"),
-    ).toBe("true");
-    expect(
-      screen.getByText("Last 7 days · to Oct 27, 2026 · UTC · Sample"),
+      screen.getByRole("heading", {
+        name: "Assay protocol analytics",
+        level: 1,
+      }),
     ).toBeDefined();
+    for (const title of [
+      "Revenue and volume",
+      "Adoption",
+      "Right now",
+      "Top tools",
+      "Latest payments",
+      "How each number is counted",
+    ]) {
+      expect(
+        screen.getByRole("heading", { name: title, level: 2 }),
+      ).toBeDefined();
+    }
+    expectEmptyDashboard(container);
+    expect(screen.getAllByRole("img")).toHaveLength(5);
     expect(
-      within(
-        screen.getByRole("region", { name: "Headline figures" }),
-      ).getByText("$658.00"),
-    ).toBeDefined();
-    fireEvent.click(screen.getByRole("radio", { name: "Volume" }));
-    expect(
-      screen.getByRole("img", { name: "Volume per day (sample data)" }),
-    ).toBeDefined();
-    fireEvent.click(screen.getByRole("radio", { name: "All" }));
-    expect(
-      screen.getByText("Since launch · to Oct 27, 2026 · UTC · Sample"),
-    ).toBeDefined();
-    expect(container.textContent).not.toMatch(/undefined|vs previous/);
+      screen
+        .getAllByRole("img")
+        .every((chart) =>
+          chart.getAttribute("aria-label")?.includes("no data available"),
+        ),
+    ).toBe(true);
   });
 
-  it("sorts the sample tools and reports the sorting direction", () => {
+  it("shows empty tables instead of fabricated tools and payments", () => {
     render(<ProtocolAnalytics />);
-    const table = screen.getByRole("table", { name: /Top tools/ });
-    const firstTool = () => table.querySelector("tbody tr td")!.textContent;
-    expect(firstTool()).toBe("web_search");
-    fireEvent.click(within(table).getByRole("button", { name: /^Tool$/ }));
-    expect(firstTool()).toBe("code_review");
-    expect(
-      within(table)
-        .getByRole("columnheader", { name: /Tool/ })
-        .getAttribute("aria-sort"),
-    ).toBe("ascending");
-    fireEvent.click(within(table).getByRole("button", { name: "Tool ▲" }));
-    expect(firstTool()).toBe("web_search");
+    for (const title of ["Top tools", "Latest payments"]) {
+      const table = screen.getByRole("table", { name: title });
+      expect(within(table).getByText("No data available.")).toBeDefined();
+      expect(table.querySelectorAll("tbody tr")).toHaveLength(1);
+      expect(table.querySelectorAll("tbody tr td")).toHaveLength(1);
+    }
+    expect(screen.queryByText("web_search")).toBeNull();
+    expect(screen.queryByText("Settled")).toBeNull();
+    expect(screen.queryByText("Verifying")).toBeNull();
   });
 
-  it("supports selecting the time range with the keyboard", () => {
+  it("preserves missing values across every time range and metric", () => {
+    const { container } = render(<ProtocolAnalytics />);
+    for (const [range, description] of [
+      ["7D", "Last 7 days"],
+      ["30D", "Last 30 days"],
+      ["90D", "Last 90 days"],
+      ["All", "Since launch"],
+    ]) {
+      fireEvent.click(screen.getByRole("radio", { name: range }));
+      expect(
+        screen.getByRole("radio", { name: range }).getAttribute("aria-checked"),
+      ).toBe("true");
+      expect(screen.getByText(`${description} · UTC`)).toBeDefined();
+      for (const metric of ["Revenue", "Volume", "Paid calls"]) {
+        fireEvent.click(screen.getByRole("radio", { name: metric }));
+        expect(
+          screen.getByRole("img", {
+            name: `${metric} per day: no data available`,
+          }),
+        ).toBeDefined();
+        expectEmptyDashboard(container);
+      }
+    }
+  });
+
+  it("supports time-range selection with the keyboard", () => {
     render(<ProtocolAnalytics />);
     const selected = screen.getByRole("radio", { name: "30D" });
     selected.focus();
@@ -84,8 +100,6 @@ describe("protocol analytics sample", () => {
     expect(
       screen.getByRole("radio", { name: "90D" }).getAttribute("aria-checked"),
     ).toBe("true");
-    expect(
-      screen.getByText("Last 90 days · to Oct 27, 2026 · UTC · Sample"),
-    ).toBeDefined();
+    expect(screen.getByText("Last 90 days · UTC")).toBeDefined();
   });
 });
