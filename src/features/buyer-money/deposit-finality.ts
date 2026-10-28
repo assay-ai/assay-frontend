@@ -27,7 +27,7 @@ import { CONFIRMING_SLOW_POLL_MS } from "./confirming";
 export const DEPOSIT_FINALITY_KEY = ["deposit-finality"] as const;
 
 /** The statuses a deposit behind "still confirming" can be in. */
-const CANDIDATE_STATUSES = ["CREATED", "SETTLING", "SETTLED"];
+const CANDIDATE_STATUSES = ["SETTLING", "SETTLED"];
 
 export interface DepositFinalityWait {
   /** The deposits still pending, read again on the next tick. Empty: look them up again. */
@@ -39,10 +39,9 @@ export interface DepositFinalityWait {
 }
 
 /** Whether this deposit still holds money in "still confirming on chain". */
-export function depositStillPending(deposit: Deposit, nowMs: number): boolean {
+export function depositStillPending(deposit: Deposit): boolean {
+  // A CREATED deposit sent nothing yet, and `GET /balances` does not count it either.
   if (deposit.status === "SETTLING") return true;
-  // Counted in `pendingDeposits` until it expires, as `GET /balances` counts it.
-  if (deposit.status === "CREATED") return Date.parse(deposit.expiresAt) > nowMs;
   return deposit.status === "SETTLED" && deposit.finality === "PENDING";
 }
 
@@ -89,7 +88,7 @@ export async function depositFinalityTick(
   if (predatesFinality(deposits)) return { pending: [], legacy: true, refreshedAt };
 
   const at = now();
-  const pending = deposits.filter((deposit) => depositStillPending(deposit, at)).map((deposit) => deposit.id);
+  const pending = deposits.filter((deposit) => depositStillPending(deposit)).map((deposit) => deposit.id);
   const decided = watching.some((id) => !pending.includes(id));
   const mismatch = pending.length === 0 && (refreshedAt === null || at - refreshedAt >= CONFIRMING_SLOW_POLL_MS);
   if (decided || mismatch) {
