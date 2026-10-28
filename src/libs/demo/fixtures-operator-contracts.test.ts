@@ -38,12 +38,13 @@ describe("demo contract editor", () => {
     expect(list.tools.length).toBeGreaterThan(5);
   });
 
-  it("has get_weather on 1.x and 2.0, with major 1 deprecated and sunset 120 days out", async () => {
+  it("has get_weather on 1.x and 2.0, with major 1 deprecated and its sunset past the 90-day notice", async () => {
     const f = await load();
     const tool = call<OperatorTool>(f, "GET", `/operator/tools/${WEATHER_TOOL_ID}`);
     expect(tool.versions.map((v) => `${v.semver}:${v.status}`)).toEqual(["2.0.0:ACTIVE", "1.1.0:DEPRECATED", "1.0.0:DEPRECATED"]);
     const days = (Date.parse(tool.versions[1]!.sunsetAt!) - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(110);
+    // A fixed calendar date (weatherSunsetAt), never under the 90-day notice.
+    expect(days).toBeGreaterThan(90);
     expect(tool.majors.map((m) => m.major)).toEqual([2, 1]);
     expect(tool.draft).toMatchObject({ baseSemver: "2.0.0", nextSemver: "2.1.0", bump: "MINOR", problems: [] });
   });
