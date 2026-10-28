@@ -63,7 +63,7 @@ export function SettingsView() {
         <Panel>
           <PanelHeader>
             <PanelTitles>
-              <PanelTitle>Your account</PanelTitle>
+              <PanelTitle as="h2">Your account</PanelTitle>
             </PanelTitles>
           </PanelHeader>
           <PanelBody className="px-5 pb-[18px] pt-2">

@@ -121,6 +121,7 @@ import {
   isUserRejection,
   pickWallet,
   resolveSignerState,
+  rowWalletAddresses,
   toSolanaChain,
   useSigner,
   withWalletPrompt,
@@ -1163,5 +1164,28 @@ describe("the eip155 branch", () => {
     /* No requested address: the embedded wallet wins even though it is second. */
     expect(state.signer!.address).toBe(EVM_EMBEDDED);
     expect(state.signer!.kind).toBe("embedded");
+  });
+});
+
+describe("rowWalletAddresses: the account label counts the rows the menu shows (BUG-DEV-NEW-01)", () => {
+  const EVM = "eip155:46630";
+  const EVM_TWO = "eip155:1";
+  const EVM_ADDRESS = "0x5dbF000000000000000000000000000000007042";
+  const evm = { ready: true, wallets: [{ address: EVM_ADDRESS, walletClientType: "privy" }] };
+
+  it("leaves out a wallet of a namespace no enabled chain uses", () => {
+    const solana = { ready: true, wallets: [embedded(EMBEDDED_A)] };
+    expect(rowWalletAddresses([EVM], { solana, evm })).toEqual([EVM_ADDRESS]);
+  });
+
+  it("counts one address shown on two chains once, and one row per namespace, not every wallet", () => {
+    const two = { ready: true, wallets: [...evm.wallets, { address: "0x1111111111111111111111111111111111111111", walletClientType: "metamask" }] };
+    expect(rowWalletAddresses([EVM, EVM_TWO], { solana: { ready: true, wallets: [] }, evm: two })).toEqual([EVM_ADDRESS]);
+  });
+
+  it("counts both namespaces when both have a chain, and nothing while a list hydrates", () => {
+    const solana = { ready: true, wallets: [embedded(EMBEDDED_A)] };
+    expect(rowWalletAddresses([SOLANA_DEVNET_CAIP2, EVM], { solana, evm })).toEqual([EMBEDDED_A, EVM_ADDRESS]);
+    expect(rowWalletAddresses([EVM], { solana, evm: { ...evm, ready: false } })).toEqual([]);
   });
 });

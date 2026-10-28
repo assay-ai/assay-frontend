@@ -19,7 +19,7 @@ import { Avatar } from "@/components/ui/avatar";
 import type { FullBalance } from "@/features/g30/balance";
 import { useProviderEntryState } from "@/features/provider-entry/use-provider-entry";
 import { useChains } from "@/hooks/useChains";
-import { useConnectedAddresses } from "@/hooks/useSigner";
+import { useConnectedAddresses, useRowWalletAddresses } from "@/hooks/useSigner";
 import { clearSessionToken } from "@/libs/ApiClient";
 import { demoEnabled } from "@/libs/demo/demo-api";
 import { getBalances } from "@/services";
@@ -94,11 +94,13 @@ export function WalletMenu({ className }: { className?: string }) {
   */
   const chainsResult = useChains();
   /*
-    A count and an identity seed, not a signer: "how many wallets do I have" is
-    not a per-chain question. The rows below each hold their own
+    The identity seed, not a signer. The rows below each hold their own
     `useSigner({ chainId })`.
   */
   const addresses = useConnectedAddresses();
+  // The label's count: the distinct addresses the wallet rows below show, not every connected one.
+  const chainIds = React.useMemo(() => chainsResult.chains.map((chain) => chain.chainId), [chainsResult.chains]);
+  const shown = useRowWalletAddresses(chainIds);
   const email = user?.email?.address ?? null;
 
   /*
@@ -168,11 +170,11 @@ export function WalletMenu({ className }: { className?: string }) {
             mismatch (React #418 was a real error in this build's console).
           */
           aria-label={
-            !mounted || addresses.length === 0
+            !mounted || shown.length === 0
               ? "Account"
-              : addresses.length === 1
-                ? `Account, wallet ${addresses[0]}`
-                : `Account, ${addresses.length} wallets`
+              : shown.length === 1
+                ? `Account, wallet ${shown[0]}`
+                : `Account, ${shown.length} wallets`
           }
           className={cn(
             "rounded-full outline-none focus-visible:ring-1 focus-visible:ring-primary-500",

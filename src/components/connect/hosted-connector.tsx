@@ -22,13 +22,13 @@ function paidUrl(url: string): string {
  * URL carries `?free=1` unless the person asks to see paid tools too (they
  * only explain how to pay; a hosted connector never holds a payment key).
  */
-export function HostedConnector({ client, url, secondUrl = false, onCopy }: { client: HostedMcpClient; url: string; secondUrl?: boolean; onCopy?: (url: string) => void }) {
+export function HostedConnector({ client, url, secondUrl = false, heading: Heading = "h3", onCopy }: { client: HostedMcpClient; url: string; secondUrl?: boolean; heading?: "h2" | "h3"; onCopy?: (url: string) => void }) {
   const app = appName(client);
   const [paid, setPaid] = React.useState(false);
   const shown = paid ? paidUrl(url) : hostedUrl(url);
   return (
     <div className="flex min-w-0 flex-col gap-2" data-testid="hosted-connector">
-      <h3 className="text-label-sm text-01">Add Assay to {app}</h3>
+      <Heading className="text-label-sm text-01">Add Assay to {app}</Heading>
       <ol className="flex list-decimal flex-col gap-1.5 pl-5 text-body-13 text-02">
         <li>{client === "claude-ai" ? "Open Settings › Connectors › Add custom connector." : `Open ${app}'s settings, find Connectors, and add a custom connector.`}</li>
         <li className="min-w-0">

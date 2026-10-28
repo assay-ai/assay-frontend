@@ -29,6 +29,7 @@ import { chainsText } from "@/features/toolsets/provider-fit";
 import { useChainName } from "@/hooks/useChainName";
 import { ApiError } from "@/libs/ApiClient";
 import { plainError } from "@/libs/plain-language";
+import { isRecordMissing } from "@/libs/record-missing";
 import { routes } from "@/libs/routes";
 import { getCatalogueProvider } from "@/services/catalogue.service";
 import { formatMoney } from "@/utils/money";
@@ -67,7 +68,8 @@ export function ProviderDetailView({ providerId }: { providerId: string }) {
     </Link>
   );
 
-  if (!providerId || (entry.error instanceof ApiError && entry.error.status === 404)) {
+  // A malformed id (400 VALIDATION_FAILED) is as missing as an unknown one.
+  if (!providerId || isRecordMissing(entry.error)) {
     return (
       <div className="flex flex-col gap-4 px-4 py-5 tablet:px-7">
         {back}
