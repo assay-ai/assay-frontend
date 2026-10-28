@@ -5,7 +5,7 @@ import { ProtocolAnalytics } from "@/features/protocol-analytics/protocol-analyt
 export const metadata: Metadata = {
   title: "Protocol analytics",
   description:
-    "Preview Assay protocol analytics with fictional sample data for revenue, tool activity and agent adoption.",
+    "Assay protocol revenue, tool activity, agent adoption and escrow payment analytics.",
   robots: { index: false, follow: true },
 };
 
