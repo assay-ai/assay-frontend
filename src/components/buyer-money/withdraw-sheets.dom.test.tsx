@@ -12,16 +12,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
   and paid calls can land before the request is on chain).
 */
 const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x1", decimals: 6 });
-const money = vi.hoisted(() => ({ openHolds: "0", frozen: undefined as boolean | null | undefined }));
+const money = vi.hoisted(() => ({ openHolds: "0", frozen: undefined as boolean | null | undefined, pending: false, requested: "0" }));
 
 vi.mock("./use-buyer-money", () => ({
   useBuyerMoney: () => ({
+    escrowQuery: { isPending: money.pending },
     escrow: {
       exists: true,
       balance: usd("13240000"),
       spendable: usd(String(13_240_000 - Number(money.openHolds))),
       openHolds: usd(money.openHolds),
-      withdrawRequested: usd("0"),
+      withdrawRequested: usd(money.requested),
       withdrawAvailableAt: null,
       withdrawalsFrozen: money.frozen,
     },
@@ -45,12 +46,14 @@ vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIn
 vi.mock("@/features/buyer-debt/use-owed-intent-ids", () => ({ useOwedIntentIds: () => new Set<string>() }));
 vi.mock("@/features/buyer-debt/settle-debt-sheet", () => ({ useSettleDebt: () => ({ openSettle: () => undefined }) }));
 
-import { WithdrawSheet, withdrawalsFrozen, withdrawAcknowledgement, withdrawHeldNote, withdrawPauseWarning, withdrawReceiveNote } from "./withdraw-sheets";
+import { ClaimSheet, WithdrawSheet, withdrawalsFrozen, withdrawAcknowledgement, withdrawHeldNote, withdrawPauseWarning, withdrawReceiveNote } from "./withdraw-sheets";
 
 afterEach(() => {
   cleanup();
   money.openHolds = "0";
   money.frozen = undefined;
+  money.pending = false;
+  money.requested = "0";
 });
 
 function open() {
@@ -170,5 +173,28 @@ describe("Withdraw while withdrawals are frozen", () => {
     expect(withdrawalsFrozen({})).toBe(false);
     expect(withdrawalsFrozen({ withdrawalsFrozen: null })).toBe(false);
     expect(withdrawalsFrozen({ withdrawalsFrozen: true })).toBe(true);
+  });
+});
+
+describe("Claim: the empty state waits for the escrow", () => {
+  const openClaim = () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ClaimSheet open onOpenChange={() => undefined} />
+      </QueryClientProvider>,
+    );
+  };
+
+  it("does not say there is nothing to claim while the escrow is still loading", () => {
+    money.pending = true;
+    openClaim();
+    expect(document.body.textContent).not.toContain("There is no withdrawal to claim");
+    expect(document.body.textContent).toContain("Loading your withdrawal");
+  });
+
+  it("says it once the escrow is read and holds no withdrawal", () => {
+    openClaim();
+    expect(document.body.textContent).toContain("There is no withdrawal to claim. Request one first.");
   });
 });

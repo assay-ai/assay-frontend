@@ -96,7 +96,7 @@ describe("waiting for a deposit to be final", () => {
     client.setQueryData(ME_STATUS_KEY, { blockStatus: null, unreadCount: null, debts: null });
     client.setQueryData([...OVERVIEW_KEY, "x"], {});
     await waitFor(() => expect(api.list).toHaveBeenCalledTimes(1));
-    expect(api.list).toHaveBeenCalledWith({ status: ["CREATED", "SETTLING", "SETTLED"], limit: 50 });
+    expect(api.list).toHaveBeenCalledWith({ status: ["SETTLING", "SETTLED"], limit: 50 });
 
     await tick();
     await tick();
@@ -174,12 +174,10 @@ describe("waiting for a deposit to be final", () => {
 });
 
 describe("depositStillPending", () => {
-  const now = Date.parse("2026-10-20T12:00:00.000Z");
-  it("is pending while settling, settled but not final, or created and not expired", () => {
-    expect(depositStillPending(deposit("a", "SETTLING", null) as never, now)).toBe(true);
-    expect(depositStillPending(deposit("a", "SETTLED", "PENDING") as never, now)).toBe(true);
-    expect(depositStillPending(deposit("a", "CREATED", null) as never, now)).toBe(true);
-    expect(depositStillPending({ ...deposit("a", "CREATED", null), expiresAt: "2026-10-20T11:00:00.000Z" } as never, now)).toBe(false);
+  it("is pending while settling or settled but not final, never while only created", () => {
+    expect(depositStillPending(deposit("a", "SETTLING", null) as never)).toBe(true);
+    expect(depositStillPending(deposit("a", "SETTLED", "PENDING") as never)).toBe(true);
+    expect(depositStillPending(deposit("a", "CREATED", null) as never)).toBe(false);
   });
   it("is decided once confirmed, rejected, failed or expired", () => {
     for (const [status, finality] of [
@@ -188,7 +186,7 @@ describe("depositStillPending", () => {
       ["FAILED", null],
       ["EXPIRED", null],
     ] as const) {
-      expect(depositStillPending(deposit("a", status, finality) as never, now)).toBe(false);
+      expect(depositStillPending(deposit("a", status, finality) as never)).toBe(false);
     }
   });
 });

@@ -232,8 +232,13 @@ describe("public tool sets", () => {
     const pinned = panel(render(<ToolsetPublicBody page={page} token={null} v={null} from={null} />, seed));
     expect(pinned).toContain("/@geodesk/travel-planner@1<");
     expect(pinned).not.toContain("/@geodesk/travel-planner<");
-    // An explicit version is the latest URL plus that version.
-    expect(panel(render(<ToolsetPublicBody page={page} token={null} v={3} from={null} />, seed))).toContain("/@geodesk/travel-planner@3<");
+    // A version the API did not serve (it answers with the newest) never makes up a URL.
+    const asked = render(<ToolsetPublicBody page={page} token={null} v={3} from={null} />, seed);
+    expect(panel(asked)).toContain("/@geodesk/travel-planner@1<");
+    expect(panel(asked)).not.toContain("@3");
+    expect(text(asked)).toContain("Version 3 is not available. Showing v1 instead.");
+    expect(text(asked)).toContain("Locked to v1");
+    expect(text(asked)).not.toContain("v3");
   });
 
   it("opened from the update alert: what changed, Copy v3 URL, and that the app keeps v2", () => {
