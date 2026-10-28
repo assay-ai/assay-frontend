@@ -147,6 +147,23 @@ const DELIVERY_STATUS_TONE = {
 
 const DELIVERY_WORD = { PENDING: "Queued", DELIVERED: "Sent", FAILED: "Failed", SUPPRESSED: "Skipped" } as const;
 
+/**
+ * Rows worth showing: a skipped row for an external channel that is not offered
+ * here or that the person never set up is noise ("you turned this off" when they
+ * did not). Anything that really happened, and in-app, stays. With only in-app
+ * left, the caller says "Shown in-app only."
+ */
+export function visibleDeliveries(
+  deliveries: readonly NotificationDeliveryDto[],
+  offered: readonly string[],
+  configured: ReadonlySet<string>,
+): NotificationDeliveryDto[] {
+  const shown = deliveries.filter(
+    (d) => d.status !== "SUPPRESSED" || d.channel === "IN_APP" || (offered.includes(d.channel) && configured.has(d.channel)),
+  );
+  return shown.every((d) => d.channel === "IN_APP") ? [] : shown;
+}
+
 function DeliveryRow({ delivery }: { delivery: NotificationDeliveryDto }) {
   const tone = DELIVERY_STATUS_TONE[delivery.status as keyof typeof DELIVERY_STATUS_TONE] ?? "neutral";
   return (
@@ -294,6 +311,11 @@ export function AlertsView() {
     for (const row of channelsQuery.data ?? []) map.set(row.channel, row);
     return map;
   }, [channelsQuery.data]);
+
+  const deliveries = React.useMemo(
+    () => visibleDeliveries(deliveriesQuery.data ?? [], available, new Set(channelByType.keys())),
+    [deliveriesQuery.data, available, channelByType],
+  );
 
   const preferenceOverride = React.useMemo(() => {
     const map = new Map<string, boolean>();
@@ -621,10 +643,10 @@ export function AlertsView() {
                           <PageState kind="loading" rows={1} label="Loading deliveries" />
                         ) : deliveriesQuery.isError ? (
                           <p className="text-body-xs text-danger-600">Where this went could not be loaded.</p>
-                        ) : (deliveriesQuery.data?.length ?? 0) === 0 ? (
+                        ) : deliveries.length === 0 ? (
                           <p className="text-body-xs text-03">Shown in-app only.</p>
                         ) : (
-                          deliveriesQuery.data?.map((delivery) => <DeliveryRow key={delivery.id} delivery={delivery} />)
+                          deliveries.map((delivery) => <DeliveryRow key={delivery.id} delivery={delivery} />)
                         )}
                       </div>
                     ) : null}

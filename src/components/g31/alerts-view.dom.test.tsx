@@ -8,7 +8,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-import { AlertRowActions, AlertsView } from "./alerts-view";
+import { AlertRowActions, AlertsView, visibleDeliveries } from "./alerts-view";
 
 function render(providerMe?: unknown): string {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -70,5 +70,24 @@ describe("headings do not skip a level (BUG-DEV-NF-01)", () => {
     expect(levels[0]).toBe(1);
     expect(html).toMatch(/<h2[^>]*>Where alerts go<\/h2>/);
     levels.forEach((level, i) => expect(level - (levels[i - 1] ?? 0)).toBeLessThanOrEqual(1));
+  });
+});
+
+describe("See all alerts: delivery rows (BUY-SHELL-01)", () => {
+  const row = (channel: "IN_APP" | "EMAIL" | "PUSH", status: "DELIVERED" | "SUPPRESSED" | "FAILED") =>
+    ({ id: `${channel}-${status}`, channel, status, attempts: 0 }) as never;
+
+  it("shows no skipped rows for channels that are not offered or not set up: in-app only", () => {
+    const rows = [row("IN_APP", "DELIVERED"), row("EMAIL", "SUPPRESSED"), row("PUSH", "SUPPRESSED")];
+    expect(visibleDeliveries(rows, [], new Set())).toEqual([]);
+    expect(visibleDeliveries(rows, ["EMAIL", "PUSH"], new Set())).toEqual([]);
+    expect(visibleDeliveries(rows, [], new Set(["EMAIL"]))).toEqual([]);
+  });
+  it("keeps a skipped row for a channel the person set up, with in-app beside it", () => {
+    const rows = [row("IN_APP", "DELIVERED"), row("EMAIL", "SUPPRESSED"), row("PUSH", "SUPPRESSED")];
+    expect(visibleDeliveries(rows, ["EMAIL", "PUSH"], new Set(["EMAIL"])).map((d) => d.channel)).toEqual(["IN_APP", "EMAIL"]);
+  });
+  it("never hides something that really happened", () => {
+    expect(visibleDeliveries([row("EMAIL", "FAILED")], [], new Set())).toHaveLength(1);
   });
 });

@@ -7,6 +7,7 @@ import { formatLimit } from "@/components/g31/format";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { PresetChips } from "@/components/patterns/preset-chips";
 import { WalletActionSheet, type WalletStep } from "@/components/patterns/sign-action";
+import { PageState } from "@/components/patterns/page-state";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { Button } from "@/components/ui/button";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
@@ -332,7 +333,11 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
   const label = payout ? `Claim ${formatLimit(payout)}` : "Claim";
   const { hasPassed: matured } = useCountdown(escrow?.withdrawAvailableAt);
   const frozen = withdrawalsFrozen(escrow);
-  const notYet = frozen
+  // Until the escrow has been read, "no withdrawal" would be a guess (a deep link opens this sheet at once).
+  const loading = money.escrowQuery.isPending;
+  const notYet = loading
+    ? "Checking your withdrawal."
+    : frozen
     ? "Withdrawals are paused for now."
     : !requested || BigInt(requested.amount || "0") === 0n
     ? "There is no withdrawal to claim. Request one first."
@@ -404,6 +409,7 @@ export function ClaimSheet({ open, onOpenChange }: { open: boolean; onOpenChange
       successDescription="Your agents can pay for calls again with what is left in your escrow."
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
     >
+      {loading ? <PageState kind="loading" rows={1} label="Loading your withdrawal" /> : null}
       {frozen ? <FrozenBanner /> : null}
       {evm ? (
         <p className="text-body-13 text-02">
