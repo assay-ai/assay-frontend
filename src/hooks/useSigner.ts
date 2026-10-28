@@ -940,6 +940,39 @@ export function useConnectedAddresses(): readonly string[] {
   );
 }
 
+/**
+ * The addresses the account menu's wallet rows show, one per chain, distinct.
+ *
+ * Each row is `useSigner({ chainId })` with no requested address, so it shows
+ * `pickWallet` over that chain's namespace list. The header's "N wallets" is
+ * counted from the same rule: counting every connected address said
+ * "2 wallets" over a menu listing one (a wallet of a namespace no enabled
+ * chain uses, BUG-DEV-NEW-01). A list that is not ready shows no address.
+ */
+export function rowWalletAddresses(
+  chainIds: readonly string[],
+  lists: {
+    readonly solana: { readonly ready: boolean; readonly wallets: readonly SelectableWallet[] };
+    readonly evm: { readonly ready: boolean; readonly wallets: readonly SelectableWallet[] };
+  },
+): string[] {
+  const shown = chainIds.map((chainId) => {
+    const list = isEvmChain(chainId) ? lists.evm : lists.solana;
+    return list.ready ? (pickWallet(list.wallets)?.address ?? null) : null;
+  });
+  return [...new Set(shown.filter((address): address is string => address !== null))];
+}
+
+/** `rowWalletAddresses` over Privy's two live lists. */
+export function useRowWalletAddresses(chainIds: readonly string[]): readonly string[] {
+  const solana = useWallets();
+  const evm = useEvmWallets();
+  return useMemo(
+    () => rowWalletAddresses(chainIds, { solana, evm }),
+    [chainIds, solana, evm],
+  );
+}
+
 /*
   A type pin, not a test. If Privy removes or renames `isPrivyWallet`, this
   stops compiling — which is exactly the failure a fixture test with a

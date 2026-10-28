@@ -79,6 +79,7 @@ export function McpConfigTabs({
   creatingKey = false,
   createKeyError,
   agentName,
+  heading = "h3",
 }: {
   token: string | null;
   /** `assay_sk_live_…2fds`, the hint of the key that goes in the config. */
@@ -105,6 +106,8 @@ export function McpConfigTabs({
   createKeyError?: string | null;
   /** Named in the confirm before a key is created. */
   agentName?: string | null;
+  /** The level of the step headings: "h2" where the tabs sit straight under the page's h1 (the Connect page). */
+  heading?: "h2" | "h3";
 }) {
   // A live key is made only after the confirm says so; Cancel makes nothing.
   const [confirmCreate, setConfirmCreate] = React.useState(false);
@@ -201,18 +204,18 @@ export function McpConfigTabs({
             </p>
           </>
         ) : isLocalClient(client) ? (
-          <LocalInstall client={client} file={MCP_CLIENTS.find((c) => c.id === client)?.file ?? "Terminal"} url={url} name={name} refused={nameRefused} secondUrl={secondUrl} onCopy={() => onCopy?.(client)} />
+          <LocalInstall client={client} file={MCP_CLIENTS.find((c) => c.id === client)?.file ?? "Terminal"} url={url} name={name} refused={nameRefused} secondUrl={secondUrl} heading={heading} onCopy={() => onCopy?.(client)} />
         ) : (
-          <HostedConnector client={client} url={url} secondUrl={secondUrl} onCopy={(shown) => onCopy?.(client, shown)} />
+          <HostedConnector client={client} url={url} secondUrl={secondUrl} heading={heading} onCopy={(shown) => onCopy?.(client, shown)} />
         )}
-        {guide && client !== "other" ? <NextSteps client={client} /> : null}
+        {guide && client !== "other" ? <NextSteps client={client} heading={heading} /> : null}
       </div>
     </div>
   );
 }
 
 /** The paid-capable install: a button for Cursor and VS Code (config under it), the command otherwise. */
-function LocalInstall({ client, file, url, name, refused, secondUrl, onCopy }: { client: LocalMcpClient; file: string; url: string; name: string; refused: boolean; secondUrl: boolean; onCopy: () => void }) {
+function LocalInstall({ client, file, url, name, refused, secondUrl, heading: Heading, onCopy }: { client: LocalMcpClient; file: string; url: string; name: string; refused: boolean; secondUrl: boolean; heading: "h2" | "h3"; onCopy: () => void }) {
   const input = { url, name };
   const app = appName(client);
   const link = refused ? null : tryBuild(() => deeplink(client, input));
@@ -231,7 +234,7 @@ function LocalInstall({ client, file, url, name, refused, secondUrl, onCopy }: {
   const intro = button ? null : client === "claude-desktop" ? "Paste into claude_desktop_config.json (Settings › Developer › Edit config), then restart." : "Run this in a terminal:";
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <h3 className="text-label-sm text-01">Add Assay to {app}</h3>
+      <Heading className="text-label-sm text-01">Add Assay to {app}</Heading>
       {button && link ? (
         <div className="flex flex-col items-start gap-1">
           <Button asChild className="min-h-10">
@@ -267,7 +270,7 @@ function LocalInstall({ client, file, url, name, refused, secondUrl, onCopy }: {
 }
 
 /** "What happens next" and the free example prompt (spec 9.2): nothing here asks for money. */
-function NextSteps({ client }: { client: McpClient }) {
+function NextSteps({ client, heading: Heading }: { client: McpClient; heading: "h2" | "h3" }) {
   const app = appName(client);
   const assistant = assistantName(client);
   const restart = restartNote(client);
@@ -276,7 +279,7 @@ function NextSteps({ client }: { client: McpClient }) {
     <div className="flex min-w-0 flex-col gap-2" data-testid="next-steps">
       {hosted ? null : (
         <>
-          <h3 className="text-label-sm text-01">What happens next</h3>
+          <Heading className="text-label-sm text-01">What happens next</Heading>
           <ol className="flex list-decimal flex-col gap-1 pl-5 text-body-13 text-02">
             <li>
               {/* `{" "}`: the dev compiler drops the space after `{assistant}` in a text run with entities. */}
