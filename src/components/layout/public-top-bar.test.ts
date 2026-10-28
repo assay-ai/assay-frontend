@@ -62,6 +62,14 @@ describe("public top bar links", () => {
     expect(publicNavItems({ demo: false }).map((i) => i.id)).not.toContain("demo");
     expect(publicNavItems({ demo: true }).map((i) => i.id)).toContain("demo");
   });
+
+  it("links Analytics even when Demo is not configured", () => {
+    for (const demo of [false, true]) {
+      expect(flattenPublicNav(publicNavItems({ demo }))).toContainEqual(
+        expect.objectContaining({ id: "analytics", label: "Analytics", href: "/analytics" }),
+      );
+    }
+  });
 });
 
 describe("public footer links", () => {

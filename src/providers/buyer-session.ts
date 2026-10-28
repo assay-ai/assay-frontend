@@ -157,6 +157,7 @@ export function needsEmbeddedEvmWallet(
  * so `/toolsets` is matched page by page, never as a prefix.
  */
 const PUBLIC_PAGES = new Set([
+  "/analytics",
   "/how-it-works",
   "/why-list-here",
   "/catalogue",
