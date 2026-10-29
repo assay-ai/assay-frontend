@@ -1,7 +1,7 @@
 import { publicApi } from "./public-api";
 
 /**
- * `GET /public/receipts/:intentId`: what anyone with the link may see of one
+ * `GET /public/explorer/calls/:intentId`: what anyone with the link may see of one
  * call (SPEC-public-receipts 3.1). No session, so it goes through `publicApi`.
  *
  * The response is never handed on as it came. `parsePublicReceipt` builds a
@@ -128,6 +128,6 @@ export function parsePublicReceipt(value: unknown): PublicReceipt {
 }
 
 export async function getPublicReceipt(intentId: string): Promise<PublicReceipt> {
-  const body = await publicApi.get<unknown>(`/public/receipts/${encodeURIComponent(intentId)}`);
+  const body = await publicApi.get<unknown>(`/public/explorer/calls/${encodeURIComponent(intentId)}`);
   return parsePublicReceipt(body);
 }

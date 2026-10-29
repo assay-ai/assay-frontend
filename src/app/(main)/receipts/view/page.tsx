@@ -533,11 +533,11 @@ function CollectionHeadline({
 }
 
 /**
- * The public address of this receipt (`/r/view?id=`), to share. Anyone with it
+ * The public address of this receipt (`/explorer/call/<id>`), to share. Anyone with it
  * sees only the price, the tool and the check results (SPEC-public-receipts).
  */
 function PublicLinkRow({ intentId }: { intentId: string }) {
-  const path = routes.publicReceipt(intentId);
+  const path = routes.publicCall(intentId);
   const url = typeof globalThis.location === "undefined" ? path : `${globalThis.location.origin}${path}`;
   return (
     <section

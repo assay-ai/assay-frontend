@@ -103,7 +103,7 @@ describe("getPublicReceipt", () => {
   it("reads the public route and parses the answer", async () => {
     get.mockResolvedValue(wire({ secret: "s" }));
     const receipt = await getPublicReceipt("abc/def");
-    expect(get).toHaveBeenCalledWith("/public/receipts/abc%2Fdef");
+    expect(get).toHaveBeenCalledWith("/public/explorer/calls/abc%2Fdef");
     expect("secret" in receipt).toBe(false);
   });
 });

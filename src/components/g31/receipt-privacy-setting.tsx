@@ -12,7 +12,7 @@ import { toast } from "@/utils/toast";
 
 const KEY = ["receipt-privacy"] as const;
 
-/** Settings › Receipts: whether a receipt's public link (`/r/view?id=`) opens for anyone. */
+/** Settings › Receipts: whether a receipt's public link (`/explorer/call/<id>`) opens for anyone. */
 export function ReceiptPrivacySetting() {
   const queryClient = useQueryClient();
   const query = useQuery<ReceiptPrivacy, ApiError>({
