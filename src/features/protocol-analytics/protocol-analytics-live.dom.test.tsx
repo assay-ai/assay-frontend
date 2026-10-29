@@ -87,6 +87,18 @@ afterEach(() => {
 });
 
 describe("protocol analytics live data", () => {
+  it("explains withheld table groups while retaining the protocol totals", async () => {
+    read.mockResolvedValue({ ...response(), withheldForPrivacy: true });
+    show();
+    await screen.findAllByText("0.10 USDG");
+    for (const title of ["Top tools", "Latest payments"]) {
+      const table = screen.getByRole("table", { name: title });
+      expect(within(table).getByText(/No groups are eligible for public display/).textContent)
+        .toContain("at least five buyer organizations");
+      expect(within(table).queryByText("No data available.")).toBeNull();
+    }
+  });
+
   it("renders ledger amounts and real zero balances", async () => {
     show();
     await screen.findAllByText("0.10 USDG");
