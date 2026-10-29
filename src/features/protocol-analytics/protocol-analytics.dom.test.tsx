@@ -7,7 +7,16 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("./use-protocol-analytics", () => ({
+  useProtocolAnalytics: () => ({
+    data: undefined,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+}));
 
 import { ProtocolAnalytics } from "./protocol-analytics";
 
@@ -79,7 +88,11 @@ describe("protocol analytics empty state", () => {
       expect(
         screen.getByRole("radio", { name: range }).getAttribute("aria-checked"),
       ).toBe("true");
-      expect(screen.getByText(`${description} · UTC`)).toBeDefined();
+      expect(
+        screen.getByText(
+          `${description} · UTC${range === "All" ? " · Charts: latest 90 days" : ""}`,
+        ),
+      ).toBeDefined();
       for (const metric of ["Revenue", "Volume", "Paid calls"]) {
         fireEvent.click(screen.getByRole("radio", { name: metric }));
         expect(
