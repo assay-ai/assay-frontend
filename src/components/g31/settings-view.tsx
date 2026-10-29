@@ -11,12 +11,13 @@ import { Panel, PanelBody, PanelHeader, PanelTitle, PanelTitles } from "@/compon
 import { demoEnabled } from "@/libs/demo/demo-api";
 
 import { KeyValueRow, PageHeader } from "./chrome";
+import { ReceiptPrivacySetting } from "./receipt-privacy-setting";
 
 /**
  * Account › Settings: only what is real. Email, how you sign in and your
- * wallets come from Privy (the sign-in provider); nothing here is editable on
- * Assay yet, so there is no Save button and there are no switches that cannot
- * save. Close account sits at the bottom.
+ * wallets come from Privy (the sign-in provider) and are not editable on
+ * Assay, so there is no Save button. The one switch, whether receipts open
+ * from a public link, saves on change. Close account sits at the bottom.
  */
 
 const LOGIN_METHOD: Record<string, string> = {
@@ -95,6 +96,8 @@ export function SettingsView() {
           </PanelBody>
         </Panel>
       )}
+
+      {demo ? null : <ReceiptPrivacySetting />}
 
       <Link
         href="/settings/close"
