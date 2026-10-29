@@ -165,11 +165,13 @@ function DataTable({
     </Panel>
   );
 }
-function NoRows({ columns }: { columns: number }) {
+function NoRows({ columns, withheld = false }: { columns: number; withheld?: boolean }) {
   return (
     <tr>
       <td colSpan={columns} className="px-5 py-12 text-center text-03">
-        No data available.
+        {withheld
+          ? "No groups are eligible for public display in this period. Public tool groups require at least five buyer organizations; private or unapproved tools are excluded. Protocol totals still include this activity."
+          : "No data available."}
       </td>
     </tr>
   );
@@ -343,6 +345,7 @@ export function ProtocolAnalytics() {
           <div className="p-5">
             <AnalyticsChart
               label={`${metric} per day`}
+              unit={metricField === "paidCalls" ? "calls" : asset?.symbol}
               values={daily.map((day) => ({
                 day: day.day,
                 value:
@@ -385,6 +388,7 @@ export function ProtocolAnalytics() {
             </p>
             <AnalyticsChart
               label="Passed checks per day"
+              unit="%"
               values={daily.map((day) => ({
                 day: day.day,
                 value: day.passRate === null ? null : day.passRate * 100,
@@ -402,6 +406,7 @@ export function ProtocolAnalytics() {
             <AnalyticsChart
               compact
               label="Paying agents per day"
+              unit="agents"
               values={daily.map((day) => ({
                 day: day.day,
                 value: day.payingAgents,
@@ -415,6 +420,7 @@ export function ProtocolAnalytics() {
             <AnalyticsChart
               compact
               label="Agents since launch"
+              unit="agents"
               values={daily.map((day) => ({
                 day: day.day,
                 value: day.agentsSinceLaunch,
@@ -428,6 +434,7 @@ export function ProtocolAnalytics() {
             <AnalyticsChart
               compact
               label="Tools since launch"
+              unit="tools"
               values={daily.map((day) => ({
                 day: day.day,
                 value: day.toolsSinceLaunch,
@@ -485,7 +492,7 @@ export function ProtocolAnalytics() {
               </tr>
             ))
           ) : (
-            <NoRows columns={6} />
+            <NoRows columns={6} withheld={data?.withheldForPrivacy} />
           )}
         </DataTable>
       </Section>
@@ -520,7 +527,7 @@ export function ProtocolAnalytics() {
               </tr>
             ))
           ) : (
-            <NoRows columns={6} />
+            <NoRows columns={6} withheld={data?.withheldForPrivacy} />
           )}
         </DataTable>
         {data?.withheldForPrivacy ? (
