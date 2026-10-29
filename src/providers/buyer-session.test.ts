@@ -273,6 +273,7 @@ describe("isPublicPath", () => {
       "/reserves",
       "/toolsets/view",
       "/toolsets/handle",
+      "/r/view",
       "/how-it-works/",
     ]) {
       expect(isPublicPath(path), path).toBe(true);
