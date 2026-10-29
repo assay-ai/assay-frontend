@@ -154,7 +154,7 @@ function useDelegationContext(account: string | undefined) {
       : "";
     if (!chainId || !contract) {
       throw new Error(
-        "The escrow could not be read, so there is nothing to check a signature request against.",
+        "Your escrow has no funds yet. Add funds first: your first deposit opens your escrow, then you can approve paid calls.",
       );
     }
     return { chainId: chainId.split(":")[1], verifyingContract: contract };
