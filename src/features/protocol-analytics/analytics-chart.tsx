@@ -26,13 +26,14 @@ export function AnalyticsChart({
   const plotWidth = width - 24;
   const plotHeight = 170;
   const max = Decimal.max(
-    1,
+    0,
     ...values.map((row) => new Decimal(row.value ?? 0)),
   );
+  const scaleMax = max.isZero() ? new Decimal(1) : max;
   const x = (index: number) =>
     left + ((index + 0.5) * plotWidth) / values.length;
   const y = (value: string | number) =>
-    12 + plotHeight * (1 - new Decimal(value).div(max).toNumber());
+    12 + plotHeight * (1 - new Decimal(value).div(scaleMax).toNumber());
   return (
     <svg
       role="img"
