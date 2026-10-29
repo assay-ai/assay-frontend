@@ -85,3 +85,5 @@ export * from "./demo.service";
 // baked into the bundle; every money screen's chain list starts here.
 export * from "./chains.service";
 export * from "./display-asset";
+
+export * from "./protocol-analytics.service";
