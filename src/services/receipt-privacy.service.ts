@@ -1,6 +1,6 @@
 import { api } from "./api";
 
-/** Whether this account's receipts open for anyone with the link (`/r/view?id=`). Signed-in only. */
+/** Whether this account's receipts open for anyone with the link (`/explorer/call/<id>`). Signed-in only. */
 export interface ReceiptPrivacy {
   receiptsPublic: boolean;
 }

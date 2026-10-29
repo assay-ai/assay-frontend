@@ -165,9 +165,9 @@ const PUBLIC_PAGES = new Set([
   "/reserves",
   "/toolsets/view",
   "/toolsets/handle",
-  "/r/view",
+  "/explorer/call",
 ]);
-const PUBLIC_PREFIXES = ["/catalogue/"];
+const PUBLIC_PREFIXES = ["/catalogue/", "/explorer/call/"];
 
 /**
  * Public shells now mounted (`components/layout/public-shell.tsx`). The 404

@@ -6,12 +6,12 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/libs/ApiClient";
 
-/* `/r/view?id=…`: the public receipt, by status, and only its own fields. */
+/* `/explorer/call/<id>`: one call on the public explorer, by status, and only its own fields. */
 const ID = "6f1c2a7e-0000-4000-8000-000000000001";
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: () => undefined, replace: () => undefined, back: () => undefined, prefetch: () => undefined }),
-  usePathname: () => "/r/view",
-  useSearchParams: () => new URLSearchParams({ id: ID }),
+  usePathname: () => `/explorer/call/${ID}`,
+  useSearchParams: () => new URLSearchParams(),
 }));
 const get = vi.fn();
 vi.mock("@/services/public-api", () => ({
@@ -67,7 +67,7 @@ describe("public receipt page", () => {
     get.mockResolvedValue(wire({ status }));
     mount();
     expect((await screen.findByRole("heading", { level: 2, name: headline })).textContent).toBe(headline);
-    expect(get).toHaveBeenCalledWith(`/public/receipts/${ID}`);
+    expect(get).toHaveBeenCalledWith(`/public/explorer/calls/${ID}`);
     expect(screen.getAllByTestId("public-stage")).toHaveLength(4);
   });
 
