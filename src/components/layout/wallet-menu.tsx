@@ -50,15 +50,12 @@ import { cn } from "@/utils";
  * public devnet, which rate-limits — `libs/chains/solana/chains.ts` says in as many
  * words not to build a poll on it. A menu that opens on every page is a poll.
  *
- * **Five signer states, not two.** `hydrating` is not "no wallet": telling a
- * user who has a wallet that they have none is a state with no button that
- * fixes it. See `useSigner`'s module doc — every row renders each one
- * distinctly, and per chain.
+ * **Wallet hydration is not an empty wallet list.** Each chain group waits
+ * for its namespace's wallet list before showing the absent state.
  *
- * **One wallet row per chain, never one "your wallet".** The rows and
- * the balance pairs live in `wallet-menu-rows.tsx`: `useSigner` is a hook, so
- * "one signer per chain" has to be one component per chain, and the extraction
- * is also what lets a test render them without Radix or a `PrivyProvider`.
+ * **All connected wallets per chain.** The display lists every wallet in
+ * that chain's namespace, independently of the default transaction signer.
+ * Each address has its own label, explorer link and copy button.
  *
  * **No hardcoded explorer.** `EXPLORER_CLUSTER` and a template literal pinned
  * to `explorer.solana.com/?cluster=devnet` are gone; each row builds its link
@@ -94,8 +91,8 @@ export function WalletMenu({ className }: { className?: string }) {
   */
   const chainsResult = useChains();
   /*
-    The identity seed, not a signer. The rows below each hold their own
-    `useSigner({ chainId })`.
+    The identity seed, not a signer. The rows below display all connected
+    wallets in each chain namespace.
   */
   const addresses = useConnectedAddresses();
   // The label's count: the distinct addresses the wallet rows below show, not every connected one.

@@ -15,7 +15,7 @@ import type { Chain } from "@/interfaces/chain";
   identical guard, and `WalletChainRows` is new rendering with no browser
   route: the menu opens only behind an authenticated Privy session.
 
-  The Privy modules are replaced with recorders so the REAL `useSigner` runs —
+  The Privy modules are replaced with recorders so the real wallet-list hooks run —
   the same shape `useSigner.test.ts` uses. Rendering a presentational shim
   instead would test a component the menu does not have.
 */
@@ -126,6 +126,54 @@ describe("WalletChainRows", () => {
     expect(solanaRow).not.toContain("0x83ab…2913");
     expect(evmRow).toContain("0x83ab…2913");
     expect(evmRow).not.toContain("7xKX…gAsU");
+  });
+
+  it("shows MetaMask alongside Privy with a separate label, explorer and copy button", () => {
+    const external = "0x1111111111111111111111111111111111111111";
+    privyEvm.wallets = [
+      { address: EVM_ADDRESS, walletClientType: "privy" },
+      { address: external, walletClientType: "metamask" },
+    ];
+    const html = renderToStaticMarkup(<WalletChainRows chains={[CHAINS[1]]} />);
+    expect(html).toContain("Privy wallet");
+    expect(html).toContain("MetaMask");
+    expect(html).toContain(`https://testnet-explorer.example/address/${external}`);
+    expect(html).toContain(`title="${EVM_ADDRESS}"`);
+    expect(html).toContain(`title="${external}"`);
+    expect(html.match(/<button/g)).toHaveLength(2);
+    expect(html).toContain("Copy the MetaMask Robinhood Chain testnet address");
+  });
+
+  it("shows an external wallet when there is no embedded wallet", () => {
+    privyEvm.wallets = [{ address: EVM_ADDRESS, walletClientType: "metamask" }];
+    const html = renderToStaticMarkup(<WalletChainRows chains={[CHAINS[1]]} />);
+    expect(html).toContain("MetaMask");
+    expect(html).toContain(`title="${EVM_ADDRESS}"`);
+    expect(html).not.toContain("Privy wallet");
+    expect(html).not.toContain("No wallet connected");
+  });
+
+  it("shows embedded and external Solana wallets only in the Solana group", () => {
+    const external = "ExternalSolanaWallet111111111111111111111111";
+    privySolana.wallets = [
+      { address: SOLANA_ADDRESS, standardWallet: { isPrivyWallet: true } },
+      { address: external, standardWallet: {} },
+    ];
+    const html = renderToStaticMarkup(<WalletChainRows chains={CHAINS} />);
+    const [, solanaRow, evmRow] = html.split('data-testid="wallet-row"');
+    expect(solanaRow).toContain(`title="${SOLANA_ADDRESS}"`);
+    expect(solanaRow).toContain(`title="${external}"`);
+    expect(solanaRow).toContain("External wallet");
+    expect(evmRow).not.toContain(external);
+  });
+
+  it("does not duplicate an EVM wallet connected through multiple connectors", () => {
+    privyEvm.wallets = [
+      { address: EVM_ADDRESS, walletClientType: "metamask" },
+      { address: EVM_ADDRESS.toUpperCase(), walletClientType: "metamask" },
+    ];
+    const html = renderToStaticMarkup(<WalletChainRows chains={[CHAINS[1]]} />);
+    expect(html.match(/<button/g)).toHaveLength(1);
   });
 
   it("shows a per-chain absent state without hiding the chain", () => {
