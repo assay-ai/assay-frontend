@@ -14,6 +14,7 @@ import { PublicShell } from "@/components/layout/public-shell";
  * | Live demo (when configured)    | `/demo`                             |
  * | For providers (+ calculator)   | `/why-list-here`                    |
  * | Reserves                       | `/reserves`                         |
+ * | Protocol analytics             | `/analytics`                        |
  *
  * None of these needs a session, and a 401 never sends them to sign-in
  * (`isPublicPath` in `providers/buyer-session.ts` lists them).
