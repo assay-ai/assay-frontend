@@ -1,0 +1,3 @@
+# Cloudflare Pages rewrites (status 200 keeps the address in the browser).
+# The public explorer's call page is one static page; the id is in the path.
+/explorer/call/*  /explorer/call  200

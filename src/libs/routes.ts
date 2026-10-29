@@ -21,7 +21,7 @@ function under(base: string, sub?: string): string {
 export const routes = {
   receipt: (intentId: string) => withQuery("/receipts/view", { id: intentId }),
   /** The public receipt of one call: price, tool and check results, for anyone with the link. */
-  publicReceipt: (intentId: string) => withQuery("/r/view", { id: intentId }),
+  publicCall: (intentId: string) => `/explorer/call/${encodeURIComponent(intentId)}`,
   /** A paid call opened from a link (a notification): its outcome and receipt. Takes the call id. */
   payment: (callId: string) => withQuery("/payments/view", { id: callId }),
   /** Agents & keys, opened at one agent. */

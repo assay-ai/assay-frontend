@@ -9,7 +9,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Panel, PanelBody, PanelDescription, PanelHeader, PanelTitle, PanelTitles } from "@/components/ui/panel";
 import { Amount } from "@/features/g30/receipt-parts";
-import { useSearchParam } from "@/hooks/useSearchParam";
+import { usePublicCallId } from "@/hooks/usePublicCallId";
 import { ApiError } from "@/libs/ApiClient";
 import { isRecordMissing } from "@/libs/record-missing";
 import { routes } from "@/libs/routes";
@@ -25,7 +25,8 @@ import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
 /**
- * One call's public receipt — route `/r/view?id=<intentId>`.
+ * One call on the public explorer — `/explorer/call/<intentId>` (rewritten to
+ * this page by `public/_redirects`; `?id=` works too, for `next dev`).
  *
  * Shows only the fields of `PublicReceipt`, each one written out below: what
  * the tool listed, what was charged, why not (a fixed sentence) and the four
@@ -173,7 +174,7 @@ function ReceiptView({ receipt }: { receipt: PublicReceipt }) {
 }
 
 function PublicReceiptContent() {
-  const intentId = useSearchParam("id");
+  const intentId = usePublicCallId();
   const query = useQuery<PublicReceipt, Error>({
     queryKey: ["public-receipt", intentId],
     queryFn: () => getPublicReceipt(intentId),
