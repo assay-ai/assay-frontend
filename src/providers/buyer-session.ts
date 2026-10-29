@@ -165,6 +165,7 @@ const PUBLIC_PAGES = new Set([
   "/reserves",
   "/toolsets/view",
   "/toolsets/handle",
+  "/r/view",
 ]);
 const PUBLIC_PREFIXES = ["/catalogue/"];
 

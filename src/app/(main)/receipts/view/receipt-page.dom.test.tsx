@@ -199,6 +199,15 @@ describe("the receipt page tells one story", () => {
 });
 
 /* BUG-PROD-NF-01/02: an id the API refuses as malformed is a call that does not exist, under one h1. */
+describe("the public link row", () => {
+  it("offers the /r/view link with what it shows", () => {
+    const words = render(uncheckedReceipt());
+    expect(words).toContain("Public link");
+    expect(words).toContain("/r/view?id=e17d0000-0000-0000-0000-000000000007");
+    expect(words).toContain("Anyone with the link sees only the price, the tool and the check results.");
+  });
+});
+
 describe("a receipt that cannot be found", () => {
   function renderError(id: string, error: ApiError): string {
     intentId = id;

@@ -422,6 +422,8 @@ function ReceiptPageContent() {
         ))}
       </dl>
 
+      <PublicLinkRow intentId={receipt.intentId} />
+
       {/* A charged call: "Report a bad result", or the report's status once filed. */}
       {receipt.status === "SETTLED" ? (
         <ReceiptReport
@@ -526,6 +528,27 @@ function CollectionHeadline({
           <Amount label="Not charged" value={notCharged ?? listed} teal align="start" className="min-w-0 flex-1 tablet:flex-none tablet:items-end" />
         )}
       </div>
+    </section>
+  );
+}
+
+/**
+ * The public address of this receipt (`/r/view?id=`), to share. Anyone with it
+ * sees only the price, the tool and the check results (SPEC-public-receipts).
+ */
+function PublicLinkRow({ intentId }: { intentId: string }) {
+  const path = routes.publicReceipt(intentId);
+  const url = typeof globalThis.location === "undefined" ? path : `${globalThis.location.origin}${path}`;
+  return (
+    <section
+      data-testid="receipt-public-link"
+      className="flex w-full flex-col gap-1.5 rounded-xl border border-01 bg-01 px-5 py-4 tablet:flex-row tablet:items-center tablet:gap-4"
+    >
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <h2 className="text-label-13 text-02">Public link</h2>
+        <p className="text-body-xs text-03">Anyone with the link sees only the price, the tool and the check results.</p>
+      </div>
+      <CopyChip value={url} label="public link" display={url} className="max-w-full self-start truncate tablet:self-center" />
     </section>
   );
 }
