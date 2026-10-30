@@ -733,7 +733,7 @@ function describeLong(
     }
 
     case "buyer_debt.bulk_void": {
-      const { count, total, ids } = debtVoidParts(payload);
+      const { count, total } = debtVoidParts(payload);
       const asset = text(payload.assetId);
       return {
         sentence: `Void ${debtsText(count)}${total ? ` worth ${total}` : ""}: the buyers are not charged, the providers are not paid for those calls, and the holds are released. It can't be undone.`,
@@ -742,9 +742,7 @@ function describeLong(
           { label: "Debts", value: String(count) },
           ...(total ? [{ label: "Total", value: total }] : []),
           ...(asset ? [{ label: "Asset", value: asset }] : []),
-          ...(ids.length > 0
-            ? [{ label: "Intent ids", value: ids.length > 6 ? `${ids.slice(0, 6).join(", ")} and ${ids.length - 6} more` : ids.join(", ") }]
-            : []),
+          // Every id, and who they belong to, is drawn under these fields (`DebtVoidDetails`).
           ...commonFields(body),
         ],
       };

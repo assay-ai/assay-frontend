@@ -20,6 +20,7 @@ import {
   assetShort,
   BUYER_DEBT_VOID_ACTION,
   BUYER_DEBT_VOID_CODE,
+  buyerCausedCount,
   countText,
   DEBT_PAGE_SIZE,
   debtAmountText,
@@ -30,11 +31,14 @@ import {
   EMPTY_SELECTION,
   filterErrors,
   matchingAsset,
+  matchingCountFor,
   mayReadBuyerDebts,
   mayVoidBuyerDebts,
   pageSelectState,
   reasonError,
+  selectAllCapNote,
   selectBlockedBecause,
+  selectedText,
   selectionMoney,
   toggleRows,
   totalText,
@@ -46,6 +50,7 @@ import {
   voidRequestError,
 } from "@/features/operator/buyer-debts";
 import { chainDisplayName } from "@/features/operator/call-summary";
+import { BuyerCausedWarning, DebtBreakdown } from "@/features/operator/debt-breakdown";
 import { eligibleApprovers } from "@/features/operator/inbox";
 import { listLoadError } from "@/features/operator/operator-errors";
 import { OperatorCasesTabs } from "@/features/operator/provider-tool-ui";
@@ -56,7 +61,6 @@ import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "@/features/operat
 import { approvalHref, approverPhrase, sentForApproval } from "@/features/operator/two-person";
 import { useOperatorDirectory, useProviderNames } from "@/features/operator/use-operator-lookups";
 import { WhatHappens } from "@/features/operator/what-happens";
-import { WhyNot } from "@/features/operator/why-not";
 import { ApiError } from "@/libs/ApiClient";
 import { listOperatorBuyerDebts, requestBuyerDebtVoid, type OperatorBuyerDebt } from "@/services/operator-buyer-debts.service";
 import { cn } from "@/utils";
@@ -72,8 +76,8 @@ import { formatMoney } from "@/utils/money";
  * (`M-1`); a second one approves it in Approvals. A void releases the hold and
  * the buyer is not charged, the provider is NOT paid, and it cannot be undone.
  *
- * Readable by Treasury, Lead adjudicators, Adjudicators and Support (SRE). One
- * request covers one asset and at most 500 debts. "Suggested platform cause"
+ * Readable by Treasury and Lead adjudicators only, the roles that may request
+ * and approve a void. One request covers one asset and at most 100 debts. "Suggested platform cause"
  * is the server's label from the recorded refusal; it decides nothing.
  */
 
@@ -127,7 +131,7 @@ function BuyerDebtsScreen() {
     setInvalidIds(new Set());
   };
 
-  // "Select all matching": every debt the filters match, up to 500, when they are all of one asset.
+  // "Select all matching": every debt the filters match, up to 100, when they are all of one asset.
   const single = totals ? matchingAsset(totals.byAsset) : null;
   const selectAllMatching = async () => {
     setSelectingAll(true);
@@ -156,8 +160,8 @@ function BuyerDebtsScreen() {
         <OperatorCasesTabs />
         <PageState
           kind="blocked"
-          title="Buyer debts are for Treasury, adjudicators and Support"
-          description="This list shows what buyers owe for calls whose payment lapsed. Ask an operator with one of those roles."
+          title="Buyer debts are for Treasury and Lead adjudicators"
+          description="This list shows what buyers owe for calls whose payment lapsed, with their paying wallets. Only the roles that may void a debt can read it."
         />
       </>
     );
@@ -167,6 +171,10 @@ function BuyerDebtsScreen() {
   const pageState = pageSelectState(selection, rows);
   const mixedOnPage = canVoid && rows.some((row) => selectBlockedBecause(selection, row) !== null && !selection.ids.includes(row.intentId));
   const approvers = directory.isPending ? undefined : eligibleApprovers(BUYER_DEBT_VOID_CODE, directory.operators, me.id);
+  // The debts of the selection's asset the filters match: the "M" of "N of M selected".
+  const matching = matchingCountFor(totals?.byAsset, selection.assetId, selection.decimals);
+  const selectedRows = selection.ids.map((id) => known.current.get(id)).filter((row): row is Row => Boolean(row));
+  const capped = selection.ids.length >= VOID_MAX_IDS && matching !== null && matching > VOID_MAX_IDS;
 
   return (
     <>
@@ -180,11 +188,9 @@ function BuyerDebtsScreen() {
 
       {canVoid ? (
         <p className="text-body-13 text-02">
-          If the platform caused a lapse (for example the redeemer ran out of gas), select those debts and request a void. A second operator approves it.
+          If the platform caused a lapse (for example the redeemer ran out of gas), select those debts and request a void, at most {VOID_MAX_IDS} at a time. A second operator approves it.
         </p>
-      ) : (
-        <WhyNot action="voidDebts" me={me} ask="Can you look at these buyer debts on Assay? Some may need a void, and my role cannot ask for one." />
-      )}
+      ) : null}
 
       {result ? <div className="w-full">{result}</div> : null}
 
@@ -226,7 +232,7 @@ function BuyerDebtsScreen() {
                 Select all {Math.min(single.count, VOID_MAX_IDS).toLocaleString("en-US")} matching
                 {single.count > VOID_MAX_IDS ? ` (of ${single.count.toLocaleString("en-US")})` : ""}
               </Button>
-              {single.count > VOID_MAX_IDS ? <span className="text-03">One void covers at most {VOID_MAX_IDS}; the first {VOID_MAX_IDS} in this order are picked.</span> : null}
+              {selectAllCapNote(single.count) ? <span className="text-03">{selectAllCapNote(single.count)}</span> : null}
               {selectAllError ? (
                 <span role="alert" className="text-danger-600">
                   {selectAllError}
@@ -264,7 +270,9 @@ function BuyerDebtsScreen() {
           className="sticky bottom-0 z-10 flex w-full flex-wrap items-center justify-between gap-2 rounded-xl border border-02 bg-01 px-4 py-3 shadow-sm"
         >
           <p className="text-label-13 text-01" aria-live="polite">
-            {countText(selection.ids.length)} selected{total ? ` · ${formatMoney(total, { decimals: 4 })}` : ""}
+            {selectedText(selection.ids.length, matching)}
+            {capped ? `; at most ${VOID_MAX_IDS} per request` : ""}
+            {total ? ` · ${formatMoney(total, { decimals: 4 })}` : ""}
             {selection.assetId ? <span className="text-body-xs text-03"> · {assetShort(selection.assetId)}</span> : null}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -283,6 +291,9 @@ function BuyerDebtsScreen() {
           open={sheetOpen}
           onOpenChange={setSheetOpen}
           selection={selection}
+          rows={selectedRows}
+          matching={matching}
+          providerName={(id) => (id ? (providers.lookup(id) ?? `Provider ${shortRef(id)}`) : "Unknown provider")}
           invalidIds={invalidIds}
           onInvalid={setInvalidIds}
           onDropInvalid={dropInvalid}
@@ -579,6 +590,9 @@ function RequestVoidSheet({
   open,
   onOpenChange,
   selection,
+  rows,
+  matching,
+  providerName,
   invalidIds,
   onInvalid,
   onDropInvalid,
@@ -589,6 +603,11 @@ function RequestVoidSheet({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   selection: DebtSelection;
+  /** The selected debts, as listed. */
+  rows: readonly Row[];
+  /** How many debts of this asset the filters match; null when unknown. */
+  matching: number | null;
+  providerName: (id: string | null) => string;
   invalidIds: ReadonlySet<string>;
   onInvalid: (ids: ReadonlySet<string>) => void;
   onDropInvalid: () => void;
@@ -606,6 +625,8 @@ function RequestVoidSheet({
   const totalLabel = total ? formatMoney(total, { decimals: 4 }) : "";
   const debtsLabel = countText(selection.ids.length).replace(/debts?$/, "buyer $&");
   const what = `Voiding ${debtsLabel} (${totalLabel})`;
+  // Debts whose recorded cause does not suggest the platform: a warning, not a block.
+  const buyerCaused = buyerCausedCount(rows);
 
   const request = useMutation({
     mutationFn: () =>
@@ -663,12 +684,21 @@ function RequestVoidSheet({
         <div className="flex w-full flex-col gap-4 px-[18px] pt-3">
           <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1 text-body-13">
             <dt className="text-02">Debts</dt>
-            <dd className="tabular-nums text-01">{selection.ids.length}</dd>
+            <dd className="tabular-nums text-01">
+              {matching !== null && matching > selection.ids.length
+                ? `${selection.ids.length.toLocaleString("en-US")} of ${matching.toLocaleString("en-US")} matching`
+                : selection.ids.length}
+              {selection.ids.length >= VOID_MAX_IDS ? <span className="text-03"> (at most {VOID_MAX_IDS} per request)</span> : null}
+            </dd>
             <dt className="text-02">Total</dt>
             <dd className="tabular-nums text-01">{totalLabel}</dd>
             <dt className="text-02">Asset</dt>
             <dd className="font-mono text-mono-12 text-01 [overflow-wrap:anywhere]">{selection.assetId}</dd>
           </dl>
+          {buyerCaused > 0 ? <BuyerCausedWarning count={buyerCaused} of={rows.length} /> : null}
+          {selection.assetId !== null && selection.decimals !== null && rows.length > 0 ? (
+            <DebtBreakdown rows={rows} assetId={selection.assetId} decimals={selection.decimals} providerName={providerName} />
+          ) : null}
           <WhatHappens
             lines={[
               { icon: Undo2, text: VOID_CONSEQUENCES.buyer },

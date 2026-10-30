@@ -110,16 +110,10 @@ describe("buyer debts: the list", () => {
     await waitFor(() => expect(debts.listOperatorBuyerDebts).toHaveBeenLastCalledWith(expect.objectContaining({ suggestedOnly: true })));
   });
 
-  it("shows no checkboxes and says who can void to a role that only reads", async () => {
-    renderPage({ ...TRE, roles: ["ADJ"] });
-    await screen.findByTestId("debt-table");
-    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
-    expect(screen.getByText(/Voiding buyer debts needs Lead adjudicator or Treasury/)).toBeTruthy();
-  });
-
-  it("is refused to a role that cannot read it, without asking the API", () => {
-    renderPage({ ...TRE, roles: ["SUP"] });
-    expect(screen.getByText("Buyer debts are for Treasury, adjudicators and Support")).toBeTruthy();
+  it.each([["ADJ"], ["SRE"], ["SUP"]] as const)("is refused to %s, without asking the API", (role) => {
+    renderPage({ ...TRE, roles: [role] });
+    expect(screen.getByText("Buyer debts are for Treasury and Lead adjudicators")).toBeTruthy();
+    expect(screen.queryByTestId("debt-table")).toBeNull();
     expect(debts.listOperatorBuyerDebts).not.toHaveBeenCalled();
   });
 });
@@ -131,12 +125,47 @@ describe("buyer debts: one asset per void", () => {
     fireEvent.click(box(/Select the \$0\.10 debt/));
     expect(box(/Select the \$0\.05 debt/).disabled).toBe(true);
     expect(box(/Select the \$0\.25 debt/).disabled).toBe(false);
-    expect(screen.getByRole("region", { name: "Selection" }).textContent).toContain("1 debt selected · $0.10");
+    expect(screen.getByRole("region", { name: "Selection" }).textContent).toContain("1 of 2 debts selected · $0.10");
 
     // The header box takes the page's rows of that asset only.
     fireEvent.click(box(/Select all on this page/));
     expect(screen.getByRole("region", { name: "Selection" }).textContent).toContain("2 debts selected · $0.35");
+    expect(screen.getByRole("region", { name: "Selection" }).textContent).not.toContain(" of ");
     expect(box(/Select the \$0\.05 debt/).checked).toBe(false);
+  });
+});
+
+describe("buyer debts: at most 100 per request", () => {
+  it("select all matching stops at 100 and says so, as N of M", async () => {
+    const many = Array.from({ length: 250 }, (_, i) => debt(`bbbbbbbb-0000-4000-8000-${String(i).padStart(12, "0")}`, "10000", { suggestedPlatformCause: true }));
+    const totals = [{ assetId: USDG, decimals: 6, count: 250, amount: "2500000" }];
+    debts.listOperatorBuyerDebts.mockImplementation(async (query: { cursor?: string }) => {
+      const start = query.cursor ? Number(query.cursor) : 0;
+      const items = many.slice(start, start + 100);
+      const next = start + 100 < many.length ? String(start + 100) : null;
+      return { items, pageInfo: { nextCursor: next, hasMore: next !== null }, totals: { count: 250, byAsset: totals } };
+    });
+    operator.listOperators.mockResolvedValue({ items: [{ ...TRE, lastSeenAt: null }, ADJL], pageInfo: { nextCursor: null, hasMore: false } });
+    operator.listApprovals.mockResolvedValue({ items: [], pageInfo: { nextCursor: null, hasMore: false } });
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <OperatorSessionContext.Provider value={TRE}>
+          <BuyerDebtsPage />
+        </OperatorSessionContext.Provider>
+      </QueryClientProvider>,
+    );
+    await screen.findByTestId("debt-table");
+    expect(screen.getByText(/^100 of 250 selected; at most 100 per request/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /Select all 100 matching \(of 250\)/ }));
+    const bar = await screen.findByRole("region", { name: "Selection" });
+    await waitFor(() => expect(bar.textContent).toContain("100 of 250 debts selected; at most 100 per request · $1.00"));
+    expect(debts.listOperatorBuyerDebts).toHaveBeenCalledTimes(2); // the list's page, then select-all stops after one page
+    expect(box(/Select all on this page/).checked).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Request void" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/100 of 250 matching/)).toBeTruthy();
+    expect(within(dialog).getByText(/at most 100 per request/)).toBeTruthy();
+    expect(within(dialog).queryByTestId("buyer-caused-warning")).toBeNull();
   });
 });
 
@@ -159,6 +188,16 @@ describe("buyer debts: requesting a void", () => {
     expect(within(dialog).getByText("Void 2 buyer debts ($0.35)?")).toBeTruthy();
     expect(within(dialog).getByText("The provider is not paid for these calls")).toBeTruthy();
     expect(within(dialog).getByText("It cannot be undone")).toBeTruthy();
+    // Who it is about, per buyer and per provider, not a list of ids.
+    const breakdown = within(dialog).getByTestId("debt-breakdown");
+    expect(within(breakdown).getByRole("region", { name: "Per buyer" }).textContent).toContain("Buyer");
+    expect(within(breakdown).getByRole("region", { name: "Per buyer" }).textContent).toContain("2 debts · $0.35");
+    expect(within(breakdown).getByRole("region", { name: "Per provider" }).textContent).toContain("Unknown provider2 debts · $0.35");
+    // D2 lapsed on a cause that does not suggest the platform: a warning, and sending stays allowed.
+    expect(within(dialog).getByTestId("buyer-caused-warning").textContent).toContain(
+      "Some selected debts look caused by the buyer, not the platform. Voiding them means the provider is never paid.",
+    );
+    expect(within(dialog).getByTestId("buyer-caused-warning").textContent).toContain("1 of 2 debts");
 
     fireEvent.change(within(dialog).getByRole("textbox", { name: /Why the platform caused/ }), { target: { value: "gas" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Send for approval" }));

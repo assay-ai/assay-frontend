@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
-import type { BuyerDebtVoidResult } from "@/services/operator-buyer-debts.service";
+import type { BuyerDebtVoidRecord } from "@/services/operator-buyer-debts.service";
 import { approveApproval, rejectApproval } from "@/services/operator.service";
 import { cn } from "@/utils";
 
@@ -32,11 +32,13 @@ import {
   type ApprovalContext,
   type ApprovalOutcomeLine,
 } from "./approvals";
-import { debtVoidResultOf } from "./buyer-debts";
+import { BUYER_DEBT_VOID_ACTION, debtVoidResultOf, debtVoidShort, mayReadBuyerDebts } from "./buyer-debts";
 import { ContractCallAction } from "./contract-call-action";
+import { PinnedDebtBreakdown } from "./debt-breakdown";
 import { DebtVoidResultList } from "./debt-void-result";
 import { Deadline } from "./deadline";
 import { ResultCard } from "./result-card";
+import { OperatorSessionContext } from "./session-context";
 import { approvalHref } from "./two-person";
 
 /**
@@ -82,7 +84,7 @@ export interface ApprovalResult {
   /** An approved on-chain block (A-11): its unsigned call, which the arbiter's wallet still signs. */
   chainBlock?: ApprovedChainBlock | null;
   /** An approved bulk void of buyer debts (M-1): what happened to each debt. */
-  debtVoid?: BuyerDebtVoidResult | null;
+  debtVoid?: BuyerDebtVoidRecord | null;
 }
 
 /** The approved arbiter block's unsigned call and the address the approver approved. */
@@ -96,8 +98,37 @@ type Outcome = {
   text: string;
   next?: string;
   chainBlock?: ApprovedChainBlock | null;
-  debtVoid?: BuyerDebtVoidResult | null;
+  debtVoid?: BuyerDebtVoidRecord | null;
 };
+
+/**
+ * A bulk void's details, under its fields: while it waits, who the debts
+ * belong to (for an operator who may read them); once it ran, what happened
+ * to each; otherwise every pinned id.
+ */
+function DebtVoidDetails({ approval, kept }: { approval: OperatorApproval; kept: BuyerDebtVoidRecord | null }) {
+  const me = React.useContext(OperatorSessionContext);
+  const ids = Array.isArray(approval.payload.intentIds) ? approval.payload.intentIds.map(String) : [];
+  return (
+    <div className="mt-2 flex w-full flex-col gap-2">
+      {approval.status === "PENDING" && me && mayReadBuyerDebts(me.roles) ? <PinnedDebtBreakdown approval={approval} /> : null}
+      {kept ? (
+        <DebtVoidResultList result={kept} />
+      ) : ids.length > 0 ? (
+        <details className="rounded-md border border-01">
+          <summary className="touch-target cursor-pointer px-3 py-2 text-label-13 text-02">Intent ids · {ids.length}</summary>
+          <ul className="flex flex-col divide-y divide-01 border-t border-01" aria-label="Intent ids">
+            {ids.map((id) => (
+              <li key={id} className="px-3 py-1.5 font-mono text-mono-12 text-02 [overflow-wrap:anywhere]">
+                {id}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </div>
+  );
+}
 
 /** The unsigned `setBlocked` an approved `arbiter.block` answers with, or null for any other result. */
 export function approvedChainBlockOf(approval: Pick<OperatorApproval, "action" | "payload">, result: unknown): ApprovedChainBlock | null {
@@ -193,6 +224,8 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
   const detailsId = React.useId();
 
   const { title, reason, target, fields } = describeApproval(approval, context);
+  // A bulk void's outcome, kept on the approval once it ran (History, a reload).
+  const keptDebtVoid = debtVoidResultOf(approval.action, approval.result);
   const changes = approvalChanges(approval, context);
   // A decided request: today's "before" says nothing about it, so no diff in its row.
   const rowChanges = mode === "history" ? [] : changes;
@@ -290,6 +323,11 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
               <span className="min-w-0 text-label-sm text-01 [overflow-wrap:anywhere]">{title}</span>
             )}
           </p>
+          {keptDebtVoid && !outcome ? (
+            <p className="text-body-13 text-02" data-testid="debt-void-short">
+              {debtVoidShort(keptDebtVoid)}
+            </p>
+          ) : null}
           {rowChanges.length > 0 || reason ? (
             <p className="text-body-13 [overflow-wrap:anywhere]">
               <ChangeInline changes={rowChanges} />
@@ -378,6 +416,9 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
             </React.Fragment>
           ))}
         </dl>
+      ) : null}
+      {expandable && open && approval.action === BUYER_DEBT_VOID_ACTION ? (
+        <DebtVoidDetails approval={approval} kept={outcome?.debtVoid ? null : keptDebtVoid} />
       ) : null}
 
       {outcome ? (
