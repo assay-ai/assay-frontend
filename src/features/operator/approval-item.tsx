@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import type { OperatorApproval, OperatorIdentity } from "@/interfaces/operator";
 import type { SlashContractCall } from "@/interfaces/slash-dispute";
 import { ApiError } from "@/libs/ApiClient";
+import type { BuyerDebtVoidResult } from "@/services/operator-buyer-debts.service";
 import { approveApproval, rejectApproval } from "@/services/operator.service";
 import { cn } from "@/utils";
 
@@ -31,7 +32,9 @@ import {
   type ApprovalContext,
   type ApprovalOutcomeLine,
 } from "./approvals";
+import { debtVoidResultOf } from "./buyer-debts";
 import { ContractCallAction } from "./contract-call-action";
+import { DebtVoidResultList } from "./debt-void-result";
 import { Deadline } from "./deadline";
 import { ResultCard } from "./result-card";
 import { approvalHref } from "./two-person";
@@ -78,6 +81,8 @@ export interface ApprovalResult {
   activityHref?: string | null;
   /** An approved on-chain block (A-11): its unsigned call, which the arbiter's wallet still signs. */
   chainBlock?: ApprovedChainBlock | null;
+  /** An approved bulk void of buyer debts (M-1): what happened to each debt. */
+  debtVoid?: BuyerDebtVoidResult | null;
 }
 
 /** The approved arbiter block's unsigned call and the address the approver approved. */
@@ -86,7 +91,13 @@ export interface ApprovedChainBlock {
   account: string;
 }
 
-type Outcome = { kind: "approved" | "rejected" | "withdrawn"; text: string; next?: string; chainBlock?: ApprovedChainBlock | null };
+type Outcome = {
+  kind: "approved" | "rejected" | "withdrawn";
+  text: string;
+  next?: string;
+  chainBlock?: ApprovedChainBlock | null;
+  debtVoid?: BuyerDebtVoidResult | null;
+};
 
 /** The unsigned `setBlocked` an approved `arbiter.block` answers with, or null for any other result. */
 export function approvedChainBlockOf(approval: Pick<OperatorApproval, "action" | "payload">, result: unknown): ApprovedChainBlock | null {
@@ -206,6 +217,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
         next: next.next,
         activityHref: next.kind === "approved" ? approvalActivityHref(approval) : null,
         chainBlock: next.chainBlock ?? null,
+        debtVoid: next.debtVoid ?? null,
       });
     } else {
       setOutcome(next);
@@ -219,6 +231,7 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
       text: approvedResultSentence(approval.action, decision.result, target.label),
       next: NEXT[approval.action],
       chainBlock: approvedChainBlockOf(approval, decision.result),
+      debtVoid: debtVoidResultOf(approval.action, decision.result),
     });
   };
   const onReject = async () => {
@@ -379,6 +392,11 @@ export function ApprovalItem({ approval, context, mode, approvers, nameOf, highl
       {outcome?.chainBlock ? (
         <div className="mt-2">
           <ApprovedChainBlockAction block={outcome.chainBlock} />
+        </div>
+      ) : null}
+      {outcome?.debtVoid ? (
+        <div className="mt-2">
+          <DebtVoidResultList result={outcome.debtVoid} />
         </div>
       ) : null}
 

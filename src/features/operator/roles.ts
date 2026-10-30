@@ -5,6 +5,7 @@ import { formatMoney } from "@/utils/money";
 import { APPROVER_ROLES } from "./approvals";
 import { ARBITER_BLOCK_ROLES, ARBITER_RULING_ROLES } from "./arbiter";
 import { BLOCK_ROLES } from "./blocks";
+import { BUYER_DEBT_VOID_ROLES } from "./buyer-debts";
 import { ROLE_OPTIONS } from "./directory";
 import { mayDecideCallDisputes } from "./provider-tool-review";
 
@@ -79,6 +80,7 @@ export const APPROVAL_WHAT: Readonly<Record<string, string>> = Object.freeze({
   "A-14": "admin removals",
   "P-10": "new standard tool versions",
   "P-11": "which tool version agents get by default",
+  "M-1": "bulk voids of buyer debts",
 });
 
 const APPROVES = Object.entries(APPROVER_ROLES).map(([code, roles]) => ({
@@ -110,7 +112,7 @@ export function actsOnMoney(roles: readonly OperatorRole[]): boolean {
  * screen and the "Why you can't, and who can" lines all read `checkAction`,
  * so the banner can never promise an action a screen then hides.
  */
-export type ConsoleAction = "rule" | "block" | "blockOnChain" | "compensate" | "manageTeam" | "upholdRefund";
+export type ConsoleAction = "rule" | "block" | "blockOnChain" | "compensate" | "manageTeam" | "upholdRefund" | "voidDebts";
 
 /** Who decides buyer call disputes (S-14); upholding one refunds the buyer, under the authority limit. */
 const CALL_DISPUTE_ROLES: readonly OperatorRole[] = ["ADJ", "ADJL"];
@@ -122,6 +124,7 @@ const ACTION_ROLES: Readonly<Record<ConsoleAction, readonly OperatorRole[]>> = {
   compensate: COMPENSATE_ROLES,
   manageTeam: ADMIN_ROLES,
   upholdRefund: CALL_DISPUTE_ROLES,
+  voidDebts: BUYER_DEBT_VOID_ROLES,
 };
 
 /** What the action is, as a verb phrase: "block an account". */
@@ -132,6 +135,7 @@ export const ACTION_WHAT: Readonly<Record<ConsoleAction, string>> = {
   compensate: "compensate a provider",
   manageTeam: "add and change operators",
   upholdRefund: "uphold a buyer's call-dispute refund",
+  voidDebts: "ask for a void of buyer debts",
 };
 
 /** The action as a subject, for the one-line why-not: "Blocking accounts needs …". */
@@ -142,6 +146,7 @@ export const ACTION_DOING: Readonly<Record<ConsoleAction, string>> = {
   compensate: "Compensating a provider",
   manageTeam: "Changing the team",
   upholdRefund: "Upholding a call-dispute refund",
+  voidDebts: "Voiding buyer debts",
 };
 
 /**
@@ -315,6 +320,7 @@ const ACTION_DOES: Readonly<Record<ConsoleAction, string>> = {
   compensate: "compensates providers",
   manageTeam: "adds, changes and removes operators",
   upholdRefund: "upholds buyer call-dispute refunds",
+  voidDebts: "asks for voids of buyer debts the platform caused",
 };
 
 /** The approvals, short, for a role card. */
@@ -327,6 +333,7 @@ const APPROVAL_SHORT: Readonly<Record<string, string>> = {
   "A-12": "new operators",
   "A-13": "raised roles and limits",
   "A-14": "admin removals",
+  "M-1": "buyer-debt voids",
 };
 
 function sentence(text: string): string {
