@@ -123,6 +123,11 @@ export interface OperatorApproval {
   createdAt: string;
   decidedAt: string | null;
   expiresAt: string;
+  /**
+   * What the approved action did, kept on the approval; only a bulk void of
+   * buyer debts (`buyer_debt.bulk_void`) has one so far. Null or absent otherwise.
+   */
+  result?: unknown;
 }
 
 /** `POST /operator/approvals/:id/approve|reject`. */
@@ -555,6 +560,26 @@ export interface OverrideLogEntry {
   after: Record<string, unknown>;
   ticketRef: string | null;
   breakGlass: boolean;
+  /**
+   * A bulk void of buyer debts (`buyer_debt_void`): what it did. Null while
+   * the void runs, on older entries, and on every other entry.
+   */
+  outcome?: DebtVoidOutcome | null;
+}
+
+/** The counts and amounts of a bulk void, on its `M-1` Activity entry. Atomic amounts. */
+export interface DebtVoidOutcome {
+  approvalId: string;
+  assetId: string;
+  decimals: number;
+  requestedCount: number;
+  requestedAmount: string;
+  voidedCount: number;
+  voidedAmount: string;
+  skippedCount: number;
+  skippedAmount: string;
+  /** False: the run stopped part way. */
+  complete: boolean;
 }
 
 /** `GET /operator/override-log` filters. */

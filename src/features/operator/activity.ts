@@ -1,9 +1,11 @@
 import type { OverrideLogEntry } from "@/interfaces/operator";
 import { routes } from "@/libs/routes";
+import { formatMoney } from "@/utils/money";
 
 import { RULING_REASONS } from "./arbiter";
 import { walletLabel } from "./block-targets";
 import { reasonLabel } from "./reasons";
+import { approvalHref } from "./two-person";
 
 /**
  * The override register, read as sentences ("Jordan blocked Wallet 0x9f3C…F36c
@@ -85,7 +87,7 @@ const VERBS: Readonly<Record<string, string>> = {
   "A-23": "resolved a report about",
   "A-24": "decided the catalogue review of",
   "A-25": "took down",
-  "M-1": "voided",
+  "M-1": "requested a void of",
   "P-10": "published a version of",
   "P-11": "moved the default version of",
   "P-12": "deprecated a major of",
@@ -191,6 +193,37 @@ export interface ActivitySentence {
   href: string | null;
   /** For an entry logged when a transaction was built: what it does not mean yet. */
   pending: string | null;
+  /** A plain caveat under the line, a full sentence (a bulk void's unknown or partial outcome). */
+  note: string | null;
+}
+
+/**
+ * A bulk void (M-1) as Activity words. It never claims a debt was voided
+ * unless its outcome says so: with no outcome (still running, or an entry
+ * from before outcomes were kept) it says only that a void was requested.
+ */
+function debtVoidWords(entry: Pick<OverrideLogEntry, "after" | "outcome">): { verb: string; target: string; note: string | null; href: string | null } {
+  const outcome = entry.outcome;
+  // The approval it ran under, whose details list each debt's result.
+  const approvalId = outcome?.approvalId ?? (typeof entry.after?.approvalId === "string" ? entry.after.approvalId : null);
+  const href = approvalId ? approvalHref(approvalId) : null;
+  if (outcome) {
+    const money = (amount: string) => formatMoney({ amount, asset: outcome.assetId, decimals: outcome.decimals }, { decimals: 4 });
+    const debts = `${outcome.voidedCount} buyer debt${outcome.voidedCount === 1 ? "" : "s"}`;
+    return {
+      verb: "voided",
+      target: `${debts} (${money(outcome.voidedAmount)}), skipped ${outcome.skippedCount}${outcome.skippedCount > 0 ? ` (${money(outcome.skippedAmount)})` : ""}`,
+      note: outcome.complete ? null : `Partial run: the void stopped before it finished; ${outcome.requestedCount} were requested.`,
+      href,
+    };
+  }
+  const count = typeof entry.after?.count === "number" ? entry.after.count : null;
+  return {
+    verb: "requested a void of",
+    target: count === null ? "buyer debts" : `${count} buyer debt${count === 1 ? "" : "s"}`,
+    note: "Outcome pending or unknown.",
+    href,
+  };
 }
 
 function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId"> & { after?: Record<string, unknown> }): string {
@@ -285,6 +318,7 @@ function verbOf(entry: OverrideLogEntry): string {
 }
 
 export function activitySentence(entry: OverrideLogEntry, names: ActivityNames & { block?: (id: string) => { active: boolean } | null }): ActivitySentence {
+  const debtVoid = entry.code === "M-1" || entry.targetType === "buyer_debt_void" ? debtVoidWords(entry) : null;
   return {
     actor: names.operator(entry.actorSubject),
     verb: verbOf(entry),
@@ -293,6 +327,8 @@ export function activitySentence(entry: OverrideLogEntry, names: ActivityNames &
     approver: entry.approverSubject ? names.operator(entry.approverSubject) : null,
     href: activityHref(entry, entry.targetType === "account_block" ? names.block?.(entry.targetId) : null),
     pending: PENDING[entry.code] ?? null,
+    note: debtVoid?.note ?? null,
+    ...(debtVoid ? { verb: debtVoid.verb, target: debtVoid.target, href: debtVoid.href } : {}),
   };
 }
 
@@ -300,5 +336,5 @@ export function activitySentence(entry: OverrideLogEntry, names: ActivityNames &
 export function activityText(sentence: ActivitySentence): string {
   return `${sentence.actor} ${sentence.verb} ${sentence.target}${sentence.reason ? ` (${sentence.reason})` : ""}${
     sentence.approver ? `, approved by ${sentence.approver}` : ""
-  }${sentence.pending ? `: ${sentence.pending}` : ""}.`;
+  }${sentence.pending ? `: ${sentence.pending}` : ""}.${sentence.note ? ` ${sentence.note}` : ""}`;
 }

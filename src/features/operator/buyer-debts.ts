@@ -5,7 +5,7 @@ import type {
   BuyerDebtAssetTotal,
   BuyerDebtSkipReason,
   BuyerDebtSort,
-  BuyerDebtVoidResult,
+  BuyerDebtVoidRecord,
   ListBuyerDebtsQuery,
   OperatorBuyerDebt,
 } from "@/services/operator-buyer-debts.service";
@@ -23,8 +23,11 @@ import { operatorErrorSentence } from "./operator-errors";
  * operator, whatever the amount.
  */
 
-/** Who may read the list (the controller's `@RequireRoles`). */
-export const BUYER_DEBT_READ_ROLES: readonly OperatorRole[] = ["TRE", "ADJL", "ADJ", "SRE"];
+/**
+ * Who may read the list (the controller's `@RequireRoles`): only the roles
+ * that may act on it, since it names every buyer's paying wallet.
+ */
+export const BUYER_DEBT_READ_ROLES: readonly OperatorRole[] = ["TRE", "ADJL"];
 /** Who may request a void, and who may approve one (`M-1`). */
 export const BUYER_DEBT_VOID_ROLES: readonly OperatorRole[] = ["ADJL", "TRE"];
 
@@ -33,7 +36,8 @@ export const BUYER_DEBT_VOID_CODE = "M-1";
 /** The approval's action. */
 export const BUYER_DEBT_VOID_ACTION = "buyer_debt.bulk_void";
 
-export const VOID_MAX_IDS = 500;
+/** The most ids one void request carries (the API refuses more). */
+export const VOID_MAX_IDS = 100;
 export const VOID_REASON_MIN = 10;
 export const VOID_REASON_MAX = 2048;
 export const VOID_TICKET_MAX = 128;
@@ -197,8 +201,8 @@ function rebuild(rows: readonly Row[]): DebtSelection {
 }
 
 /**
- * Adds or removes rows, keeping the selection to one asset and 500 ids: a
- * row of another asset, or past the 500th, is left out. `known` maps every
+ * Adds or removes rows, keeping the selection to one asset and 100 ids: a
+ * row of another asset, or past the 100th, is left out. `known` maps every
  * id seen so far to its row, so a removal can recompute the total. Pure.
  */
 export function toggleRows(selection: DebtSelection, rows: readonly Row[], on: boolean, known: ReadonlyMap<string, Row>): DebtSelection {
@@ -214,6 +218,28 @@ export function toggleRows(selection: DebtSelection, rows: readonly Row[], on: b
     next = rebuild(picked);
   }
   return next;
+}
+
+/**
+ * "3 of 12 debts selected": the selection against the debts of its asset the
+ * filters match, when that count is known and larger. Pure.
+ */
+export function selectedText(count: number, matching: number | null): string {
+  if (matching === null || matching <= count) return `${countText(count)} selected`;
+  return `${count.toLocaleString("en-US")} of ${countText(matching)} selected`;
+}
+
+/** The note beside "Select all matching" when the filters match more than one request carries; null otherwise. */
+export function selectAllCapNote(matching: number): string | null {
+  return matching > VOID_MAX_IDS
+    ? `${VOID_MAX_IDS.toLocaleString("en-US")} of ${matching.toLocaleString("en-US")} selected; at most ${VOID_MAX_IDS} per request. The first ${VOID_MAX_IDS} in this order are picked.`
+    : null;
+}
+
+/** How many debts of this asset the filters match, from the totals; null when unknown. */
+export function matchingCountFor(byAsset: readonly BuyerDebtAssetTotal[] | undefined, assetId: string | null, decimals: number | null): number | null {
+  if (!byAsset || assetId === null) return null;
+  return byAsset.find((total) => total.assetId === assetId && total.decimals === decimals)?.count ?? null;
 }
 
 /** The selection's total as money; null when empty. */
@@ -239,6 +265,70 @@ export function pageSelectState<T extends Row>(selection: DebtSelection, rows: r
 export function matchingAsset(byAsset: readonly BuyerDebtAssetTotal[]): BuyerDebtAssetTotal | null {
   return byAsset.length === 1 ? byAsset[0]! : null;
 }
+
+// ── Who the selection is about ──────────────────────────────────────────────
+
+type BreakdownRow = Pick<OperatorBuyerDebt, "intentId" | "buyerOrganizationId" | "payerAccount" | "providerId" | "amount">;
+
+export interface DebtBuyerGroup {
+  buyerOrganizationId: string;
+  /** The paying wallets of these debts, distinct, in the order seen. */
+  payers: string[];
+  count: number;
+  /** Atomic. */
+  amount: string;
+}
+
+export interface DebtProviderGroup {
+  /** Null: the debt names no provider. */
+  providerId: string | null;
+  count: number;
+  amount: string;
+}
+
+/**
+ * The debts per buyer (organization, with its paying wallets) and per
+ * provider, largest amount first, so the requester and the approver see who
+ * a void lets off and who goes unpaid. Pure.
+ */
+export function debtBreakdown(rows: readonly BreakdownRow[]): { buyers: DebtBuyerGroup[]; providers: DebtProviderGroup[] } {
+  const buyers = new Map<string, { payers: string[]; count: number; amount: bigint }>();
+  const providers = new Map<string | null, { count: number; amount: bigint }>();
+  for (const row of rows) {
+    const buyer = buyers.get(row.buyerOrganizationId) ?? { payers: [], count: 0, amount: 0n };
+    if (!buyer.payers.includes(row.payerAccount)) buyer.payers.push(row.payerAccount);
+    buyer.count += 1;
+    buyer.amount += BigInt(row.amount);
+    buyers.set(row.buyerOrganizationId, buyer);
+    const provider = providers.get(row.providerId) ?? { count: 0, amount: 0n };
+    provider.count += 1;
+    provider.amount += BigInt(row.amount);
+    providers.set(row.providerId, provider);
+  }
+  const byAmount = (a: { amount: bigint; count: number }, b: { amount: bigint; count: number }) =>
+    a.amount === b.amount ? b.count - a.count : a.amount > b.amount ? -1 : 1;
+  return {
+    buyers: [...buyers.entries()]
+      .map(([buyerOrganizationId, group]) => ({ buyerOrganizationId, ...group }))
+      .sort(byAmount)
+      .map((group) => ({ ...group, amount: group.amount.toString() })),
+    providers: [...providers.entries()]
+      .map(([providerId, group]) => ({ providerId, ...group }))
+      .sort(byAmount)
+      .map((group) => ({ ...group, amount: group.amount.toString() })),
+  };
+}
+
+/** The selected debts whose recorded cause does not suggest the platform: likely the buyer's own doing. Pure. */
+export function buyerCausedCount(rows: readonly Pick<OperatorBuyerDebt, "suggestedPlatformCause">[]): number {
+  return rows.filter((row) => !row.suggestedPlatformCause).length;
+}
+
+export const BUYER_CAUSED_WARNING =
+  "Some selected debts look caused by the buyer, not the platform. Voiding them means the provider is never paid.";
+
+/** The most list pages the approver's breakdown reads to find the pinned ids (100 a page). */
+export const PINNED_LOOKUP_MAX_PAGES = 20;
 
 // ── The request ─────────────────────────────────────────────────────────────
 
@@ -291,27 +381,55 @@ export const SKIP_REASON_TEXT: Readonly<Record<BuyerDebtSkipReason, string>> = {
   SEQ_USED_ON_CHAIN: "Its voucher was used on chain, so it is not void",
   CHAIN_UNREADABLE: "The chain could not be read; ask again later",
   CHANGED_UNDERNEATH: "It changed while the void ran; check it and ask again",
+  NOT_ATTEMPTED: "Not attempted: the run stopped before it; it is still owed",
 };
 
 export function skipReasonText(reason: BuyerDebtSkipReason | null): string {
   return reason ? (SKIP_REASON_TEXT[reason] ?? reason) : "Skipped";
 }
 
-/** The result off the approve answer, or null when it is not a bulk void's. */
-export function debtVoidResultOf(action: string, result: unknown): BuyerDebtVoidResult | null {
+/**
+ * A bulk void's outcome, from the approve answer or the record kept on the
+ * approval, or null when it is not one. The approve answer has no skipped
+ * side: it is worked out from the requested and voided totals, and the run is
+ * complete unless an item was never attempted. Pure.
+ */
+export function debtVoidResultOf(action: string, result: unknown): BuyerDebtVoidRecord | null {
   if (action !== BUYER_DEBT_VOID_ACTION || !result || typeof result !== "object") return null;
-  const r = result as Partial<BuyerDebtVoidResult>;
+  const r = result as Partial<BuyerDebtVoidRecord>;
   if (typeof r.voidedCount !== "number" || typeof r.requestedCount !== "number" || !Array.isArray(r.items)) return null;
-  return r as BuyerDebtVoidResult;
+  const requested = /^[0-9]+$/.test(String(r.requestedAmount)) ? BigInt(String(r.requestedAmount)) : 0n;
+  const voided = /^[0-9]+$/.test(String(r.voidedAmount)) ? BigInt(String(r.voidedAmount)) : 0n;
+  return {
+    ...(r as BuyerDebtVoidRecord),
+    skippedCount: typeof r.skippedCount === "number" ? r.skippedCount : r.requestedCount - r.voidedCount,
+    skippedAmount: typeof r.skippedAmount === "string" ? r.skippedAmount : (requested > voided ? requested - voided : 0n).toString(),
+    complete: typeof r.complete === "boolean" ? r.complete : !r.items.some((item) => item.skipReason === "NOT_ATTEMPTED"),
+    recordedAt: typeof r.recordedAt === "string" ? r.recordedAt : null,
+  };
 }
 
-/** "Voided 48 of 50 buyer debts ($4.80 of $5.00). 2 skipped." Pure. */
-export function debtVoidSummary(result: BuyerDebtVoidResult): string {
+function debtsWord(count: number): string {
+  return countText(count).replace(/debts?$/, "buyer $&");
+}
+
+/** "Voided 48 of 50 buyer debts ($4.80 of $5.00). 2 skipped ($0.20)." Pure. */
+export function debtVoidSummary(result: Pick<BuyerDebtVoidRecord, "assetId" | "decimals" | "requestedCount" | "requestedAmount" | "voidedCount" | "voidedAmount" | "skippedCount" | "skippedAmount">): string {
   const money = (amount: string) => formatMoney({ amount, asset: result.assetId, decimals: result.decimals }, { decimals: 4 });
-  const skipped = result.requestedCount - result.voidedCount;
   const head =
-    skipped === 0
-      ? `Voided ${countText(result.voidedCount).replace(/debts?$/, "buyer $&")} (${money(result.voidedAmount)}).`
-      : `Voided ${result.voidedCount} of ${countText(result.requestedCount).replace(/debts?$/, "buyer $&")} (${money(result.voidedAmount)} of ${money(result.requestedAmount)}). ${skipped} skipped.`;
-  return `${head} The providers are not paid for them.`;
+    result.skippedCount === 0
+      ? `Voided ${debtsWord(result.voidedCount)} (${money(result.voidedAmount)}).`
+      : `Voided ${result.voidedCount} of ${debtsWord(result.requestedCount)} (${money(result.voidedAmount)} of ${money(result.requestedAmount)}). ${result.skippedCount} skipped (${money(result.skippedAmount)}).`;
+  return result.voidedCount === 0 ? `${head} Nothing was voided; the buyers still owe them.` : `${head} The providers are not paid for the voided ones.`;
+}
+
+/** The notice of a partial run: some debts were never attempted and are still owed. */
+export function partialRunText(result: Pick<BuyerDebtVoidRecord, "items">): string {
+  const left = result.items.filter((item) => item.skipReason === "NOT_ATTEMPTED").length;
+  return `Partial run: the void stopped before it finished${left > 0 ? `, and ${debtsWord(left)} ${left === 1 ? "was" : "were"} never attempted` : ""}. Those are still owed; check them and request a new void if needed.`;
+}
+
+/** The outcome on one line, for an approval's row: "0 voided · 1 skipped · partial run". Pure. */
+export function debtVoidShort(result: Pick<BuyerDebtVoidRecord, "voidedCount" | "skippedCount" | "complete">): string {
+  return `${result.voidedCount} voided · ${result.skippedCount} skipped${result.complete ? "" : " · partial run"}`;
 }
