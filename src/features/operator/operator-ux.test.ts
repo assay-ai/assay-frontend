@@ -202,7 +202,7 @@ describe("roles in plain words", () => {
   it("warns when a removal leaves a two-person action without approvers", () => {
     const team = [operator("jordan", ["ADJL"]), operator("riley", ["ADJL"]), operator("dan", ["OPS_ADMIN"])];
     expect(removalWarnings(team, "jordan")).toEqual([
-      "Only one other Lead adjudicator or Treasury would be left, so their own requests for provider compensations and records of executions made while a cancel waited could not be approved.",
+      "Only one other Lead adjudicator or Treasury would be left, so their own requests for provider compensations, records of executions made while a cancel waited, and bulk voids of buyer debts could not be approved.",
       "Only one other Adjudicator or Lead adjudicator would be left, so their own requests for re-proposals of upheld penalties could not be approved.",
       "Only one other Lead adjudicator would be left, so their own requests for lifting account blocks and on-chain blocks could not be approved.",
     ]);

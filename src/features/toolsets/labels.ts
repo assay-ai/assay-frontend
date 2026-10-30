@@ -37,6 +37,7 @@ const REFUSAL_TEXT: Record<string, string> = {
   MCP_QUOTA_EXCEEDED: "Today's free calls are used up, and this server serves free calls only.",
   MCP_POLICY_AGENT_PAUSED: "Paid calls are paused for this agent.",
   MCP_APPROVAL_REQUIRED: "This call needs a person's approval.",
+  PAYMENT_PRICE_BELOW_MINIMUM: "Every provider of this tool charges less than the paid-call minimum, so it can't take paid calls right now.",
 };
 
 export function refusalText(code: string): string {

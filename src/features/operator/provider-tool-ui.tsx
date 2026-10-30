@@ -14,7 +14,7 @@ import type { ContractChange, OperatorToolSummary } from "@/interfaces/contracts
 import { takedownProviderTool, type ModerationCutoff, type TakedownReasonCode } from "@/services/operator-provider-tools.service";
 import type { ProviderToolVersion } from "@/services/provider-tools.service";
 
-import { mayTakeDownTools, MODERATION_NOTE_MIN, OPERATOR_CASES_TABS, operatorToolsTabs, TAKEDOWN_PUBLIC_NOTE_MAX, TAKEDOWN_REASONS, toolReviewErrorText } from "./provider-tool-review";
+import { mayTakeDownTools, MODERATION_NOTE_MIN, operatorCasesTabs, operatorToolsTabs, TAKEDOWN_PUBLIC_NOTE_MAX, TAKEDOWN_REASONS, toolReviewErrorText } from "./provider-tool-review";
 import { useOperatorSession } from "./session-context";
 
 /** Tools' tabs, the ones this operator can use. */
@@ -26,7 +26,8 @@ export function OperatorToolsTabs() {
 }
 
 export function OperatorCasesTabs() {
-  return <SectionTabs tabs={OPERATOR_CASES_TABS} label="Penalties and disputes" />;
+  const me = useOperatorSession();
+  return <SectionTabs tabs={operatorCasesTabs(me.roles)} label="Penalties and disputes" />;
 }
 
 function pretty(value: unknown): string {

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Segmented, SegmentedItem } from "@/components/ui/segmented";
 import { replaceUrlQuery } from "@/features/operator/url-params";
 import { ApprovalItem, ApprovedChainBlockAction, RowSection, type ApprovalResult } from "@/features/operator/approval-item";
+import { DebtVoidResultList } from "@/features/operator/debt-void-result";
 import { ResultCard } from "@/features/operator/result-card";
 import { approvalErrorMessage } from "@/features/operator/approvals";
 import { allWaitingLabel, groupApprovals } from "@/features/operator/inbox";
@@ -169,6 +170,8 @@ function ApprovalsInbox() {
                 />
                 {/* A-11: the approval's result is the arbiter's unsigned setBlocked; its wallet signs here. */}
                 {result.chainBlock ? <ApprovedChainBlockAction block={result.chainBlock} /> : null}
+                {/* M-1: the per-debt outcome of a bulk void, which the approvals list does not keep. */}
+                {result.debtVoid ? <DebtVoidResultList result={result.debtVoid} /> : null}
               </React.Fragment>
             ))}
 

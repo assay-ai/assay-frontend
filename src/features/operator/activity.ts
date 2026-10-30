@@ -85,6 +85,7 @@ const VERBS: Readonly<Record<string, string>> = {
   "A-23": "resolved a report about",
   "A-24": "decided the catalogue review of",
   "A-25": "took down",
+  "M-1": "voided",
   "P-10": "published a version of",
   "P-11": "moved the default version of",
   "P-12": "deprecated a major of",
@@ -140,6 +141,7 @@ export function activityIcon(entry: Pick<OverrideLogEntry, "code">): ActivityIco
     case "S-13":
       return "ruling";
     case "S-5":
+    case "M-1":
       return "money";
     case "A-12":
     case "A-13":
@@ -219,6 +221,11 @@ function fallbackTarget(entry: Pick<OverrideLogEntry, "targetType" | "targetId">
       return "a report";
     case "call_dispute":
       return "a buyer's call";
+    case "buyer_debt_void": {
+      // A bulk void (M-1): the pinned count, logged in `after`.
+      const count = typeof entry.after?.count === "number" ? entry.after.count : null;
+      return count === null ? "buyer debts" : `${count} buyer debt${count === 1 ? "" : "s"}`;
+    }
     case "provider":
       return "a provider";
     default:
