@@ -10,7 +10,9 @@ import { capabilitiesFor } from "./roles";
  *
  *   Home       /operator                 the "Needs you" inbox (+ Approvals)
  *   Penalties  /operator/cases           open penalties; a case at /operator/cases/view?id=;
- *                                        buyers' call disputes at /operator/disputes (a tab)
+ *                                        buyers' call disputes at /operator/disputes (a tab);
+ *                                        buyer debts at /operator/buyer-debts (a tab, for the
+ *                                        roles that may read them)
  *   Blocks     /operator/blocks
  *   Arbiter    /operator/arbiter         only for roles that can rule or block on chain
  *   Tools      /operator/tools           standard tool contracts (Policy roles), provider tool
@@ -35,7 +37,7 @@ export interface OperatorNavItem {
 
 export const OPERATOR_NAV_ITEMS: readonly OperatorNavItem[] = Object.freeze([
   { id: "home", label: "Home", href: "/operator", match: ["/operator", "/operator/approvals"] },
-  { id: "penalties", label: "Penalties", href: "/operator/cases", match: ["/operator/cases", "/operator/disputes"] },
+  { id: "penalties", label: "Penalties", href: "/operator/cases", match: ["/operator/cases", "/operator/disputes", "/operator/buyer-debts"] },
   { id: "blocks", label: "Blocks", href: "/operator/blocks", match: ["/operator/blocks"] },
   { id: "arbiter", label: "Arbiter", href: "/operator/arbiter", match: ["/operator/arbiter"] },
   { id: "tools", label: "Tools", href: "/operator/tools", match: ["/operator/tools"] },
@@ -86,6 +88,7 @@ export function operatorTitleFor(pathname: string): string {
   if (pathname.startsWith("/operator/tools/takedowns")) return "Takedowns";
   if (pathname.startsWith("/operator/disputes/view")) return "Call dispute";
   if (pathname.startsWith("/operator/disputes")) return "Call disputes";
+  if (pathname.startsWith("/operator/buyer-debts")) return "Buyer debts";
   const id = activeOperatorNav(pathname);
   return OPERATOR_NAV_ITEMS.find((item) => item.id === id)?.label ?? "Operator";
 }

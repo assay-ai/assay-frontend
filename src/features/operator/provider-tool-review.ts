@@ -5,6 +5,8 @@ import { CUTOFF_LATE_HOURS } from "@/libs/dispute-deadlines";
 import { plainApiError, plainError } from "@/libs/plain-language";
 import type { ModerationCutoff, ReviewChecklistItem, ReviewQueueItem } from "@/services/operator-provider-tools.service";
 
+import { mayReadBuyerDebts } from "./buyer-debts";
+
 /**
  * The operator's side of provider tools and buyer call disputes, kept out
  * of the pages so it can be tested. Pure. Roles follow the backend's
@@ -67,6 +69,14 @@ export const OPERATOR_CASES_TABS: readonly SectionTab[] = [
   { id: "penalties", label: "Penalties", href: "/operator/cases", match: ["/operator/cases"] },
   { id: "disputes", label: "Call disputes", href: "/operator/disputes", match: ["/operator/disputes"] },
 ];
+
+/** Penalties' tabs for these roles: Buyer debts only for the roles that may read them (TRE, ADJL, ADJ, SRE). */
+export function operatorCasesTabs(roles: readonly OperatorRole[]): SectionTab[] {
+  return [
+    ...OPERATOR_CASES_TABS,
+    ...(mayReadBuyerDebts(roles) ? [{ id: "buyer-debts", label: "Buyer debts", href: "/operator/buyer-debts", match: ["/operator/buyer-debts"] }] : []),
+  ];
+}
 
 /* ---------------------------------------------------------------- review */
 

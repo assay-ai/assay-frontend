@@ -32,6 +32,7 @@ import { formatMoney, toDecimal } from "@/utils/money";
 
 import { BuyerPreview } from "../buyer-preview";
 import { minorUnitsFromMajorInput, majorInputFromMoney } from "../chrome";
+import { belowMinimumText, isBelowMinimum, minPaidPriceHint, minPaidPriceOf, minPaidPriceText, priceFloorError } from "../price-floor";
 import { majorChoices, majorTestRows, majorTestText, moveNotice, termsOf } from "../contract-terms";
 import { useProviderToolNames } from "../tool-name";
 import {
@@ -107,12 +108,16 @@ export function parseLiveForm(form: LiveForm, binding: ToolBindingDetail, asset:
   let priceAmount = "0";
   if (mode !== "FREE") {
     const minor = minorUnitsFromMajorInput(form.price.replace(/^\$/, ""), asset.decimals);
-    if (form.price.trim() === "") errors.price = "Enter a price per call, like 0.10.";
+    const floor = minPaidPriceOf(asset);
+    if (form.price.trim() === "") errors.price = floor ? `Enter a price per call of at least ${minPaidPriceText(floor)}.` : "Enter a price per call, like 0.10.";
     else if (minor.error) errors.price = minor.error;
     else if (!minor.amount || /^0*$/.test(minor.amount)) errors.price = "More than $0. Choose Free for no charge.";
     else {
       priceAmount = minor.amount;
       price = { amount: minor.amount, asset: asset.assetId, decimals: asset.decimals };
+      // The paid-call minimum, judged as the API judges it: only when this edit sets a price.
+      const setsPrice = binding.pricingMode === "FREE" || priceAmount !== binding.price.amount || binding.price.asset !== asset.assetId;
+      if (floor && setsPrice && isBelowMinimum(priceAmount, floor)) errors.price = belowMinimumText(floor);
     }
   }
   let freeCalls: number | null = null;
@@ -250,6 +255,8 @@ export function LiveStage({
   const [publishing, setPublishing] = React.useState(false);
   const [publishError, setPublishError] = React.useState<string | null>(null);
   const [stakeOpen, setStakeOpen] = React.useState(false);
+  /** The API's PROVIDER_BINDING_PRICE_BELOW_MINIMUM on the last save, until the price changes. */
+  const [serverPriceError, setServerPriceError] = React.useState<string | null>(null);
 
   const stake = useStakeStatus();
   const { params: chainParams, chain } = useChainTerms();
@@ -281,8 +288,11 @@ export function LiveStage({
     try {
       await onSave(pendingBody);
       setSaveState("saved");
+      setServerPriceError(null);
       void check.refetch();
-    } catch {
+    } catch (error) {
+      // Below the paid-call minimum: said on the price box, not as a retry.
+      setServerPriceError(priceFloorError(error, asset));
       setSaveState("error");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -460,8 +470,12 @@ export function LiveStage({
               suffix="$ a call"
               value={form.price}
               disabled={readOnly}
-              onChange={(event) => set({ price: event.target.value })}
-              error={priceEmpty ? undefined : parsed.errors.price}
+              onChange={(event) => {
+                setServerPriceError(null);
+                set({ price: event.target.value });
+              }}
+              error={priceEmpty ? undefined : (parsed.errors.price ?? serverPriceError ?? undefined)}
+              hint={minPaidPriceHint(asset) ?? undefined}
               placeholder="0.10"
             />
           ) : null}
@@ -525,7 +539,7 @@ export function LiveStage({
             ) : null}
           </div>
           <p aria-live="polite" className="min-h-4 text-body-xs text-03">
-            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Draft saved" : saveState === "error" ? "Could not save. We will try again when you publish." : null}
+            {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Draft saved" : saveState === "error" ? (serverPriceError ? "Not saved: the price is below the minimum." : "Could not save. We will try again when you publish.") : null}
           </p>
         </div>
 

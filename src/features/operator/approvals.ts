@@ -35,6 +35,7 @@ const ACTION_LABEL: Readonly<Record<string, string>> = {
   "arbiter.block": "Block a wallet on chain (the arbiter signs it)",
   "tool_version.publish": "Publish a new version of a standard tool",
   "tool.current_version": "Change the version of a tool agents get by default",
+  "buyer_debt.bulk_void": "Void buyer debts the platform caused",
 };
 
 export function actionLabel(action: string): string {
@@ -53,6 +54,7 @@ export const APPROVER_ROLES: Readonly<Record<string, readonly OperatorRole[]>> =
   "A-11": ["ADJL"],
   "P-10": ["POLA"],
   "P-11": ["POLA"],
+  "M-1": ["ADJL", "TRE"],
 };
 
 export function approverRolesFor(code: string): readonly OperatorRole[] | null {
@@ -262,6 +264,9 @@ function commonFields(body: Record<string, unknown>): { label: string; value: st
   const fields: { label: string; value: string }[] = [];
   const reason = text(body.reasonCode);
   if (reason) fields.push({ label: "Reason", value: reasonText(reason) });
+  // A free-text reason (a bulk void's), in the operator's own words.
+  const why = typeof body.reason === "string" ? body.reason.trim() : "";
+  if (why && !reason) fields.push({ label: "Reason", value: why });
   const ticket = text(body.ticketRef);
   if (ticket) fields.push({ label: "Ticket", value: ticket });
   const note = text(body.note);
@@ -296,6 +301,26 @@ function penaltyName(id: string, context: ApprovalContext): string {
   return context.penalties?.get(id) ?? `penalty ${shortId(id)}`;
 }
 
+/**
+ * A bulk void's pinned list (`buyer_debt.bulk_void`): how many debts, and
+ * their total in the asset the request pinned. Null when the payload says
+ * neither.
+ */
+function debtVoidParts(payload: Record<string, unknown>): { count: number; total: string | null; ids: string[] } {
+  const ids = Array.isArray(payload.intentIds) ? payload.intentIds.map(String) : [];
+  const count = typeof payload.count === "number" ? payload.count : ids.length;
+  const amount = text(payload.totalAmount);
+  const asset = text(payload.assetId);
+  const decimals = typeof payload.decimals === "number" ? payload.decimals : null;
+  const total =
+    amount && asset && decimals !== null && /^[0-9]+$/.test(amount) ? formatMoney({ amount, asset, decimals }, { decimals: 4 }) : null;
+  return { count, total, ids };
+}
+
+function debtsText(count: number): string {
+  return `${count} buyer debt${count === 1 ? "" : "s"}`;
+}
+
 function caseTarget(id: string, context: ApprovalContext) {
   const name = penaltyName(id, context);
   return { label: name.charAt(0).toUpperCase() + name.slice(1), href: routes.operatorCase(id) };
@@ -314,10 +339,12 @@ export function describeApproval(
 ): ApprovalDescription {
   const body = bodyOf(approval.payload);
   const reason = text(body.reasonCode);
+  // A bulk void carries the operator's own words, not a reason code.
+  const words = approval.action === "buyer_debt.bulk_void" ? text(body.reason) : null;
   return {
     ...describeLong(approval, context),
     title: approvalTitle(approval, context),
-    reason: reason ? reasonText(reason) : null,
+    reason: reason ? reasonText(reason) : words ? (words.length > 120 ? `${words.slice(0, 117)}…` : words) : null,
   };
 }
 
@@ -410,6 +437,10 @@ export function approvalTitle(
       return `Publish ${toolVersionName(context, text(payload.toolId) ?? targetId, payload.version)}`;
     case "tool.current_version":
       return `Make ${toolVersionName(context, text(payload.toolId) ?? targetId, body.version)} the default for agents`;
+    case "buyer_debt.bulk_void": {
+      const { count, total } = debtVoidParts(payload);
+      return `Void ${debtsText(count)}${total ? ` (${total})` : ""}`;
+    }
     default:
       return actionLabel(approval.action);
   }
@@ -504,6 +535,17 @@ export function approvalOutcome(
       lines.push({ kind: "runs", text: "Agents that don't lock a version move to it at once. Locked URLs keep their version" });
       lines.push({ kind: "record", text: "It can be moved back with another request" });
       break;
+    case "buyer_debt.bulk_void": {
+      const { count, total } = debtVoidParts(payload);
+      lines.push({
+        kind: "money",
+        text: `The buyers are not charged for ${debtsText(count)}${total ? ` (${total})` : ""}, and the holds are released`,
+      });
+      lines.push({ kind: "money", text: "The providers are NOT paid for those calls" });
+      lines.push({ kind: "chain", text: "Each debt is checked again first; one whose voucher was used on chain, or that changed, is skipped" });
+      lines.push({ kind: "record", text: "It can't be undone" });
+      break;
+    }
     case "account.unblock": {
       const block = context.blocks.get(text(payload.blockId) ?? targetId);
       const who = block ? capitalFirst(blockSubject(block)) : "The account";
@@ -690,6 +732,22 @@ function describeLong(
       };
     }
 
+    case "buyer_debt.bulk_void": {
+      const { count, total } = debtVoidParts(payload);
+      const asset = text(payload.assetId);
+      return {
+        sentence: `Void ${debtsText(count)}${total ? ` worth ${total}` : ""}: the buyers are not charged, the providers are not paid for those calls, and the holds are released. It can't be undone.`,
+        target: { label: debtsText(count).charAt(0).toUpperCase() + debtsText(count).slice(1), href: "/operator/buyer-debts" },
+        fields: [
+          { label: "Debts", value: String(count) },
+          ...(total ? [{ label: "Total", value: total }] : []),
+          ...(asset ? [{ label: "Asset", value: asset }] : []),
+          // Every id, and who they belong to, is drawn under these fields (`DebtVoidDetails`).
+          ...commonFields(body),
+        ],
+      };
+    }
+
     case "slash.compensated": {
       const id = text(payload.proposalId) ?? targetId;
       const signature = text(body.signature);
@@ -773,6 +831,10 @@ export function approvedResultSentence(action: string, result: unknown, target?:
       return "Published. Providers and the catalogue see the new version now.";
     case "tool.current_version":
       return "Done. Agents that don't lock a version now get the new one.";
+    case "buyer_debt.bulk_void":
+      return typeof r.voidedCount === "number" && typeof r.requestedCount === "number"
+        ? `Approved. ${r.voidedCount} of ${debtsText(r.requestedCount)} voided; the per-debt results are below.`
+        : "Approved. The debts that were still open are voided.";
     case "arbiter.block":
       // "Below" only when the answer carried the call, which the screen then draws under this line.
       return typeof r.to === "string" && typeof r.data === "string"
@@ -882,6 +944,8 @@ export function approvalChanges(
       return [{ label: "Penalty", before: "Cancel requested", after: "Executed (recorded)" }];
     case "slash.repropose":
       return [{ label: "On chain", before: "Cancelled record", after: "Proposed again" }];
+    case "buyer_debt.bulk_void":
+      return [{ label: "Debts", before: "Owed by the buyers", after: "Void, nobody paid" }];
     default:
       return [];
   }

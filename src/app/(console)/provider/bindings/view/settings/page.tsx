@@ -34,6 +34,7 @@ import {
   type PriceChoice,
 } from "@/features/provider-binding/go-live";
 import { useProviderCatalogue } from "@/features/provider-binding/tool-name";
+import { minPaidPriceHint, priceFloorError } from "@/features/provider-binding/price-floor";
 import { liveFormOf, parseLiveForm, type LiveForm } from "@/features/provider-binding/wizard/live-stage";
 import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
@@ -90,6 +91,8 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
   const [authMode, setAuthMode] = React.useState<BindingAuthMode>(binding.authMode);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  /** The API's PROVIDER_BINDING_PRICE_BELOW_MINIMUM, on the price box until the price changes. */
+  const [priceError, setPriceError] = React.useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = React.useState(false);
   const [stakeOpen, setStakeOpen] = React.useState(false);
   const stake = useStakeStatus();
@@ -161,7 +164,15 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
       setAuthMode(saved.authMode);
       toast.success(saved.hasUnpublishedChanges ? "Saved. Publish the changes to make them live." : "Saved");
     } catch (caught) {
-      setError(caught instanceof ApiError ? plainApiError(caught) : "Your changes could not be saved. Try again.");
+      const belowMinimum = priceFloorError(caught, asset);
+      setPriceError(belowMinimum);
+      setError(
+        belowMinimum
+          ? "Not saved: the price is below the paid-call minimum."
+          : caught instanceof ApiError
+            ? plainApiError(caught)
+            : "Your changes could not be saved. Try again.",
+      );
       throw caught;
     } finally {
       setSaving(false);
@@ -212,13 +223,19 @@ function SettingsForm({ binding }: { binding: ToolBindingDetail }) {
               suffix="$ a call"
               value={form.price}
               disabled={readOnly}
-              onChange={(event) => set({ price: event.target.value })}
-              error={parsed.errors.price}
-              hint={
+              onChange={(event) => {
+                setPriceError(null);
+                set({ price: event.target.value });
+              }}
+              error={parsed.errors.price ?? priceError ?? undefined}
+              hint={[
+                minPaidPriceHint(asset),
                 effect.after
                   ? `At this price your paid tools need ${formatMoney(effect.after)} of stake; you have ${formatMoney(stake.staked)}.`
-                  : "A higher price needs more stake."
-              }
+                  : "A higher price needs more stake.",
+              ]
+                .filter(Boolean)
+                .join(" ")}
             />
           ) : null}
           {/* The binding-wide cap is offered in every mode, as main's free-tier screen did. */}
