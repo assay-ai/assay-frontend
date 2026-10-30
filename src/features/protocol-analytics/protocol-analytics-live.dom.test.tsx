@@ -43,7 +43,7 @@ function response(): ProtocolAnalyticsResponse {
   return {
     state: "OK",
     generatedAt: "2026-10-29T12:00:00Z",
-    cacheTtlMs: 2000,
+    cacheTtlMs: 300000,
     assets: [asset],
     asset,
     range: "30d",
@@ -84,6 +84,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   client?.clear();
+  vi.useRealTimers();
 });
 
 describe("protocol analytics live data", () => {
@@ -141,12 +142,34 @@ describe("protocol analytics live data", () => {
     await waitFor(() => expect(read).toHaveBeenLastCalledWith("7d", undefined));
   });
 
-  it("polls for new figures after three seconds while the page is visible", async () => {
+  it("reuses the five-minute client cache and polls after expiry", async () => {
+    vi.useFakeTimers();
+    show();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("0.10 USDG").length).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(299000);
+    expect(read).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1010);
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("omits empty UTC days while retaining zero-revenue days with paid activity", async () => {
+    const data = response();
+    const active = data.daily[0];
+    data.daily = [
+      { ...active, day: "2026-10-01", paidCalls: 0, payingAgents: 0 },
+      { ...active, day: "2026-10-27", revenue: "0" },
+      { ...active, day: "2026-10-28", paidCalls: 0, payingAgents: 0 },
+      active,
+    ];
+    read.mockResolvedValue(data);
     show();
     await screen.findAllByText("0.10 USDG");
-    await waitFor(
-      () => expect(read.mock.calls.length).toBeGreaterThanOrEqual(2),
-      { timeout: 4000 },
-    );
+    const chart = screen.getByRole("group", { name: "Revenue per day details" });
+    const labels = within(chart).getAllByRole("button").map((button) => button.getAttribute("aria-label"));
+    expect(labels).toEqual(["2026-10-27: 0 USDG", "2026-10-29: 0.1 USDG"]);
+    const adoption = screen.getByRole("group", { name: "Agents since launch details" });
+    expect(within(adoption).getAllByRole("button")).toHaveLength(2);
   });
 });
