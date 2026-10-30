@@ -196,7 +196,7 @@ export function ProtocolAnalytics() {
     asset
       ? new Decimal(value).div(new Decimal(10).pow(asset.decimals)).toString()
       : null;
-  const daily = data?.daily ?? [];
+  const daily = (data?.daily ?? []).filter((day) => day.paidCalls > 0);
   const metricField =
     metric === "Revenue"
       ? "revenue"
@@ -294,7 +294,7 @@ export function ProtocolAnalytics() {
             .toISOString()
             .replace("T", " ")
             .slice(0, 19)}{" "}
-          UTC · Refreshes every 3 seconds while visible.
+          UTC · Refreshes every 5 minutes while visible.
         </p>
       ) : null}
 
@@ -327,7 +327,7 @@ export function ProtocolAnalytics() {
             <div className="flex flex-col gap-1">
               <PanelTitle>Daily activity</PanelTitle>
               <p className="text-body-13 text-03">
-                Funded calls by creation day, UTC. {rangeDescription}.
+                Funded calls by creation day, UTC. {rangeDescription}. Only days with funded paid calls are shown.
               </p>
             </div>
             <Segmented
@@ -401,7 +401,7 @@ export function ProtocolAnalytics() {
         <div className="grid gap-4 tablet:grid-cols-3">
           <ChartCard
             title="Agents paying each day"
-            description="Different payer wallets with a funded paid call that day."
+            description="Different payer wallets with a funded paid call that day. Days without funded paid calls are omitted."
           >
             <AnalyticsChart
               compact
