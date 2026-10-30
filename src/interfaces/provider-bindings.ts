@@ -301,6 +301,13 @@ export interface CatalogueSettlementAsset {
   assetId: string;
   symbol: string;
   decimals: number;
+  /**
+   * The paid-call minimum for this provider's bindings, atomic units of this
+   * asset: a PAID or FREEMIUM price below it is refused
+   * (`PROVIDER_BINDING_PRICE_BELOW_MINIMUM`). `'0'` when no minimum applies;
+   * absent from an older API.
+   */
+  minPaidPrice?: string;
 }
 
 /**

@@ -362,6 +362,7 @@ const ERRORS: Record<string, string> = {
   BINDING_CHAIN_STAKE_BELOW_MINIMUM: "There is not enough stake on this chain.",
   PUBLISH_CHECKS_FAILED: "The listing did not pass the checks before going live.",
   BINDING_PRICE_NOT_POSITIVE: "The price must be above zero.",
+  BINDING_PRICE_BELOW_MINIMUM: "The price is below the paid-call minimum. Raise it, or choose Free for no charge.",
   BINDING_FREE_LIMIT_TOO_LARGE: "The free allowance is too large.",
   CONNECTIVITY_CHECK_FAILED: "We could not reach your endpoint.",
   TERMS_VERSION_MISMATCH: "Accept the latest terms to continue.",
