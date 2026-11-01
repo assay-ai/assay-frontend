@@ -13,6 +13,7 @@ const CLASS_LABEL: Record<string, string> = {
   PAID_UNCOLLECTED: "Passed, never collected",
   PROVIDER_FORFEITED: "Forfeited by you",
   PAID_UNCREDITED: "Failed our checks",
+  REFUNDED_UPHELD: "Refunded to the buyer after an upheld report",
   FREE: "Free call",
   EXPLORATION: "Trial traffic",
   EXCLUDED: "Excluded from the SLA",
@@ -108,6 +109,10 @@ export function reasonLabel(reason: string): string {
   if (reason.startsWith(UNCOLLECTED_PREFIX)) {
     const rest = reason.slice(UNCOLLECTED_PREFIX.length).trim();
     return `Never collected: the buyer did not settle it in time (${debtCauseText(rest)}) — written off, but the buyer still owes it; you are paid if they settle`;
+  }
+  // An upheld buyer report's refund (BUG-R2-PRV-03): it passed our checks; it was not a lapsed debt.
+  if (reason.trim() === `${VOIDED_PREFIX}DISPUTE_UPHELD`) {
+    return "Refunded to the buyer after an upheld report — it passed our checks, but you are not paid for it";
   }
   if (reason.startsWith(VOIDED_PREFIX)) {
     return "The buyer's payment had lapsed, and the call then did not pass our checks — voided: not paid, and nobody owes it";

@@ -13,11 +13,20 @@ export interface NotCreditedReason {
   detail: string;
 }
 
+const UPHELD_REFUND: NotCreditedReason = {
+  title: "Refunded to the buyer after an upheld report",
+  detail:
+    "The call passed our checks, but the buyer reported it and Assay upheld the report, so the buyer got the payment back. No stake is taken for it.",
+};
+
 const REASONS: Record<string, NotCreditedReason> = {
   PAID_UNCREDITED: {
     title: "Failed our checks",
     detail: "Your API answered, but the result did not pass the tool's checks (a value out of range, a missing field, stale data). The buyer was not charged.",
   },
+  REFUNDED_UPHELD: UPHELD_REFUND,
+  // The same class under the backend's own word for it (`refundedByReport`).
+  REFUNDED_BY_REPORT: UPHELD_REFUND,
   SYSTEM_ERROR: {
     title: "Endpoint error (5xx or timeout)",
     detail: "It answered with a server error (5xx) or did not answer within your timeout.",
@@ -32,13 +41,88 @@ const REASONS: Record<string, NotCreditedReason> = {
   },
 };
 
-export function notCreditedReason(className: string): NotCreditedReason {
+/**
+ * `mayIncludeUpheld`: the failed-checks figure may still hold calls refunded
+ * after an upheld report (a server that does not list them apart, and no
+ * per-call file to tell them out), so its sentence does not claim that no
+ * buyer was charged.
+ */
+export function notCreditedReason(className: string, options: { mayIncludeUpheld?: boolean } = {}): NotCreditedReason {
+  if (className === "PAID_UNCREDITED" && options.mayIncludeUpheld) {
+    return {
+      title: "Failed our checks",
+      detail:
+        "Your API answered, but the result did not pass the tool's checks (a value out of range, a missing field, stale data). The buyer was not charged. A call refunded after an upheld buyer report may be counted here too.",
+    };
+  }
   return (
     REASONS[className] ?? {
       title: "Not credited",
       detail: "These calls did not settle to you.",
     }
   );
+}
+
+/** The classes a newer server sends for a call refunded after an upheld report. */
+const UPHELD_CLASSES: readonly string[] = ["REFUNDED_UPHELD", "REFUNDED_BY_REPORT"];
+
+/** The `reason` an upheld report's refund writes on the per-call row (`voided:DISPUTE_UPHELD`). */
+export const UPHELD_REFUND_REASON = "voided:DISPUTE_UPHELD";
+
+/** Whether the server already lists upheld refunds apart from failed checks. */
+export function listsUpheldApart(breakdown: NotCreditedBreakdown): boolean {
+  return breakdown.reasons.some((reason) => UPHELD_CLASSES.includes(reason.className));
+}
+
+/** The per-call fields {@link splitUpheldRefunds} reads. */
+export interface UpheldRefundRow {
+  readonly classification: string;
+  readonly reason: string;
+  readonly toolId: string;
+  readonly providerAmount: string;
+  readonly asset: string;
+}
+
+/**
+ * Today's data (BUG-R2-PRV-03): a server without `REFUNDED_UPHELD` counts a
+ * call refunded after an upheld report under failed checks. When the
+ * per-call rows are at hand, those calls (`PAID_UNCREDITED`, reason
+ * `voided:DISPUTE_UPHELD`) move to their own reason; the summary is
+ * unchanged. Rows in another asset than the figure are left out. Pure.
+ */
+export function splitUpheldRefunds(
+  breakdown: NotCreditedBreakdown,
+  rows: readonly UpheldRefundRow[] | null | undefined,
+): NotCreditedBreakdown {
+  if (!rows || listsUpheldApart(breakdown)) return breakdown;
+  const failed = breakdown.reasons.find((reason) => reason.className === "PAID_UNCREDITED");
+  if (!failed) return breakdown;
+  const asset = failed.amount?.asset ?? null;
+  const upheld = rows.filter(
+    (row) => row.classification === "PAID_UNCREDITED" && row.reason === UPHELD_REFUND_REASON && (!asset || row.asset === asset),
+  );
+  if (upheld.length === 0) return breakdown;
+  const calls = Math.min(upheld.length, failed.calls);
+  const moved = upheld.reduce((sum, row) => sum + BigInt(row.providerAmount || "0"), 0n);
+  const failedAtomic = BigInt(failed.amount?.amount || "0");
+  const movedAtomic = moved > failedAtomic ? failedAtomic : moved;
+  const refunded: NotCreditedReasonRow = {
+    className: "REFUNDED_UPHELD",
+    calls,
+    amount: failed.amount ? { ...failed.amount, amount: movedAtomic.toString() } : null,
+    toolIds: [...new Set(upheld.map((row) => row.toolId))],
+  };
+  const rest: NotCreditedReasonRow = {
+    ...failed,
+    calls: failed.calls - calls,
+    amount: failed.amount ? { ...failed.amount, amount: (failedAtomic - movedAtomic).toString() } : null,
+  };
+  const reasons = breakdown.reasons
+    .flatMap((reason) => (reason === failed ? (rest.calls > 0 ? [rest, refunded] : [refunded]) : [reason]))
+    .map((reason, index) => ({ reason, index }))
+    .sort((a, b) => b.reason.calls - a.reason.calls || a.index - b.index)
+    .map(({ reason }) => reason);
+  return { ...breakdown, reasons };
 }
 
 /**

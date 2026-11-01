@@ -7,12 +7,14 @@ import type { Money, NotCreditedClass, ProviderEarningsFigures, ProviderEarnings
 
 import {
   callCount,
+  listsUpheldApart,
   notCreditedBreakdown,
   notCreditedReason,
   partsThatAddUp,
   providerMoney,
   settlementShown,
   shownReasonAmounts,
+  splitUpheldRefunds,
   toolsLine,
   unpaidCallAmount,
 } from "./not-credited";
@@ -54,7 +56,7 @@ describe("notCreditedReason", () => {
 
 describe("notCreditedReason and the outcome list", () => {
   it("names each class the same way in the reasons and in the Explain drawer's outcome list", () => {
-    for (const name of ["PAID_UNCREDITED", "SYSTEM_ERROR", "REQUEST_ERROR"]) {
+    for (const name of ["PAID_UNCREDITED", "SYSTEM_ERROR", "REQUEST_ERROR", "REFUNDED_UPHELD"]) {
       expect(notCreditedReason(name).title).toBe(classLabel(name));
     }
   });
@@ -208,5 +210,53 @@ describe("settlementShown", () => {
 
   it("is all null when there is nothing to show", () => {
     expect(settlementShown(null, null)).toEqual({ net: null, fee: null, gross: null });
+  });
+});
+
+describe("upheld-report refunds (BUG-R2-PRV-03)", () => {
+  const ASSET = "eip155:46630/erc20:0x1";
+  const m = (amount: string): Money => ({ amount, asset: ASSET, decimals: 6 });
+  const failed = { className: "PAID_UNCREDITED" as const, calls: 3, amount: m("27000"), toolIds: ["t1", "t2"] };
+  const errors = { className: "SYSTEM_ERROR" as const, calls: 2, amount: m("18000"), toolIds: ["t1"] };
+  const breakdown = { calls: 5, amount: m("45000"), reasons: [failed, errors] };
+  const row = (reason: string, toolId = "t2", asset = ASSET) => ({
+    classification: "PAID_UNCREDITED",
+    reason,
+    toolId,
+    providerAmount: "9000",
+    asset,
+  });
+
+  it("names a refunded call as a refund after an upheld report, not a failed check", () => {
+    const reason = notCreditedReason("REFUNDED_UPHELD");
+    expect(reason.title).toBe("Refunded to the buyer after an upheld report");
+    expect(reason.detail).toContain("passed our checks");
+    expect(reason.detail).not.toContain("was not charged");
+  });
+
+  it("a newer server's own class stands as it came", () => {
+    const withClass = { ...breakdown, reasons: [failed, { ...errors, className: "REFUNDED_UPHELD" as const }] };
+    expect(listsUpheldApart(withClass)).toBe(true);
+    expect(splitUpheldRefunds(withClass, [row("voided:DISPUTE_UPHELD")])).toBe(withClass);
+  });
+
+  it("today's data: moves the per-call rows marked voided:DISPUTE_UPHELD out of failed checks, summary unchanged", () => {
+    const split = splitUpheldRefunds(breakdown, [row("voided:DISPUTE_UPHELD"), row("voided:FAIL"), row("voided:DISPUTE_UPHELD", "t1", "eip155:1/erc20:0x2")]);
+    expect(split.calls).toBe(5);
+    expect(split.amount).toEqual(m("45000"));
+    expect(split.reasons.map((r) => [r.className, r.calls, r.amount?.amount])).toEqual([
+      ["PAID_UNCREDITED", 2, "18000"],
+      ["SYSTEM_ERROR", 2, "18000"],
+      ["REFUNDED_UPHELD", 1, "9000"],
+    ]);
+    expect(split.reasons[2]!.toolIds).toEqual(["t2"]);
+    // No rows at hand, or none upheld: nothing moves.
+    expect(splitUpheldRefunds(breakdown, null)).toBe(breakdown);
+    expect(splitUpheldRefunds(breakdown, [row("voided:FAIL")])).toBe(breakdown);
+  });
+
+  it("the failed-checks sentence does not promise the buyer was not charged while it may hold refunds", () => {
+    expect(notCreditedReason("PAID_UNCREDITED", { mayIncludeUpheld: true }).detail).toContain("upheld buyer report may be counted here");
+    expect(notCreditedReason("PAID_UNCREDITED").detail).toMatch(/The buyer was not charged\.$/);
   });
 });

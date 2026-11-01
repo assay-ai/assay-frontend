@@ -33,7 +33,13 @@ export interface ProviderEarningsQuery extends ProviderReportWindow {
 }
 
 /** The per-call export classes a provider reads as "not credited". */
-export type NotCreditedClass = "PAID_UNCREDITED" | "SYSTEM_ERROR" | "REQUEST_ERROR";
+/**
+ * `REFUNDED_UPHELD`: a call that passed, refunded to the buyer after an upheld
+ * report (BUG-R2-PRV-03). Sent apart only by a newer server; an older one
+ * counts it under `PAID_UNCREDITED` (its per-call row: reason
+ * `voided:DISPUTE_UPHELD`).
+ */
+export type NotCreditedClass = "PAID_UNCREDITED" | "SYSTEM_ERROR" | "REQUEST_ERROR" | "REFUNDED_UPHELD";
 
 /** One not-credited reason: its calls and their worth. */
 export interface NotCreditedClassFigure {

@@ -26,11 +26,13 @@ import { isTransactionRef } from "@/features/provider-earnings/payments";
 import { callsOfClass, earningsSplit, heldInWindowLine, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
 import {
   callCount,
+  listsUpheldApart,
   notCreditedBreakdown,
   notCreditedReason,
   providerMoney,
   settlementShown,
   shownReasonAmounts,
+  splitUpheldRefunds,
   toolsLine,
   unpaidCallAmount,
 } from "@/features/provider-earnings/not-credited";
@@ -110,12 +112,10 @@ export default function ProviderMoneyPage() {
     reasons. Overdue and forfeited calls passed the check: they are explained
     under "Passed, but not paid", not here.
   */
-  const notCredited = React.useMemo(
+  const reported = React.useMemo(
     () => notCreditedBreakdown(earnings.data?.totals, earnings.data?.groups),
     [earnings.data],
   );
-  /* Each reason card's amount, adjusted at the shown places so the cards add up to their total on screen. */
-  const reasonAmounts = React.useMemo(() => shownReasonAmounts(notCredited.reasons), [notCredited.reasons]);
   const passedUnpaidCalls = (earnings.data?.totals.uncollectedCalls ?? 0) + (earnings.data?.totals.forfeitedCalls ?? 0);
   /* The wallet figure and the fee come rounded once, at the shown places: the same figures Home and the Explain drawer's Gross − fee = Net show. */
   const split = earningsSplit(earnings.data?.totals);
@@ -149,6 +149,18 @@ export default function ProviderMoneyPage() {
   const calls = useCallsExport(month, { enabled: callsWanted || (explainOpen && ledger.isError) });
   const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
   const classes = React.useMemo(() => foldClasses(rows), [rows]);
+  /*
+    BUG-R2-PRV-03: a server that does not list upheld-report refunds apart
+    counts them as failed checks; once the per-call rows are here they move to
+    their own reason. Until then the failed-checks sentence says it may hold them.
+  */
+  const notCredited = React.useMemo(
+    () => splitUpheldRefunds(reported, calls.data ? rows : null),
+    [reported, calls.data, rows],
+  );
+  const mayIncludeUpheld = !listsUpheldApart(reported) && !(calls.data && !calls.meta?.truncated);
+  /* Each reason card's amount, adjusted at the shown places so the cards add up to their total on screen. */
+  const reasonAmounts = React.useMemo(() => shownReasonAmounts(notCredited.reasons), [notCredited.reasons]);
   const observedTake = React.useMemo(() => observedTakeRate(rows), [rows]);
   const recon = React.useMemo(
     () => (ledger.data ? fromLedger(ledger.data) : ledger.isError && calls.data ? fromExport(classes, observedTake) : null),
@@ -365,7 +377,7 @@ export default function ProviderMoneyPage() {
             <PageState kind="loading" rows={2} bare label="Loading calls" />
           ) : notCredited.reasons.length > 0 ? (
             notCredited.reasons.map((bucket, index) => {
-              const reason = notCreditedReason(bucket.className);
+              const reason = notCreditedReason(bucket.className, { mayIncludeUpheld });
               const tools = toolsLine(bucket.toolIds, names.toolName, names.isPending, names.loaded);
               return (
                 <div key={bucket.className} className="flex w-full flex-col gap-1 rounded-lg border border-01 bg-02 p-3.5 tablet:flex-row tablet:items-start tablet:gap-4">
