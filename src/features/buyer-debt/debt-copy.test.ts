@@ -522,4 +522,13 @@ describe("Funding's held line with the on-chain dispute hold (BUG-R2-BUY-01)", (
     );
     expect(onChainHeldText("$0.09", 9, null)).not.toMatch(/minutes/);
   });
+
+  // REVIEW L-8: past its end, "after <a time already gone>" reads odd; the next payout run pays it.
+  it("once the hold end has passed, says the hold ended and the next payout run pays it", () => {
+    const now = Date.parse("2026-11-01T15:20:00.000Z");
+    expect(onChainHeldText("$0.06", 6, "2026-11-01T15:00:00.000Z", { now })).toBe(
+      "$0.06 in the dispute hold on chain for 6 calls (hold ended; paid to the provider in the next payout run unless reported)",
+    );
+    expect(onChainHeldText("$0.06", 6, "2026-11-01T15:20:00.000Z", { now })).toMatch(/hold ended/);
+  });
 });

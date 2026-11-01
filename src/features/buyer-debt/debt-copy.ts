@@ -508,7 +508,8 @@ export function escrowHeldText(
  * unless reported)". It is not in the escrow's balance or held figure, so it
  * is said apart from them. The time is the server's `onChainHoldEndsAt` (the
  * last of those calls to leave the hold), in UTC; without it, the 1-hour hold
- * is named instead (never "within minutes").
+ * is named instead (never "within minutes"). Once that time has passed, the
+ * line says the hold ended and the next payout run pays it.
  */
 export function onChainHeldText(
   amount: string,
@@ -517,6 +518,11 @@ export function onChainHeldText(
   { now = Date.now() }: { now?: number } = {},
 ): string {
   const forCalls = calls && calls > 0 ? ` for ${callsText(calls)}` : "";
+  const ends = endsAt ? Date.parse(endsAt) : Number.NaN;
+  // Past its end, the hold waits for the payout run: "after <a time already gone>" reads odd (REVIEW L-8).
+  if (Number.isFinite(ends) && ends <= now) {
+    return `${amount} in the dispute hold on chain${forCalls} (hold ended; paid to the provider in the next payout run unless reported)`;
+  }
   const when = endsAt ? `after ${formatDateTime(endsAt, { now, midSentence: true })}` : "after the 1-hour dispute hold";
   return `${amount} in the dispute hold on chain${forCalls} (paid to the provider ${when} unless reported)`;
 }

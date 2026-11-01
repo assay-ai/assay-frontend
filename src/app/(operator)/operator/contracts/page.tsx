@@ -95,7 +95,8 @@ import { cn } from "@/utils";
  * and decoded again before it is offered (`ContractCallAction`).
  *
  * The owner's doors (replacing the admin, upgrading the contracts) are shown
- * read-only: the owner is a cold key and those stay in the runbook. *
+ * read-only: the owner is a cold key and those stay in the runbook.
+ *
  * One card is not the chain's: "Payment channels" (BUG-R2-OPS-01) runs the
  * platform's channel overrides through Assay's backend, for `SRE` and `TRE`,
  * who see only that card here.

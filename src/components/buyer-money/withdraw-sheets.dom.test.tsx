@@ -170,11 +170,12 @@ describe("Withdraw: the pause is stated and acknowledged", () => {
   // BUG-R2-BUY-01: money already in the on-chain dispute hold is not in the escrow, so never part of a withdrawal.
   it("with calls in the on-chain dispute hold: says so apart, and never counts it as held in the escrow", () => {
     money.openHolds = "20000";
-    money.onChain = { amount: "90000", calls: 9, endsAt: "2026-11-01T15:00:00.000Z" };
+    // Ends in the future, so the line names the time (a past end says the hold ended).
+    money.onChain = { amount: "90000", calls: 9, endsAt: new Date(Date.now() + 2 * 3_600_000).toISOString() };
     open();
     enter("5");
     expect(screen.getByTestId("withdraw-on-chain-held").textContent).toMatch(
-      /^\$0\.09 in the dispute hold on chain for 9 calls \(paid to the provider after .*15:00 UTC unless reported\)\. It already left your escrow, so it is not part of a withdrawal\.$/,
+      /^\$0\.09 in the dispute hold on chain for 9 calls \(paid to the provider after .*\d\d:\d\d UTC unless reported\)\. It already left your escrow, so it is not part of a withdrawal\.$/,
     );
     expect(screen.getByTestId("withdraw-held-receive").textContent).toMatch(/^\$0\.02 is held by calls/);
   });
