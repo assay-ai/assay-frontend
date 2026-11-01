@@ -12,7 +12,7 @@ import type {
   ListOperatorCasesQuery, OperatorCaseListRow,
   RecordCompensationBody,
   ManualCaseActionBody, ManualCaseActionResult, OperatorProviderSettlement,
-  DrainChannelsBody, DrainChannelsResult, ClaimUnpaidBody, ClaimUnpaidResult,
+  DrainChannelsBody, DrainChannelsResult, ClaimUnpaidBody, ClaimUnpaidResult, ClearReconcileBody, ClearReconcileResult,
 } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 
@@ -79,6 +79,11 @@ export function drainChannels(body: DrainChannelsBody): Promise<DrainChannelsRes
 /** `POST /operator/channels/claim-unpaid` — override `M-3`, `SRE` or `TRE`, one operator. */
 export function claimUnpaidChannelPayouts(body: ClaimUnpaidBody): Promise<ClaimUnpaidResult> {
   return operatorApi.post<ClaimUnpaidResult>("/operator/channels/claim-unpaid", body);
+}
+
+/** `POST /operator/channels/clear-reconcile` — override `M-4`, `SRE` or `TRE`, one operator. */
+export function clearChannelReconcileStop(body: ClearReconcileBody): Promise<ClearReconcileResult> {
+  return operatorApi.post<ClearReconcileResult>("/operator/channels/clear-reconcile", body);
 }
 
 /** `GET /operator/dashboard/data.json` — any operator; the console reads its reconciliation rows. */

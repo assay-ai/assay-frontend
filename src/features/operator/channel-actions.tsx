@@ -10,12 +10,14 @@ import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHe
 import type {
   ClaimUnpaidBody,
   ClaimUnpaidResult,
+  ClearReconcileBody,
+  ClearReconcileResult,
   DrainChannelsBody,
   DrainChannelsResult,
   OperatorRole,
 } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
-import { claimUnpaidChannelPayouts, drainChannels } from "@/services/operator.service";
+import { claimUnpaidChannelPayouts, clearChannelReconcileStop, drainChannels } from "@/services/operator.service";
 import { toast } from "@/utils/toast";
 
 import { operatorErrorSentence } from "./operator-errors";
@@ -23,14 +25,20 @@ import { SHORT_NOTE_MIN_LENGTH } from "./reason-codes";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "./sheet-footer";
 
 /**
- * The two payment-channel overrides (round-2 W2): `M-2` drain (settle every
- * pending channel now, one asset or all) and `M-3` claim unpaid (claim an
- * address's payouts the token refused, once the issuer's block has lifted).
- * Both are `SRE` or `TRE`, one operator, recorded in the override register,
- * and idempotent; nothing is sent from the API, the scheduler acts on its
- * next tick.
+ * The payment-channel overrides (round-2 W2): `M-2` drain (settle every
+ * pending channel now, one asset or all), `M-3` claim unpaid (claim an
+ * address's payouts the token refused, once the issuer's block has lifted)
+ * and `M-4` clear a reconciler stop on one channel. All are `SRE` or `TRE`,
+ * one operator, recorded in the override register; nothing is sent from the
+ * API, the scheduler acts on its next tick.
  */
-export type ChannelActionKind = "drain" | "claim";
+export type ChannelActionKind = "drain" | "claim" | "clear";
+
+/**
+ * Where the buttons sit: under one provider's payout runs (a penalty case),
+ * or on the platform's Contracts page. Only the drain's wording changes.
+ */
+export type ChannelActionScope = "provider" | "platform";
 
 const CHANNEL_ROLES: readonly OperatorRole[] = ["SRE", "TRE"];
 
@@ -48,6 +56,10 @@ const REASONS: Record<ChannelActionKind, readonly ReasonOption[]> = {
     { value: "ISSUER_FREEZE_LIFTED", label: "Issuer block lifted", hint: "The token issuer no longer blocks the payout address." },
     { value: "OTHER", label: "Other", hint: "Say why in the note." },
   ],
+  clear: [
+    { value: "INVESTIGATED", label: "Explained", hint: "The settlement the database missed is found, and the chain agrees with it again." },
+    { value: "OTHER", label: "Other", hint: "Say why in the note." },
+  ],
 };
 
 export interface ChannelActionCopy {
@@ -58,7 +70,34 @@ export interface ChannelActionCopy {
   submit: string;
 }
 
-export function channelActionCopy(kind: ChannelActionKind): ChannelActionCopy {
+export function channelActionCopy(kind: ChannelActionKind, scope: ChannelActionScope = "provider"): ChannelActionCopy {
+  if (kind === "drain" && scope === "platform") {
+    return {
+      title: "Settle every provider's payment channels now",
+      button: "Settle all providers' channels",
+      lines: [
+        "Every payment channel of every provider with money to settle gets an urgent settle round on the scheduler's next tick, past every rate limit. For an incident: before a pause or an upgrade.",
+        "The asset narrows it to one asset (still every provider on it). Leave it empty for every asset. Running it again changes nothing more.",
+        "Recorded in the override register (M-2) under your name.",
+      ],
+      confirm: "I understand every provider's pending channels (of this asset, or of every asset) are settled on chain on the next tick.",
+      submit: "Settle channels",
+    };
+  }
+  if (kind === "clear") {
+    return {
+      title: "Clear a reconciler stop",
+      button: "Clear reconcile stop",
+      lines: [
+        "The reconciler stopped this channel because the chain and the database disagreed on what it settled.",
+        "Clear it only once you found the settlement the database missed. The backend reads the chain again first and refuses while they still disagree.",
+        "The channel goes back to rotated, not open: it takes no new voucher, and what was already signed on it settles again.",
+        "Recorded in the override register (M-4) under your name.",
+      ],
+      confirm: "I found why the chain and the database disagreed, and they agree again.",
+      submit: "Clear the stop",
+    };
+  }
   if (kind === "drain") {
     return {
       title: "Settle every provider's payment channels now",
@@ -89,6 +128,7 @@ export function channelActionCopy(kind: ChannelActionKind): ChannelActionCopy {
 export interface ChannelActionInput {
   assetId: string;
   address: string;
+  channelRowId: string;
   reasonCode: string;
   note: string;
   ticketRef: string;
@@ -97,11 +137,18 @@ export interface ChannelActionInput {
 export interface ChannelActionErrors {
   assetId?: string;
   address?: string;
+  channelRowId?: string;
   reason?: string;
   note?: string;
 }
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Whether this is a channel row id the clear can be sent for (a UUID). Pure. */
+export function isChannelRowId(value: string): boolean {
+  return UUID.test(value.trim());
+}
 
 /** The form's checks, before anything is sent. Empty when it may be sent. Pure. */
 export function channelActionErrors(kind: ChannelActionKind, input: ChannelActionInput): ChannelActionErrors {
@@ -110,6 +157,7 @@ export function channelActionErrors(kind: ChannelActionKind, input: ChannelActio
   if (kind === "claim" && !asset) errors.assetId = "Name the asset (CAIP-19).";
   if (asset.length > 256) errors.assetId = "The asset id is too long.";
   if (kind === "claim" && !ADDRESS.test(input.address.trim())) errors.address = "Enter the payout address: 0x and 40 hex characters.";
+  if (kind === "clear" && !isChannelRowId(input.channelRowId)) errors.channelRowId = "Enter the channel's row id (a UUID).";
   if (!input.reasonCode) errors.reason = "Pick a reason.";
   if (input.note.trim().length < SHORT_NOTE_MIN_LENGTH) errors.note = `Write at least ${SHORT_NOTE_MIN_LENGTH} characters: why, and what you checked.`;
   return errors;
@@ -138,11 +186,24 @@ export function claimBody(input: ChannelActionInput): ClaimUnpaidBody {
   };
 }
 
+export function clearBody(input: ChannelActionInput): ClearReconcileBody {
+  const ticket = input.ticketRef.trim();
+  return {
+    channelRowId: input.channelRowId.trim(),
+    reasonCode: input.reasonCode,
+    note: input.note.trim(),
+    ...(ticket ? { ticketRef: ticket } : {}),
+  };
+}
+
 /** What the toast says once the backend took it. Pure. */
 export function channelActionDone(
   kind: ChannelActionKind,
-  result: DrainChannelsResult | ClaimUnpaidResult,
+  result: DrainChannelsResult | ClaimUnpaidResult | ClearReconcileResult,
 ): string {
+  if (kind === "clear") {
+    return "The stop is cleared. The channel is rotated: it takes no new voucher, and what was signed on it settles again.";
+  }
   if (kind === "drain") {
     const { channels } = result as DrainChannelsResult;
     return channels === 0
@@ -153,6 +214,15 @@ export function channelActionDone(
   return payouts === 0
     ? "Nothing to claim for this address: no unpaid payout is recorded."
     : `${payouts} unpaid ${payouts === 1 ? "payout is" : "payouts are"} claimed on the scheduler's next tick.`;
+}
+
+/** The refusal in words; a refused clear says why (the backend's detail). Pure. */
+export function channelActionErrorSentence(error: unknown): string {
+  if (error instanceof ApiError && error.code === "OPERATOR_CHANNEL_CLEAR_REFUSED") {
+    const detail = typeof error.context?.detail === "string" ? error.context.detail : null;
+    return detail ? `The stop was not cleared: ${detail}.` : "The stop was not cleared. Nothing changed.";
+  }
+  return operatorErrorSentence(error);
 }
 
 /**
@@ -191,23 +261,28 @@ export function ChannelActions({
   );
 }
 
-function ChannelActionSheet({
+export function ChannelActionSheet({
   kind,
+  scope = "provider",
   assetId,
   payoutAddress,
+  channelRowId = "",
   open,
   onOpenChange,
 }: {
   kind: ChannelActionKind;
+  scope?: ChannelActionScope;
   assetId: string | null;
   payoutAddress: string | null;
+  channelRowId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  const copy = channelActionCopy(kind);
+  const copy = channelActionCopy(kind, scope);
   const [input, setInput] = React.useState<ChannelActionInput>({
     assetId: assetId ?? "",
     address: payoutAddress ?? "",
+    channelRowId,
     reasonCode: REASONS[kind][0]!.value,
     note: "",
     ticketRef: "",
@@ -229,11 +304,16 @@ function ChannelActionSheet({
     setBusy(true);
     setFailure(null);
     try {
-      const result = kind === "drain" ? await drainChannels(drainBody(input)) : await claimUnpaidChannelPayouts(claimBody(input));
+      const result =
+        kind === "drain"
+          ? await drainChannels(drainBody(input))
+          : kind === "claim"
+            ? await claimUnpaidChannelPayouts(claimBody(input))
+            : await clearChannelReconcileStop(clearBody(input));
       toast.success(copy.title, { description: channelActionDone(kind, result) });
       onOpenChange(false);
     } catch (error) {
-      setFailure({ sentence: operatorErrorSentence(error), code: error instanceof ApiError ? error.code : null });
+      setFailure({ sentence: channelActionErrorSentence(error), code: error instanceof ApiError ? error.code : null });
     } finally {
       sending.current = false;
       setBusy(false);
@@ -253,15 +333,27 @@ function ChannelActionSheet({
               <li key={line}>{line}</li>
             ))}
           </ul>
-          <Field
-            label={kind === "drain" ? "Asset (CAIP-19, empty for every asset)" : "Asset (CAIP-19)"}
-            value={input.assetId}
-            onChange={(event) => set("assetId")(event.target.value)}
-            placeholder="eip155:4663/erc20:0x…"
-            maxLength={256}
-            error={errors.assetId}
-            className="font-mono text-mono-xs"
-          />
+          {kind === "clear" ? (
+            <Field
+              label="Channel row id"
+              value={input.channelRowId}
+              onChange={(event) => set("channelRowId")(event.target.value)}
+              placeholder="00000000-0000-0000-0000-000000000000"
+              maxLength={36}
+              error={errors.channelRowId}
+              className="font-mono text-mono-xs"
+            />
+          ) : (
+            <Field
+              label={kind === "drain" ? "Asset (CAIP-19, empty for every asset)" : "Asset (CAIP-19)"}
+              value={input.assetId}
+              onChange={(event) => set("assetId")(event.target.value)}
+              placeholder="eip155:4663/erc20:0x…"
+              maxLength={256}
+              error={errors.assetId}
+              className="font-mono text-mono-xs"
+            />
+          )}
           {kind === "claim" ? (
             <Field
               label="Payout address"

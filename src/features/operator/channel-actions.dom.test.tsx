@@ -31,7 +31,7 @@ afterEach(() => {
 const ASSET = "eip155:4663/erc20:0x1111111111111111111111111111111111111111";
 const ADDRESS = "0xAbCdEf0123456789aBcDeF0123456789AbCdEf01";
 const NOTE = "Issuer confirmed the freeze lifted, ticket OPS-77.";
-const input = { assetId: ASSET, address: ADDRESS, reasonCode: "OTHER", note: NOTE, ticketRef: "" };
+const input = { assetId: ASSET, address: ADDRESS, channelRowId: "", reasonCode: "OTHER", note: NOTE, ticketRef: "" };
 
 describe("channel overrides: rules (round-2 M-2, M-3)", () => {
   it("are for SRE and TRE only", () => {

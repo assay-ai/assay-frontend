@@ -786,3 +786,23 @@ export interface ClaimUnpaidResult {
   /** Unpaid payouts marked for the claim. */
   payouts: number;
 }
+
+/**
+ * `POST /operator/channels/clear-reconcile` — override `M-4`, `SRE` or `TRE`,
+ * one operator, recorded: clear the reconciler's stop (DESYNC/RECONCILE) on
+ * one channel once the chain agrees with the database again. The lane goes
+ * back to ROTATED (it takes no new voucher; what was signed settles again).
+ */
+export interface ClearReconcileBody {
+  /** The `voucher_channels` row id (a UUID). */
+  channelRowId: string;
+  reasonCode: string;
+  /** At least 20 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+export interface ClearReconcileResult {
+  channelRowId: string;
+  status: "ROTATED";
+}

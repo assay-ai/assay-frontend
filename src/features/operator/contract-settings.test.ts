@@ -229,8 +229,10 @@ describe("the admin's calls", () => {
 });
 
 describe("the Contracts nav item", () => {
-  it("shows only to Admin", () => {
+  it("shows to Admin, and to SRE and TRE for the channel overrides", () => {
     expect(operatorNavFor(["OPS_ADMIN"]).map((item) => item.id)).toContain("contracts");
+    expect(operatorNavFor(["SRE"]).map((item) => item.id)).toContain("contracts");
+    expect(operatorNavFor(["TRE"]).map((item) => item.id)).toContain("contracts");
     expect(operatorNavFor(["ADJL"]).map((item) => item.id)).not.toContain("contracts");
   });
 });

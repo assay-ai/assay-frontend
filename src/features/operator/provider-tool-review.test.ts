@@ -46,12 +46,13 @@ describe("operator navigation with provider tools and call disputes", () => {
     expect(operatorTitleFor("/operator/disputes/view")).toBe("Call dispute");
   });
 
-  it("every demo preset and every single role fits the bar, Contracts for Admin only", () => {
+  it("every demo preset and every single role fits the bar, Contracts for Admin, SRE and TRE", () => {
     const presets: OperatorRole[][] = [["ADJL", "POL"], ["SRE", "SUP"], ["OPS_ADMIN"], ["ADJ"], ["ADJL", "TRE", "POLA"]];
     for (const roles of [...presets, ...ALL.map((r) => [r])]) {
       const items = operatorNavFor(roles);
       expect(items.length).toBeLessThanOrEqual(8);
-      expect(items.some((i) => i.id === "contracts")).toBe(roles.includes("OPS_ADMIN"));
+      // SRE and TRE find the platform's channel overrides there (BUG-R2-OPS-01).
+      expect(items.some((i) => i.id === "contracts")).toBe(roles.some((r) => r === "OPS_ADMIN" || r === "SRE" || r === "TRE"));
     }
     expect(operatorNavFor(["ADJL", "POL"]).map((i) => i.id)).toEqual(["home", "penalties", "blocks", "arbiter", "tools", "team", "activity"]);
     expect(operatorNavFor(["ADJL", "POL", "OPS_ADMIN"])).toHaveLength(8);

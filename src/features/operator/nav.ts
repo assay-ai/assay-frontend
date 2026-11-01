@@ -1,5 +1,6 @@
 import type { OperatorRole } from "@/interfaces/operator";
 
+import { mayRunChannelActions } from "./channel-actions";
 import { seesTools, toolsHomeFor } from "./provider-tool-review";
 import { capabilitiesFor } from "./roles";
 
@@ -19,7 +20,7 @@ import { capabilitiesFor } from "./roles";
  *                                        reviews, promotions and takedowns (tabs); opens on
  *                                        the first tab this operator can use
  *   Team       /operator/operators
- *   Contracts  /operator/contracts       the contracts' admin settings, only for Admin
+ *   Contracts  /operator/contracts       the contracts' admin settings, only for Admin; channel overrides for SRE/TRE
  *   Activity   /operator/activity        the override register, as sentences
  */
 /** Eight items at most: the phone tab bar holds eight at 390px (48px each). */
@@ -48,13 +49,14 @@ export const OPERATOR_NAV_ITEMS: readonly OperatorNavItem[] = Object.freeze([
 
 /**
  * The items this operator sees. Arbiter is left out for a role with nothing to
- * do there; Contracts is for Admin only (it is the admin key's page).
+ * do there; Contracts is the admin key's page, and also where `SRE` and `TRE`
+ * find the platform's payment-channel overrides (BUG-R2-OPS-01).
  */
 export function operatorNavFor(roles: readonly OperatorRole[]): OperatorNavItem[] {
   const caps = capabilitiesFor(roles);
   return OPERATOR_NAV_ITEMS.filter((item) => {
     if (item.id === "arbiter") return caps.rule || caps.blockOnChain;
-    if (item.id === "contracts") return caps.manageOperators;
+    if (item.id === "contracts") return caps.manageOperators || mayRunChannelActions(roles);
     // Contracts (Policy roles), provider tool reviews (ADJ, ADJL, POL) and takedowns (ADJ, ADJL, SRE).
     if (item.id === "tools") return seesTools(roles);
     return true;
