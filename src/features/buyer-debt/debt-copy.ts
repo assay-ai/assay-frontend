@@ -549,6 +549,21 @@ export function heldSegmentLabel(
 }
 
 /**
+ * What holds the in-flight (not owed) part, by stage: "1 call passed, being
+ * paid to the provider after the dispute hold (…)". The Withdraw sheet's two
+ * held lines (the amount's own line and the "not part of this request" note)
+ * both use it, so Custom and Use all say the same thing.
+ */
+export function withdrawHeldBy(
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+  payingIntentIds: ReadonlySet<string> | null = null,
+): string {
+  const split = heldSplit(openHoldIntentIds, owedIntentIds, payingIntentIds);
+  return inFlightPhrase(split, { counted: split.inFlight > 0 });
+}
+
+/**
  * The Withdraw sheet's line about the held amount, and whether any of it is
  * buyer debt (the sheet then offers to settle). A debt's price does not come
  * back in minutes: it stays held until the payment is collected, so the line
@@ -562,7 +577,7 @@ export function withdrawHeldText(
 ): { text: string; owed: number } {
   const split = heldSplit(openHoldIntentIds, owedIntentIds, payingIntentIds);
   const { owed, inFlight } = split;
-  if (owed === 0) return { text: `${amount} is held by ${inFlightPhrase(split, { counted: inFlight > 0 })}.`, owed };
+  if (owed === 0) return { text: `${amount} is held by ${withdrawHeldBy(openHoldIntentIds, owedIntentIds, payingIntentIds)}.`, owed };
   const unpaid = `${owed} unpaid ${owed === 1 ? "call" : "calls"}`;
   const until = `held until ${owed === 1 ? "its payment is" : "their payments are"} collected`;
   const settle = `Settle ${owed === 1 ? "it" : "them"} to free that money.`;

@@ -19,6 +19,7 @@ const money = vi.hoisted(() => ({
   requested: "0",
   unsettled: null as { count: number; amount: string } | null,
   onChain: undefined as { amount: string; calls: number; endsAt: string } | undefined,
+  paying: null as Set<string> | null,
 }));
 
 vi.mock("./use-buyer-money", () => ({
@@ -52,7 +53,7 @@ vi.mock("./use-buyer-money", () => ({
   requireSigner: () => ({}),
 }));
 vi.mock("@/features/account-block/use-account-block", () => ({ useAccountReadOnly: () => false }));
-vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIntentIds: () => ["i1"], usePayingIntentIds: () => null }));
+vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIntentIds: () => ["i1"], usePayingIntentIds: () => money.paying }));
 vi.mock("@/features/buyer-money/use-escrow-unsettled", () => ({
   useEscrowUnsettled: () => ({
     data: money.unsettled
@@ -88,6 +89,7 @@ afterEach(() => {
   money.requested = "0";
   money.unsettled = null;
   money.onChain = undefined;
+  money.paying = null;
 });
 
 function open() {
@@ -149,7 +151,7 @@ describe("Withdraw: the pause is stated and acknowledged", () => {
     open();
     enter("5");
     expect(screen.getByTestId("withdraw-held-receive").textContent).toBe(
-      "$0.40 is held by calls being checked or being paid to the provider and is not part of this request. You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
+      "$0.40 is held by 1 call being checked (minutes) or passed and being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours) and is not part of this request. You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
     );
     // Said once: the older held line gives way to it.
     expect(screen.queryByTestId("withdraw-held-note")).toBeNull();
@@ -177,7 +179,27 @@ describe("Withdraw: the pause is stated and acknowledged", () => {
     expect(screen.getByTestId("withdraw-on-chain-held").textContent).toMatch(
       /^\$0\.09 in the dispute hold on chain for 9 calls \(paid to the provider after .*\d\d:\d\d UTC unless reported\)\. It already left your escrow, so it is not part of a withdrawal\.$/,
     );
-    expect(screen.getByTestId("withdraw-held-receive").textContent).toMatch(/^\$0\.02 is held by calls/);
+    expect(screen.getByTestId("withdraw-held-receive").textContent).toMatch(/^\$0\.02 is held by 1 call/);
+  });
+
+  // R2 buyer retest: Custom and Use all named the held part with different words.
+  it("says what holds the money in the same stage-aware words in Custom and in Use all", () => {
+    money.openHolds = "10000";
+    money.paying = new Set(["i1"]);
+    money.unsettled = { count: 1, amount: "10000" };
+    const phrase =
+      "$0.01 is held by 1 call passed, being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)";
+    open();
+    // Use all (preselected).
+    const useAll = document.body.textContent ?? "";
+    expect(useAll).toContain(phrase);
+    expect(useAll).not.toContain("being checked or being paid");
+    cleanup();
+    open();
+    enter("5");
+    const custom = document.body.textContent ?? "";
+    expect(custom).toContain(phrase);
+    expect(custom).not.toContain("being checked or being paid");
   });
 
   it("on an older server (no on-chain fields): no on-chain line", () => {

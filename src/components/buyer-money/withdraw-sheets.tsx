@@ -11,7 +11,7 @@ import { PageState } from "@/components/patterns/page-state";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { Button } from "@/components/ui/button";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { onChainHeldText, withdrawAllHeldReason, withdrawHeldText } from "@/features/buyer-debt/debt-copy";
+import { onChainHeldText, withdrawAllHeldReason, withdrawHeldBy, withdrawHeldText } from "@/features/buyer-debt/debt-copy";
 import { useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
 import { useOpenHoldIntentIds, usePayingIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
@@ -95,11 +95,17 @@ export function withdrawReceiveNote(requested: Money | null): string {
  * With unpaid calls, the held amount and its Settle button are already said
  * above (`withdrawHeldText`), so it is not named again.
  */
-export function withdrawHeldNote(requested: Money | null, held: Money | null, owedCalls: number): string | null {
+export function withdrawHeldNote(
+  requested: Money | null,
+  held: Money | null,
+  owedCalls: number,
+  /** What holds it, by stage (`withdrawHeldBy`), the same words as the held line above. */
+  heldBy: string = "calls being checked or being paid to the provider",
+): string | null {
   if (!requested || !held || BigInt(held.amount) <= 0n) return null;
   const receive = withdrawReceiveNote(requested);
   if (owedCalls > 0) return `That money is not part of this request. ${receive}`;
-  return `${formatLimit(held)} is held by calls being checked or being paid to the provider and is not part of this request. ${receive}`;
+  return `${formatLimit(held)} is held by ${heldBy} and is not part of this request. ${receive}`;
 }
 
 function positive(amount: string | undefined): boolean {
@@ -159,7 +165,9 @@ export function WithdrawSheet({
   const { openSettle } = useSettleDebt();
   const heldText = held ? withdrawHeldText(formatLimit(held), openHoldIds, owedIntentIds, payingIds) : null;
   const requestedMoney: Money | null = parsed.atomic && held ? { ...held, amount: parsed.atomic } : null;
-  const heldNote = cancelling ? null : withdrawHeldNote(requestedMoney, held, heldText?.owed ?? 0);
+  // The same stage-aware words as the held line, whichever line shows (Custom or Use all).
+  const heldBy = withdrawHeldBy(openHoldIds, owedIntentIds, payingIds);
+  const heldNote = cancelling ? null : withdrawHeldNote(requestedMoney, held, heldText?.owed ?? 0, heldBy);
   // Already out of the escrow, in the on-chain dispute hold (BUG-R2-BUY-01): never part of a withdrawal.
   const onChain = cancelling ? null : onChainHeld(escrow);
   // Earlier calls still settling are paid first (round-2 W2): say what that leaves, and when.
