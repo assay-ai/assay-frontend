@@ -155,6 +155,19 @@ export interface BuyerEscrow {
   withdrawableUpTo?: Money | null;
   /** ISO-8601, equal to `withdrawAvailableAt`. */
   withdrawableAt?: string | null;
+  /*
+   * BUG-R2-BUY-01. Absent on older servers: nothing is said about it.
+   */
+  /**
+   * The payer's calls held ON CHAIN in the dispute hold (settled into a channel
+   * bucket, or a per-call payment redeemed into the hold), not collected, not
+   * refunded. Out of `balance`, `openHolds` and `pendingSettlement`.
+   */
+  onChainHeld?: Money | null;
+  /** How many calls `onChainHeld` covers (the `ON_CHAIN_HOLD` holds). */
+  onChainHeldCalls?: number;
+  /** ISO-8601, the latest `collectableAt` of those calls; null when there are none. */
+  onChainHoldEndsAt?: string | null;
 }
 
 /** `BuyerEscrow.lifetime`. */

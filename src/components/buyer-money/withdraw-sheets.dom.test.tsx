@@ -18,6 +18,7 @@ const money = vi.hoisted(() => ({
   pending: false,
   requested: "0",
   unsettled: null as { count: number; amount: string } | null,
+  onChain: undefined as { amount: string; calls: number; endsAt: string } | undefined,
 }));
 
 vi.mock("./use-buyer-money", () => ({
@@ -31,6 +32,9 @@ vi.mock("./use-buyer-money", () => ({
       withdrawRequested: usd(money.requested),
       withdrawAvailableAt: null,
       withdrawalsFrozen: money.frozen,
+      ...(money.onChain
+        ? { onChainHeld: usd(money.onChain.amount), onChainHeldCalls: money.onChain.calls, onChainHoldEndsAt: money.onChain.endsAt }
+        : {}),
     },
     chain: {
       chainId: "eip155:46630",
@@ -76,6 +80,7 @@ afterEach(() => {
   money.pending = false;
   money.requested = "0";
   money.unsettled = null;
+  money.onChain = undefined;
 });
 
 function open() {
@@ -141,6 +146,25 @@ describe("Withdraw: the pause is stated and acknowledged", () => {
       "About $13.00 from earlier calls is still settling and is paid first; you will receive up to $0.24 (available about 3 hours after you ask).",
     );
     expect(screen.getByTestId("withdraw-pause-warning")).toBeTruthy();
+  });
+
+  // BUG-R2-BUY-01: money already in the on-chain dispute hold is not in the escrow, so never part of a withdrawal.
+  it("with calls in the on-chain dispute hold: says so apart, and never counts it as held in the escrow", () => {
+    money.openHolds = "20000";
+    money.onChain = { amount: "90000", calls: 9, endsAt: "2026-11-01T15:00:00.000Z" };
+    open();
+    enter("5");
+    expect(screen.getByTestId("withdraw-on-chain-held").textContent).toMatch(
+      /^\$0\.09 in the dispute hold on chain for 9 calls \(paid to the provider after .*15:00 UTC unless reported\)\. It already left your escrow, so it is not part of a withdrawal\.$/,
+    );
+    expect(screen.getByTestId("withdraw-held-receive").textContent).toMatch(/^\$0\.02 is held by calls/);
+  });
+
+  it("on an older server (no on-chain fields): no on-chain line", () => {
+    money.openHolds = "20000";
+    open();
+    enter("5");
+    expect(screen.queryByTestId("withdraw-on-chain-held")).toBeNull();
   });
 
   it("with nothing settling: no settling line", () => {

@@ -4,6 +4,7 @@ import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
 import { timelineStamp } from "@/features/g30/receipt-collection";
 import { formatDateTime } from "@/libs/utc-time";
+import { inEscrowHolds, payingIntentIds } from "./use-open-hold-intent-ids";
 
 import {
   callPaymentNote,
@@ -27,6 +28,7 @@ import {
   heldCallsText,
   heldSegmentLabel,
   isReplaceable,
+  onChainHeldText,
   nextReplaceableAt,
   notYetReplaceableSentence,
   notYetSettleSentence,
@@ -487,5 +489,37 @@ describe("channel debts (round-2 W2)", () => {
     expect(debtRowText(ready)).not.toContain("your agent settles it");
     expect(channelFallbackSentence(null)).toContain("once its payment channel can no longer collect it");
     expect(channelFallbackSentence(from, { count: 2 })).toContain("you can settle them here from");
+  });
+});
+
+describe("Funding's held line with the on-chain dispute hold (BUG-R2-BUY-01)", () => {
+  // 11 calls on one lane: 9 settled on chain into the dispute hold, 2 not settled yet.
+  const holds = [
+    ...Array.from({ length: 9 }, (_, i) => ({ intentId: `h${i}`, stage: "ON_CHAIN_HOLD" as const })),
+    { intentId: "s1", stage: "SETTLING" as const },
+    { intentId: "s2", stage: "SETTLING" as const },
+  ];
+  const ids = inEscrowHolds(holds).map((hold) => hold.intentId);
+
+  it("counts only the calls whose money is still in the escrow, so the count matches openHolds", () => {
+    expect(escrowHeldText("$0.02", ids, new Set(), payingIntentIds(holds))).toBe(
+      "$0.02 more is held by 2 calls passed, being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)",
+    );
+    expect(heldSegmentLabel(ids, new Set(), payingIntentIds(holds))).toBe("Passed, being paid to the provider");
+    expect(withdrawHeldText("$0.02", ids, new Set(), payingIntentIds(holds)).text).toMatch(/^\$0\.02 is held by 2 calls passed/);
+  });
+
+  it("says the on-chain part apart, with its UTC time, never 'within minutes'", () => {
+    const now = Date.parse("2026-11-01T13:46:00.000Z");
+    expect(onChainHeldText("$0.09", 9, "2026-11-01T15:00:00.000Z", { now })).toBe(
+      "$0.09 in the dispute hold on chain for 9 calls (paid to the provider after 15:00 UTC unless reported)",
+    );
+    expect(onChainHeldText("$0.01", 1, "2026-11-02T00:30:00.000Z", { now })).toBe(
+      "$0.01 in the dispute hold on chain for 1 call (paid to the provider after tomorrow 00:30 UTC unless reported)",
+    );
+    expect(onChainHeldText("$0.09", null, null, { now })).toBe(
+      "$0.09 in the dispute hold on chain (paid to the provider after the 1-hour dispute hold unless reported)",
+    );
+    expect(onChainHeldText("$0.09", 9, null)).not.toMatch(/minutes/);
   });
 });

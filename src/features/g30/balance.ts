@@ -92,9 +92,13 @@ export interface Hold {
    * `DEBT` (round-2 review M10): buyer debt, the payment being collected
    * again after it could not be collected the first time; the copy calls it
    * an unpaid call, held until it is collected (as the debts list does).
+   * `ON_CHAIN_HOLD` (BUG-R2-BUY-01): passed, and the money already left the
+   * escrow on chain into the dispute hold (a channel call settled into a
+   * bucket, or a per-call payment redeemed into the hold). Not in `openHolds`:
+   * `GET /escrow`'s `onChainHeld` counts it instead.
    * Absent on older servers: the copy then names both stages.
    */
-  stage?: "CHECKING" | "SETTLING" | "DEBT" | null;
+  stage?: "CHECKING" | "SETTLING" | "ON_CHAIN_HOLD" | "DEBT" | null;
 }
 
 /**

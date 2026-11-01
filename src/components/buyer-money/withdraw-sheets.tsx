@@ -11,11 +11,11 @@ import { PageState } from "@/components/patterns/page-state";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { Button } from "@/components/ui/button";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { withdrawAllHeldReason, withdrawHeldText } from "@/features/buyer-debt/debt-copy";
+import { onChainHeldText, withdrawAllHeldReason, withdrawHeldText } from "@/features/buyer-debt/debt-copy";
 import { useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
 import { useOpenHoldIntentIds, usePayingIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
-import { escrowReportsSettlement, pendingSettlement, withdrawSettlingNote } from "@/features/buyer-money/settlement-copy";
+import { escrowReportsSettlement, onChainHeld, pendingSettlement, withdrawSettlingNote } from "@/features/buyer-money/settlement-copy";
 import { useEscrowUnsettled } from "@/features/buyer-money/use-escrow-unsettled";
 import { describeMoneyError, WITHDRAWALS_FROZEN_TEXT } from "@/features/buyer-money/money-errors";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
@@ -157,6 +157,8 @@ export function WithdrawSheet({
   const heldText = held ? withdrawHeldText(formatLimit(held), openHoldIds, owedIntentIds, payingIds) : null;
   const requestedMoney: Money | null = parsed.atomic && held ? { ...held, amount: parsed.atomic } : null;
   const heldNote = cancelling ? null : withdrawHeldNote(requestedMoney, held, heldText?.owed ?? 0);
+  // Already out of the escrow, in the on-chain dispute hold (BUG-R2-BUY-01): never part of a withdrawal.
+  const onChain = cancelling ? null : onChainHeld(escrow);
   // Earlier calls still settling are paid first (round-2 W2): say what that leaves, and when.
   const unsettled =
     useEscrowUnsettled(open && Boolean(escrow?.exists) && !escrowReportsSettlement(escrow)).data?.unsettled ?? null;
@@ -304,6 +306,12 @@ export function WithdrawSheet({
               </p>
               {heldText.owed > 0 ? settleButton : null}
             </div>
+          ) : null}
+          {onChain ? (
+            <p className="text-body-13 text-02" data-testid="withdraw-on-chain-held">
+              {onChainHeldText(formatLimit(onChain.amount), onChain.calls, onChain.endsAt)}. It already left your escrow, so it
+              is not part of a withdrawal.
+            </p>
           ) : null}
           {standing ? (
             <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700">

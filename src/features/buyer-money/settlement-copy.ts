@@ -47,6 +47,18 @@ export function pendingSettlement(
 }
 
 /**
+ * What already left the escrow on chain into the dispute hold (BUG-R2-BUY-01):
+ * `GET /escrow`'s `onChainHeld`. Null when none, or on an older server that
+ * does not send it (nothing is said, as before).
+ */
+export function onChainHeld(
+  escrow: Pick<BuyerEscrow, "onChainHeld" | "onChainHeldCalls" | "onChainHoldEndsAt"> | null | undefined,
+): { amount: Money; calls: number | null; endsAt: string | null } | null {
+  if (!positive(escrow?.onChainHeld)) return null;
+  return { amount: escrow!.onChainHeld!, calls: escrow!.onChainHeldCalls ?? null, endsAt: escrow!.onChainHoldEndsAt ?? null };
+}
+
+/**
  * Funding's "Pending settlement" line, or null when nothing is pending or the
  * server could not say. It says the maximum wait, never the server's
  * `nextSettleAt`: that is a moving "now + 30 minutes" while calls keep

@@ -7,13 +7,20 @@ import type { Hold } from "@/features/g30/balance";
 import { getHolds } from "@/services/balances.service";
 
 /**
- * The open holds' intents (`GET /holds`, the `["holds"]` query Funding and
- * Close account share), to tell buyer debt (held until it is collected) apart
- * from calls being checked. Empty until read.
+ * The open holds' intents whose money is still in the escrow (`GET /holds`,
+ * the `["holds"]` query Funding and Close account share), to tell buyer debt
+ * (held until it is collected) apart from calls being checked. A hold in the
+ * on-chain dispute hold (`ON_CHAIN_HOLD`) is left out: its money already left
+ * the escrow and is not in `openHolds` (BUG-R2-BUY-01). Empty until read.
  */
 export function useOpenHoldIntentIds(): string[] {
   const open = useOpenHolds();
-  return React.useMemo(() => open.map((hold) => hold.intentId), [open]);
+  return React.useMemo(() => inEscrowHolds(open).map((hold) => hold.intentId), [open]);
+}
+
+/** Pure: the open holds whose money is still in the escrow (every stage but `ON_CHAIN_HOLD`). */
+export function inEscrowHolds<T extends Pick<Hold, "stage">>(open: readonly T[]): T[] {
+  return open.filter((hold) => hold.stage !== "ON_CHAIN_HOLD");
 }
 
 /**
@@ -28,10 +35,15 @@ export function usePayingIntentIds(): ReadonlySet<string> | null {
 
 const KNOWN_STAGES: readonly (string | null | undefined)[] = ["CHECKING", "SETTLING", "DEBT"];
 
-/** Pure: see `usePayingIntentIds`. A `DEBT` hold is a known stage, never "being paid". */
+/**
+ * Pure: see `usePayingIntentIds`. A `DEBT` hold is a known stage, never "being
+ * paid"; an `ON_CHAIN_HOLD` one is not money in the escrow, so it is left out
+ * before the stages are read.
+ */
 export function payingIntentIds(open: readonly Pick<Hold, "intentId" | "stage">[]): ReadonlySet<string> | null {
-  if (open.some((hold) => !KNOWN_STAGES.includes(hold.stage))) return null;
-  return new Set(open.filter((hold) => hold.stage === "SETTLING").map((hold) => hold.intentId));
+  const inEscrow = inEscrowHolds(open);
+  if (inEscrow.some((hold) => !KNOWN_STAGES.includes(hold.stage))) return null;
+  return new Set(inEscrow.filter((hold) => hold.stage === "SETTLING").map((hold) => hold.intentId));
 }
 
 /**

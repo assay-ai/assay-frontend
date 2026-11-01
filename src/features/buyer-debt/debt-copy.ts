@@ -502,6 +502,26 @@ export function escrowHeldText(
 }
 
 /**
+ * The money of calls that passed and already left the escrow on chain into the
+ * dispute hold (`GET /escrow` `onChainHeld`, BUG-R2-BUY-01): "$0.09 in the
+ * dispute hold on chain for 9 calls (paid to the provider after 15:00 UTC
+ * unless reported)". It is not in the escrow's balance or held figure, so it
+ * is said apart from them. The time is the server's `onChainHoldEndsAt` (the
+ * last of those calls to leave the hold), in UTC; without it, the 1-hour hold
+ * is named instead (never "within minutes").
+ */
+export function onChainHeldText(
+  amount: string,
+  calls: number | null | undefined,
+  endsAt: string | null | undefined,
+  { now = Date.now() }: { now?: number } = {},
+): string {
+  const forCalls = calls && calls > 0 ? ` for ${callsText(calls)}` : "";
+  const when = endsAt ? `after ${formatDateTime(endsAt, { now, midSentence: true })}` : "after the 1-hour dispute hold";
+  return `${amount} in the dispute hold on chain${forCalls} (paid to the provider ${when} unless reported)`;
+}
+
+/**
  * The held segment's label in the escrow split. One name for the held figure
  * on every Funding line: the stage of the calls holding it, or the debt's own
  * words.

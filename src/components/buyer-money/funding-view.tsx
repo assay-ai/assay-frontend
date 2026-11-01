@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { confirmingLine, confirmingOnChain, escrowFreeSplit, escrowLedgerRow, readyForPaidCalls, uncreditedLine } from "@/features/buyer-money/confirming";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
-import { escrowHeldText, heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
+import { escrowHeldText, heldSegmentLabel, onChainHeldText } from "@/features/buyer-debt/debt-copy";
 import { debtBlocksPaidCalls } from "@/features/buyer-debt/debt-summary";
 import { useOpenHoldIntentIds, usePayingIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
@@ -50,6 +50,7 @@ import { useBuyerMoney } from "./use-buyer-money";
 import { ClaimSheet, WithdrawSheet } from "./withdraw-sheets";
 import {
   escrowReportsSettlement,
+  onChainHeld,
   pendingSettlement,
   pendingSettlementLine,
   signedInWindow,
@@ -187,6 +188,8 @@ export function FundingView() {
   const unsettledQuery = useEscrowUnsettled(Boolean(escrow?.exists) && !escrowReportsSettlement(escrow));
   const unsettled = unsettledQuery.data?.unsettled ?? null;
   const pendingLine = noEscrow ? null : pendingSettlementLine(pendingSettlement(escrow, unsettled));
+  // Passed and already out of the escrow on chain, in the dispute hold (BUG-R2-BUY-01): never part of the held figure.
+  const onChain = noEscrow ? null : onChainHeld(escrow);
 
   return (
     <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-5 tablet:px-7 tablet:py-[22px]">
@@ -245,6 +248,12 @@ export function FundingView() {
                 : ""}
             </span>
           )}
+          {onChain ? (
+            <span className="text-body-13 text-02" data-testid="funding-on-chain-held">
+              {onChainHeldText(formatLimit(onChain.amount), onChain.calls, onChain.endsAt)}. It already left your escrow, so it
+              is not counted in your escrow balance.
+            </span>
+          ) : null}
           {pendingLine ? (
             <span className="text-body-13 text-02" data-testid="funding-pending-settlement">
               <span className="font-medium text-01">{pendingLine.label}:</span> {pendingLine.text}

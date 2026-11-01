@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { pendingSettlement, pendingSettlementLine, signedInWindow, withdrawalPausedText, withdrawSettlingNote } from "./settlement-copy";
+import { onChainHeld, pendingSettlement, pendingSettlementLine, signedInWindow, withdrawalPausedText, withdrawSettlingNote } from "./settlement-copy";
 
 const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x1", decimals: 6 });
 const unsettled = (count: number, amount: string, windowNeeds = amount) => ({
@@ -75,5 +75,18 @@ describe("buyer settlement copy (round-2 SPEC-W2 §11)", () => {
     expect(withdrawalPausedText("Robinhood Chain testnet")).toBe(
       "Every agent's paid calls on Robinhood Chain testnet are paused while a withdrawal is pending; claim it or cancel it to resume. Free calls keep working.",
     );
+  });
+});
+
+describe("the on-chain dispute hold (BUG-R2-BUY-01)", () => {
+  it("reads the escrow's onChainHeld fields, apart from pendingSettlement", () => {
+    const escrow = { onChainHeld: usd("90000"), onChainHeldCalls: 9, onChainHoldEndsAt: "2026-11-01T15:00:00.000Z" };
+    expect(onChainHeld(escrow)).toEqual({ amount: usd("90000"), calls: 9, endsAt: "2026-11-01T15:00:00.000Z" });
+  });
+  it("says nothing when there is none, or on an older server that does not send it", () => {
+    expect(onChainHeld({ onChainHeld: usd("0"), onChainHeldCalls: 0, onChainHoldEndsAt: null })).toBeNull();
+    expect(onChainHeld({ onChainHeld: null })).toBeNull();
+    expect(onChainHeld({})).toBeNull();
+    expect(onChainHeld(null)).toBeNull();
   });
 });
