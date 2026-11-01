@@ -269,6 +269,7 @@ export function ChannelActionSheet({
   channelRowId = "",
   open,
   onOpenChange,
+  onDone,
 }: {
   kind: ChannelActionKind;
   scope?: ChannelActionScope;
@@ -277,6 +278,8 @@ export function ChannelActionSheet({
   channelRowId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** After the backend took it (for example, to read a list again). */
+  onDone?: () => void;
 }) {
   const copy = channelActionCopy(kind, scope);
   const [input, setInput] = React.useState<ChannelActionInput>({
@@ -311,6 +314,7 @@ export function ChannelActionSheet({
             ? await claimUnpaidChannelPayouts(claimBody(input))
             : await clearChannelReconcileStop(clearBody(input));
       toast.success(copy.title, { description: channelActionDone(kind, result) });
+      onDone?.();
       onOpenChange(false);
     } catch (error) {
       setFailure({ sentence: channelActionErrorSentence(error), code: error instanceof ApiError ? error.code : null });

@@ -806,3 +806,29 @@ export interface ClearReconcileResult {
   channelRowId: string;
   status: "ROTATED";
 }
+
+/**
+ * One lane the reconciler stopped (DESYNC / RECONCILE) and nobody cleared yet,
+ * as `GET /operator/channels/stopped` lists it (`SRE`, `TRE`, `OPS_ADMIN`;
+ * read only). Newest first, at most 200.
+ */
+export interface StoppedChannel {
+  /** The `voucher_channels` row id: what `POST /operator/channels/clear-reconcile` takes. */
+  channelRowId: string;
+  /** 0x, 32 bytes: the finding's `key`. */
+  channelKey: string;
+  /** CAIP-2. */
+  chainId: string;
+  /** CAIP-19. */
+  assetId: string;
+  providerId: string;
+  /** CAIP-10: the buyer's escrow account. */
+  payer: string;
+  /** ISO-8601: when the lane row last changed (the stop, or a settlement landing after it). */
+  stoppedAt: string;
+  /** `RECONCILE`. */
+  reason: string;
+  /** Atomic decimal strings: accepted (cumulative) and booked as settled on the lane. */
+  accepted: string;
+  settled: string;
+}

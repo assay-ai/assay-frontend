@@ -13,6 +13,7 @@ import type {
   RecordCompensationBody,
   ManualCaseActionBody, ManualCaseActionResult, OperatorProviderSettlement,
   DrainChannelsBody, DrainChannelsResult, ClaimUnpaidBody, ClaimUnpaidResult, ClearReconcileBody, ClearReconcileResult,
+  StoppedChannel,
 } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
 
@@ -84,6 +85,12 @@ export function claimUnpaidChannelPayouts(body: ClaimUnpaidBody): Promise<ClaimU
 /** `POST /operator/channels/clear-reconcile` — override `M-4`, `SRE` or `TRE`, one operator. */
 export function clearChannelReconcileStop(body: ClearReconcileBody): Promise<ClearReconcileResult> {
   return operatorApi.post<ClearReconcileResult>("/operator/channels/clear-reconcile", body);
+}
+
+/** `GET /operator/channels/stopped` — the lanes the reconciler stopped and nobody cleared yet; `SRE`, `TRE` or `OPS_ADMIN`, read only. */
+export async function listStoppedChannels(): Promise<StoppedChannel[]> {
+  const page = await operatorApi.get<{ items?: StoppedChannel[] }>("/operator/channels/stopped");
+  return page.items ?? [];
 }
 
 /** `GET /operator/dashboard/data.json` — any operator; the console reads its reconciliation rows. */
