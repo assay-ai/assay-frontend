@@ -229,7 +229,7 @@ describe("upheld-report refunds (BUG-R2-PRV-03)", () => {
 
   it("names a refunded call as a refund after an upheld report, not a failed check", () => {
     const reason = notCreditedReason("REFUNDED_UPHELD");
-    expect(reason.title).toBe("Refunded to the buyer after an upheld report");
+    expect(reason.title).toBe("Not credited: the buyer's report was upheld");
     expect(reason.detail).toContain("passed our checks");
     expect(reason.detail).not.toContain("was not charged");
   });
@@ -273,7 +273,7 @@ describe("upheld-report refunds (BUG-R2-PRV-03)", () => {
     } as unknown as Parameters<typeof notCreditedBreakdown>[0];
     const reported = notCreditedBreakdown(totals);
     expect(reported.reasons.map((r) => [r.className, r.calls, r.amount?.amount])).toEqual([["REFUNDED_UPHELD", 1, "9000"]]);
-    expect(notCreditedReason(reported.reasons[0]!.className).title).toBe("Refunded to the buyer after an upheld report");
+    expect(notCreditedReason(reported.reasons[0]!.className).title).toBe("Not credited: the buyer's report was upheld");
     // No refunds this month: the entry is still there (0 calls), so the per-call fallback stays off.
     const none = notCreditedBreakdown({
       ...totals,

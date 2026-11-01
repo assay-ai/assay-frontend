@@ -34,8 +34,9 @@ export interface ProviderEarningsQuery extends ProviderReportWindow {
 
 /** The per-call export classes a provider reads as "not credited". */
 /**
- * `REFUNDED_UPHELD`: a call that passed, refunded to the buyer after an upheld
- * report (BUG-R2-PRV-03). Sent apart only by a newer server; an older one
+ * `REFUNDED_UPHELD`: a call that passed, then the buyer's report was upheld
+ * (BUG-R2-PRV-03): a held payment refunded, or a debt voided before the buyer
+ * ever paid (REVIEW L-1), so the buyer does not pay for it. Sent apart only by a newer server; an older one
  * counts it under `PAID_UNCREDITED` (its per-call row: reason
  * `voided:DISPUTE_UPHELD`).
  */

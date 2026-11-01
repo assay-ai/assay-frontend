@@ -13,10 +13,15 @@ export interface NotCreditedReason {
   detail: string;
 }
 
+/*
+ * Neutral on purpose (REVIEW L-1): the class covers a held payment refunded to
+ * the buyer and a debt voided before it was ever collected (the buyer never
+ * paid). Either way the buyer does not pay for the call and it is not credited.
+ */
 const UPHELD_REFUND: NotCreditedReason = {
-  title: "Refunded to the buyer after an upheld report",
+  title: "Not credited: the buyer's report was upheld",
   detail:
-    "The call passed our checks, but the buyer reported it and Assay upheld the report, so the buyer got the payment back. No stake is taken for it.",
+    "The call passed our checks, but the buyer reported it and Assay upheld the report, so the buyer does not pay for this call. No stake is taken for it.",
 };
 
 const REASONS: Record<string, NotCreditedReason> = {

@@ -166,7 +166,7 @@ function isCredited(row: CallRow): boolean {
     row.classification !== "PAID_BUYER_DEBT" &&
     row.classification !== "PAID_UNCOLLECTED" &&
     row.classification !== "PAID_UNCREDITED" &&
-    // Passed, then refunded to the buyer after an upheld report (BUG-R2-PRV-03): not credited.
+    // Passed, then the buyer's report was upheld (refunded, or the debt voided; BUG-R2-PRV-03): not credited.
     row.classification !== "REFUNDED_UPHELD"
   );
 }

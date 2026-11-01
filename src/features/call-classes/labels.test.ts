@@ -51,7 +51,7 @@ describe("call class labels (BUG-R5-03)", () => {
     expect(reasonLabel("uncollected:VoucherExpired")).toMatch(/^Never collected.*the buyer still owes it; you are paid if they settle$/);
     expect(reasonLabel("voided:FAIL")).toMatch(/did not pass our checks — voided: not paid, and nobody owes it$/);
     // BUG-R2-PRV-03: an upheld report's refund is not a lapsed debt nor a failed check.
-    expect(reasonLabel("voided:DISPUTE_UPHELD")).toMatch(/^Refunded to the buyer after an upheld report/);
+    expect(reasonLabel("voided:DISPUTE_UPHELD")).toMatch(/^Not credited: the buyer's report was upheld — .*the buyer does not pay for it/);
     expect(reasonLabel("voided:DISPUTE_UPHELD")).not.toMatch(/did not pass|lapsed/);
     for (const reason of ["buyer_debt:X", "uncollected:X", "voided:X"]) {
       expect(reasonLabel(reason)).not.toMatch(/owed by the platform|platform owes/);

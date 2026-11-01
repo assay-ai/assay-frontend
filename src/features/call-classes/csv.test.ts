@@ -170,7 +170,7 @@ describe("PROVIDER_FORFEITED", () => {
   });
 });
 
-// BUG-R2-PRV-03: passed, then refunded to the buyer after an upheld report.
+// BUG-R2-PRV-03: passed, then the buyer's report was upheld (refunded, or the debt voided).
 describe("REFUNDED_UPHELD", () => {
   const rows = [
     row({ callId: "a" }),
