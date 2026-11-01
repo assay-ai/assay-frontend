@@ -135,6 +135,11 @@ export interface Receipt {
    * servers.
    */
   collectedAt?: string | null;
+  /**
+   * The collect (payout) transaction hash, when `collectedAt` is set and the
+   * chain recorded one (BUG-R2-BUY-05). Null otherwise; absent on older servers.
+   */
+  payoutTxRef?: string | null;
   /** A channel-voucher call's lane and bucket; null for a per-call payment, absent on older servers. */
   channel?: ReceiptChannel | null;
 }

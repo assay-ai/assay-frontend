@@ -7,6 +7,7 @@ import {
   COLLECTION_STATES,
   chargedCheck,
   chargedHeadline,
+  receiptPayout,
   receiptStory,
   receiptTimeline,
   refundableUntil,
@@ -546,6 +547,31 @@ describe("receiptTimeline — the 1-hour hold", () => {
     expect(labels(receiptTimeline({ ...receipt, collectedAt: "2026-10-16T06:00:00.000Z" }, "CHARGED", { now: AFTER, report: "open" }))).toContain(
       "Held for your report until it is decided",
     );
+  });
+
+  // BUG-R2-BUY-05: the receipt endpoint now sends collectedAt / payoutTxRef, so a collected channel call reads as paid.
+  it("a collected channel call: 'Paid to the provider' with its payout transaction, never 'next payout'", () => {
+    const collected: Receipt = {
+      ...receipt,
+      collectableAt: "2026-10-16T02:00:00.000Z",
+      collectedAt: "2026-10-16T02:00:22.000Z",
+      payoutTxRef: "0xcd4f68033e4ab3654804810988deefaabed013f37da0c252d0ceb4888bbee663",
+      voucherFormat: "CHANNEL",
+      channel: { cumulative: "170000", calls: 17, settled: true, bucketMaturesAt: "2026-10-16T02:00:00.000Z", refundWindowExtended: false },
+    };
+    const story = receiptStory(collected, "CHARGED", { now: AFTER + 3600_000 });
+    expect(story.timeline.at(-1)).toMatchObject({ at: "2026-10-16T02:00:22.000Z", label: "Paid to the provider" });
+    expect(labels(story.timeline)).not.toContain(HOLD_ENDED_NEXT_PAYOUT);
+    expect(story.payout).toEqual({ at: "2026-10-16T02:00:22.000Z", txRef: collected.payoutTxRef });
+  });
+
+  it("receiptPayout: only once collected, never while a covered report is open; no tx when none was recorded", () => {
+    expect(receiptPayout({ collectedAt: null, payoutTxRef: null })).toBeNull();
+    expect(receiptPayout({})).toBeNull();
+    expect(receiptPayout({ collectedAt: "2026-10-16T02:00:22.000Z" }, "open")).toBeNull();
+    expect(receiptPayout({ collectedAt: "2026-10-16T02:00:22.000Z", payoutTxRef: null })).toEqual({ at: "2026-10-16T02:00:22.000Z", txRef: null });
+    // Before the collect the receipt keeps its states: no payout on the story.
+    expect(receiptStory(receipt, "CHARGED", { now: AFTER }).payout).toBeNull();
   });
 
   it("a channel call: its bucket's maturity, and 'refund window extended' when a fold moved it", () => {

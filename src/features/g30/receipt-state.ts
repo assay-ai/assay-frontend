@@ -591,6 +591,8 @@ export interface ReceiptStory {
   flow: ReceiptFlowNode[];
   checks: StageCheck[];
   timeline: ReceiptTimelineRow[];
+  /** A charged call already paid to the provider (BUG-R2-BUY-05); null before that. */
+  payout: ReceiptPayout | null;
 }
 
 export function receiptStory(
@@ -605,7 +607,28 @@ export function receiptStory(
     flow: receiptFlow(receipt, state),
     checks: toStageChecks(receipt),
     timeline: receiptTimeline(receipt, state, options),
+    payout: state === "CHARGED" ? receiptPayout(receipt, options.report) : null,
   };
+}
+
+/** `ReceiptStory.payout`: when the provider was paid, and the payout transaction when the chain recorded one. */
+export interface ReceiptPayout {
+  at: string;
+  txRef: string | null;
+}
+
+/**
+ * A collected call's payout (BUG-R2-BUY-05, `GET /receipts/:id` `collectedAt`
+ * and `payoutTxRef`): the same moment as the timeline's "Paid to the provider"
+ * row. Null before the collect, on an older server that does not send it, and
+ * while a report the guarantee covers is open (the money is held for it).
+ */
+export function receiptPayout(
+  receipt: Pick<Receipt, "collectedAt" | "payoutTxRef">,
+  report: ReceiptReportState = "none",
+): ReceiptPayout | null {
+  if (!receipt.collectedAt || report === "open") return null;
+  return { at: receipt.collectedAt, txRef: receipt.payoutTxRef || null };
 }
 
 /**
