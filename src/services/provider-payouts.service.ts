@@ -1,4 +1,5 @@
-import type { CursorPage, ListProviderPayoutsQuery, ProviderPayout } from "@/interfaces";
+import type { CursorPage, ListProviderPayoutsQuery, PayoutCadence, PayoutSchedule, ProviderPayout } from "@/interfaces";
+import { ApiError } from "@/libs/ApiClient";
 
 import { api } from "./api";
 
@@ -28,4 +29,23 @@ export function payoutsInAsset(
   asset: string | undefined
 ): ProviderPayout[] {
   return asset ? payouts.filter((payout) => payout.amount.asset === asset) : [...payouts];
+}
+
+/**
+ * `GET /providers/me/payout-cadence` — the provider's payout cadence and the
+ * next run (round-2 SPEC-W2 §8). `null` on a server without it (404), so the
+ * Money page hides the setting rather than show an error.
+ */
+export async function getPayoutSchedule(): Promise<PayoutSchedule | null> {
+  try {
+    return await api.get<PayoutSchedule>("/providers/me/payout-cadence");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/** `PUT /providers/me/payout-cadence` — applies from the next run (API-W2 §3.1). */
+export function setPayoutCadence(cadence: PayoutCadence): Promise<PayoutSchedule> {
+  return api.put<PayoutSchedule>("/providers/me/payout-cadence", { cadence });
 }

@@ -108,7 +108,7 @@ describe("BuyerDebtBanner", () => {
       account: ACCOUNT,
       debts: [debt({ state: "REPLACING", replacedAt: "2026-10-16T00:05:00.000Z" })],
     });
-    expect(html).toContain("Collecting $2.50 you signed. Paid calls resume in about a minute.");
+    expect(html).toContain("Collecting $2.50 you signed. Paid calls usually resume within about 5 minutes.");
     expect(html).not.toContain("Settle $");
   });
 
@@ -194,6 +194,35 @@ describe("BuyerDebtBanner", () => {
         debts: [debt({ replaceableAt: at }), debt({ intentId: "int_2", replaceableAt: new Date(Date.now() + 90 * 60_000).toISOString() })],
       });
       expect(html).toContain("You can settle the first from today");
+    });
+  });
+  describe("a debt paid on the agent's payment channel (round-2 W2)", () => {
+    const channel = (overrides: Partial<BuyerDebt> = {}) =>
+      debt({ intentId: "int_ch", voucherFormat: "CHANNEL", channel: { cumulative: "300000", calls: 3 }, ...overrides });
+
+    it("offers no Settle button for a channel-only list, and says the agent settles it", () => {
+      const html = render({ account: ACCOUNT, debts: [channel()] });
+      expect(html).toContain('data-kind="agent"');
+      expect(html).not.toContain("Settle $");
+      expect(html).toContain("Your agent owes $2.50 for 1 call on its payment channel. Paid calls are paused until it is collected.");
+      expect(html).toContain("Your agent signed this payment on a payment channel.");
+      expect(html).toContain("paid calls usually resume within about 5 minutes after that. Nothing to sign here.");
+      expect(html).toContain("your agent settles it on its next paid call");
+    });
+
+    it("keeps Settle for the per-call debts of a mixed list, and leaves the channel one out of the total", () => {
+      const html = render({ account: ACCOUNT, debts: [debt(), channel({ amount: { amount: "1000000", asset: ASSET, decimals: 6 } })] });
+      expect(html).toContain('data-kind="settle"');
+      expect(html).toContain("You owe $2.50 for 1 call. Paid calls are paused until all of it is settled.");
+      expect(html).toContain("Settle $2.50");
+      expect(html).not.toContain("Settle $3.50");
+      expect(html).toContain("$1.00 more for 1 call was paid on your agent&#x27;s payment channel");
+    });
+
+    it("says the same for another wallet's channel debt: nobody signs it here", () => {
+      const html = render({ account: ACCOUNT, debts: [channel({ payer: "eip155:46630:0x2222222222222222222222222222222222222222" })] });
+      expect(html).toContain('data-kind="agent"');
+      expect(html).not.toContain("sign in with that wallet");
     });
   });
 });

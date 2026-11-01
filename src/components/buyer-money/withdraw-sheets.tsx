@@ -11,10 +11,12 @@ import { PageState } from "@/components/patterns/page-state";
 import { StatusTimeline } from "@/components/patterns/status-timeline";
 import { Button } from "@/components/ui/button";
 import { useAccountReadOnly } from "@/features/account-block/use-account-block";
-import { withdrawAllHeldReason, withdrawHeldText } from "@/features/buyer-debt/debt-copy";
+import { onChainHeldText, withdrawAllHeldReason, withdrawHeldBy, withdrawHeldText } from "@/features/buyer-debt/debt-copy";
 import { useSettleDebt } from "@/features/buyer-debt/settle-debt-sheet";
-import { useOpenHoldIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
+import { useOpenHoldIntentIds, usePayingIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
+import { escrowReportsSettlement, onChainHeld, pendingSettlement, withdrawSettlingNote } from "@/features/buyer-money/settlement-copy";
+import { useEscrowUnsettled } from "@/features/buyer-money/use-escrow-unsettled";
 import { describeMoneyError, WITHDRAWALS_FROZEN_TEXT } from "@/features/buyer-money/money-errors";
 import { runEscrowAction } from "@/features/escrow/relayed-submission";
 import { withdrawGasGrantNote } from "@/features/escrow/withdraw-gas-grant-note";
@@ -93,11 +95,17 @@ export function withdrawReceiveNote(requested: Money | null): string {
  * With unpaid calls, the held amount and its Settle button are already said
  * above (`withdrawHeldText`), so it is not named again.
  */
-export function withdrawHeldNote(requested: Money | null, held: Money | null, owedCalls: number): string | null {
+export function withdrawHeldNote(
+  requested: Money | null,
+  held: Money | null,
+  owedCalls: number,
+  /** What holds it, by stage (`withdrawHeldBy`), the same words as the held line above. */
+  heldBy: string = "calls being checked or being paid to the provider",
+): string | null {
   if (!requested || !held || BigInt(held.amount) <= 0n) return null;
   const receive = withdrawReceiveNote(requested);
   if (owedCalls > 0) return `That money is not part of this request. ${receive}`;
-  return `${formatLimit(held)} is held by calls being checked and is not part of this request. ${receive}`;
+  return `${formatLimit(held)} is held by ${heldBy} and is not part of this request. ${receive}`;
 }
 
 function positive(amount: string | undefined): boolean {
@@ -121,10 +129,13 @@ export function WithdrawSheet({
   const [amount, setAmount] = React.useState("");
   // "Use all" is preselected once per opening (B7); the buyer can still change it.
   const [seeded, setSeeded] = React.useState(false);
+  // Once the request went through, the standing request IS this one (BUG-R2-BUY-08): no "you already asked".
+  const [justRequested, setJustRequested] = React.useState(false);
   React.useEffect(() => {
     if (!open) {
       setAmount("");
       setSeeded(false);
+      setJustRequested(false);
     }
   }, [open]);
 
@@ -149,11 +160,29 @@ export function WithdrawSheet({
   const walletBlocker = useWalletBlocker(money.signerState, money.ownerShort);
   // A buyer debt's price stays held until it is collected, not "a few minutes": say so, and offer to settle.
   const openHoldIds = useOpenHoldIntentIds();
+  const payingIds = usePayingIntentIds();
   const owedIntentIds = useOwedIntentIds();
   const { openSettle } = useSettleDebt();
-  const heldText = held ? withdrawHeldText(formatLimit(held), openHoldIds, owedIntentIds) : null;
+  const heldText = held ? withdrawHeldText(formatLimit(held), openHoldIds, owedIntentIds, payingIds) : null;
   const requestedMoney: Money | null = parsed.atomic && held ? { ...held, amount: parsed.atomic } : null;
-  const heldNote = cancelling ? null : withdrawHeldNote(requestedMoney, held, heldText?.owed ?? 0);
+  // The same stage-aware words as the held line, whichever line shows (Custom or Use all).
+  const heldBy = withdrawHeldBy(openHoldIds, owedIntentIds, payingIds);
+  const heldNote = cancelling ? null : withdrawHeldNote(requestedMoney, held, heldText?.owed ?? 0, heldBy);
+  // Already out of the escrow, in the on-chain dispute hold (BUG-R2-BUY-01): never part of a withdrawal.
+  const onChain = cancelling ? null : onChainHeld(escrow);
+  // Earlier calls still settling are paid first (round-2 W2): say what that leaves, and when.
+  const unsettled =
+    useEscrowUnsettled(open && Boolean(escrow?.exists) && !escrowReportsSettlement(escrow)).data?.unsettled ?? null;
+  const settlingNote = cancelling
+    ? null
+    : withdrawSettlingNote({
+        requested: parsed.atomic ? { asset: balance?.asset ?? "", decimals: money.decimals, amount: parsed.atomic } : null,
+        balance,
+        pending: pendingSettlement(escrow, unsettled)?.amount,
+        // Not asked yet: no instant to show (never `now + delay`), only the wait; the pending panel shows the chain's own.
+        availableAt: null,
+        availableIn: delay,
+      });
   const settleFirst = () => {
     onOpenChange(false);
     openSettle();
@@ -176,7 +205,7 @@ export function WithdrawSheet({
         : !balance || toDecimal(balance).lte(0)
           ? "Your escrow is empty."
           : !all
-            ? withdrawAllHeldReason(openHoldIds, owedIntentIds)
+            ? withdrawAllHeldReason(openHoldIds, owedIntentIds, payingIds)
           : !parsed.value
             ? amount.trim() === ""
               ? "Pick or enter an amount."
@@ -256,6 +285,7 @@ export function WithdrawSheet({
         )
       }
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
+      onPhaseChange={(phase) => setJustRequested(phase === "success")}
     >
       {frozen ? <FrozenBanner /> : null}
       {cancelling ? null : (
@@ -281,7 +311,7 @@ export function WithdrawSheet({
             />
           </div>
           {/* Once an amount is chosen, the note below names the held amount; an unpaid call keeps this line and its settle button. */}
-          {heldText && (!heldNote || heldText.owed > 0) ? (
+          {heldText && (!heldNote || heldText.owed > 0 || settlingNote) ? (
             <div className="flex flex-col gap-2">
               <p className="text-body-13 text-02" data-testid="withdraw-held-note">
                 {heldText.text}
@@ -289,13 +319,24 @@ export function WithdrawSheet({
               {heldText.owed > 0 ? settleButton : null}
             </div>
           ) : null}
-          {standing ? (
+          {onChain ? (
+            <p className="text-body-13 text-02" data-testid="withdraw-on-chain-held">
+              {onChainHeldText(formatLimit(onChain.amount), onChain.calls, onChain.endsAt)}. It already left your escrow, so it
+              is not part of a withdrawal.
+            </p>
+          ) : null}
+          {standing && !justRequested ? (
             <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700">
               You already asked for {formatLimit(standing)}. A new request replaces it (it does not add to it) and starts the
               {" "}{chainTerms(money.chain).withdrawDelay} wait again.
             </p>
           ) : null}
-          {heldNote ? (
+          {/* One sentence on what is paid: the settling one when it lowers the amount, else the usual "up to". */}
+          {settlingNote ? (
+            <p className="text-body-13 text-02" data-testid="withdraw-settling">
+              {settlingNote}
+            </p>
+          ) : heldNote ? (
             <p className="text-body-13 text-02" data-testid="withdraw-held-receive">
               {heldNote}
             </p>

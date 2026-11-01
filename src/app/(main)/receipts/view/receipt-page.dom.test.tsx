@@ -128,8 +128,8 @@ describe("the receipt page tells one story", () => {
       uncheckedReceipt({ providerId: "prv-1", disputeFilingClosesAt: "2026-10-20T18:10:00.000Z", holdReleasedAt: null, refundableIfReportedNow: true }),
     );
     expect(words).not.toMatch(/no refund/i);
-    expect(words).toContain("Refundable: the 1-hour hold starts when the payment is collected.");
-    expect(words).toContain("The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full.");
+    expect(words).toContain("Refundable: report now for a full refund. The exact deadline appears once the payment is recorded on chain.");
+    expect(words).toContain("The payment is not recorded on chain yet. Report it now and, if your report is accepted, you are refunded in full. The exact deadline appears once it is recorded.");
     // One button, beside the headline; the box at the foot only explains.
     expect(words.match(/Report a bad result/g)).toHaveLength(1);
   });
@@ -175,7 +175,7 @@ describe("the receipt page tells one story", () => {
       "Result checked",
       "Charged: $0.0012",
       "Refundable until then: report a bad result for a full refund",
-      "Goes to the provider after the hold: $0.0012",
+      "Goes to the provider in the payout after the hold: $0.0012",
     ]);
     expect(words).toMatch(/Refundable until \S+ UTC · \d+m left to report it for a full refund\./);
     expect(words.match(/Report a bad result/g)).toHaveLength(1);
@@ -190,11 +190,49 @@ describe("the receipt page tells one story", () => {
     expect(words).toMatch(/Where the money went Held \$[\d.]+ Check passed Charged \$[\d.]+/);
     expect(words).not.toContain("left to report it");
     const labels = timelineLabels(words).map((l) => l.replace(/: \$[\d.]+$/, ""));
-    expect(labels).toEqual(["Call made", "Money held", "Result checked", "Charged", "Refundable hour ended", "Released to the provider"]);
+    expect(labels).toEqual(["Call made", "Money held", "Result checked", "Charged", "Refundable hour ended", "Hold ended. Paid to the provider in the next payout."]);
     expect(words).not.toContain("Paid to provider");
     expect(words).toContain(
       "The 1-hour hold has ended, so there is no refund for this call. If your report is accepted, it counts against the provider's quality and can lead to a penalty on their stake",
     );
+  });
+
+  // BUG-R2-BUY-05: once collected, the receipt says the provider was paid, with the payout transaction.
+  it("a demo charged call after the collect: 'Paid to the provider', the time in UTC and the payout transaction", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEMO_NOW_MS);
+    const base = demoSettledReceipt("8b3f6e9d-2c15-4a70-9e41-d7a05c38b2f6", "price_quote", 180) as unknown as Receipt;
+    const collectedAt = new Date(Date.parse(base.collectableAt!) + 22_000).toISOString();
+    const tx = "0xcd4f68033e4ab3654804810988deefaabed013f37da0c252d0ceb4888bbee663";
+    const receipt = { ...base, collectedAt, payoutTxRef: tx } as Receipt;
+    intentId = receipt.intentId;
+    const client = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } });
+    client.setQueryData(["receipt", receipt.intentId], receipt);
+    client.setQueryData(["receipt-evidence", receipt.intentId], null);
+    client.setQueryData(["call-disputes", "buyer", "intent", receipt.intentId], { items: [] });
+    const html = renderToStaticMarkup(
+      <QueryClientProvider client={client}>
+        <WithChains>
+          <ReceiptPage />
+        </WithChains>
+      </QueryClientProvider>,
+    );
+    const words = text(html);
+    const labels = timelineLabels(words).map((l) => l.replace(/: \$[\d.]+$/, ""));
+    expect(labels.at(-1)).toBe("Paid to the provider");
+    expect(words).not.toContain("Paid to the provider in the next payout");
+    // The time is the UtcTime element (its static form before mount), labelled UTC.
+    expect(words).toMatch(/Paid to the provider [\d-]+ \d\d:\d\d UTC \. View the payout transaction/);
+    expect(html).toContain(`href="https://explorer.testnet.chain.robinhood.com/tx/${tx}"`);
+  });
+
+  it("a collected call with no payout transaction recorded: paid, with no link", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(DEMO_NOW_MS);
+    const base = demoSettledReceipt("8b3f6e9d-2c15-4a70-9e41-d7a05c38b2f6", "price_quote", 180) as unknown as Receipt;
+    const words = render({ ...base, collectedAt: base.collectableAt, payoutTxRef: null } as Receipt);
+    expect(words).toContain("Paid to the provider");
+    expect(words).not.toContain("View the payout transaction");
   });
 });
 

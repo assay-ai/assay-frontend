@@ -41,6 +41,7 @@ import {
   deriveReceiptState,
   samplingExplainerCopy,
   samplingSubline,
+  type ReceiptPayout,
   type ReceiptState,
   type ReceiptTimelineRow,
 } from "@/features/g30/receipt-state";
@@ -53,6 +54,10 @@ import { useNow } from "@/features/call-disputes/ui";
 import { owedCallState } from "@/features/buyer-debt/debt-summary";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import type { Receipt } from "@/features/g30/wire";
+import { isTransactionRef } from "@/features/provider-earnings/payments";
+import { useChainTerms } from "@/hooks/useChainTerms";
+import { explorerTxUrl } from "@/libs/chains/explorer";
+import { chainIdOfAsset } from "@/utils/chain";
 import { ApiError } from "@/libs/ApiClient";
 import { isRecordMissing } from "@/libs/record-missing";
 import { getReceipt } from "@/services";
@@ -98,6 +103,28 @@ const OVERRIDABLE: ReceiptState[] = [
   "DEBT_VOIDED",
   "FORFEITED",
 ];
+
+/**
+ * A collected call (BUG-R2-BUY-05): the provider was paid, when (UTC), and the
+ * payout transaction on the chain's explorer when the chain recorded one.
+ */
+function ReceiptPayoutLine({ payout, asset }: { payout: ReceiptPayout; asset: string }) {
+  const { chain } = useChainTerms(chainIdOfAsset(asset));
+  const href = chain && isTransactionRef(payout.txRef) ? explorerTxUrl(chain, payout.txRef) : undefined;
+  return (
+    <p className="border-t border-01 pt-2.5 text-body-13 text-02" data-testid="receipt-payout">
+      Paid to the provider <UtcTime value={payout.at} alwaysDay midSentence />.
+      {href ? (
+        <>
+          {" "}
+          <a href={href} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary-600 hover:underline">
+            View the payout transaction
+          </a>
+        </>
+      ) : null}
+    </p>
+  );
+}
 
 /** A timeline stamp: UTC day and clock with seconds, labelled, the exact instant on hover. */
 function stamp(iso: string): Pick<TimelineEvent, "time" | "timeTitle"> {
@@ -409,6 +436,7 @@ function ReceiptPageContent() {
           </PanelHeader>
           <PanelBody className="px-5 pb-3.5 pt-1">
             <Timeline events={events} />
+            {told.payout ? <ReceiptPayoutLine payout={told.payout} asset={receipt.chargedPrice.asset} /> : null}
           </PanelBody>
         </Panel>
       </div>

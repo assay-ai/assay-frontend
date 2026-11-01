@@ -1,5 +1,6 @@
 import { WalletNotReady } from "@/features/buyer-money/money-errors";
 import {
+  CHANNEL_NOT_OFFERED,
   PAYMENT_DEBT_NOT_FOUND,
   PAYMENT_DEBT_NOT_YET_REPLACEABLE,
   PAYMENT_DEBT_REPLACEMENT_PENDING,
@@ -33,6 +34,7 @@ export function settleDebtFailure(error: unknown, now: number = Date.now()): str
  * or changed while signing.
  */
 const REFRESHING_CODES: ReadonlySet<string> = new Set([
+  CHANNEL_NOT_OFFERED,
   PAYMENT_DEBT_NOT_FOUND,
   PAYMENT_DEBT_REPLACEMENT_PENDING,
   PAYMENT_DEBT_NOT_YET_REPLACEABLE,

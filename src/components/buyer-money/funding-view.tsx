@@ -20,9 +20,9 @@ import { Button } from "@/components/ui/button";
 import { confirmingLine, confirmingOnChain, escrowFreeSplit, escrowLedgerRow, readyForPaidCalls, uncreditedLine } from "@/features/buyer-money/confirming";
 import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
-import { escrowHeldText, heldSegmentLabel } from "@/features/buyer-debt/debt-copy";
+import { escrowHeldText, heldSegmentLabel, onChainHeldText } from "@/features/buyer-debt/debt-copy";
 import { debtBlocksPaidCalls } from "@/features/buyer-debt/debt-summary";
-import { useOpenHoldIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
+import { useOpenHoldIntentIds, usePayingIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import { chainBalances, type Hold } from "@/features/g30/balance";
@@ -48,6 +48,17 @@ import { EscrowReconciliation, RefundableNowLine, WithdrawalsList } from "./fund
 import { PendingTxList } from "./pending-tx-list";
 import { useBuyerMoney } from "./use-buyer-money";
 import { ClaimSheet, WithdrawSheet } from "./withdraw-sheets";
+import {
+  escrowReportsSettlement,
+  onChainHeld,
+  pendingSettlement,
+  pendingSettlementLine,
+  signedInWindow,
+  withdrawalPausedText,
+  withdrawSettlingNote,
+} from "@/features/buyer-money/settlement-copy";
+import { useEscrowUnsettled } from "@/features/buyer-money/use-escrow-unsettled";
+import type { UnsettledVouchers } from "@/interfaces";
 import { chainTerms } from "@/libs/chain-terms";
 
 /**
@@ -168,8 +179,17 @@ export function FundingView() {
   // Settling a debt still takes from the escrow on a free-calls-only chain: say so beside "not spent on calls".
   const debtOwed = debtBlocksPaidCalls(useBuyerDebtsQuery().data);
   const openHoldIds = useOpenHoldIntentIds();
+  // Being checked (minutes) or passed and being paid to the provider (at most about 9 hours); null when unknown.
+  const payingIds = usePayingIntentIds();
   // A buyer debt's price stays held until it is collected: never "in flight" (main d021840 / 49210cf).
   const owedIntentIds = useOwedIntentIds();
+  // Passed, not settled on chain yet (round-2 W2): the "Pending settlement" line, the 24 h meter and the withdrawal.
+  // `GET /escrow` carries it on a W2 server; an older one is asked `GET /escrow/unsettled`.
+  const unsettledQuery = useEscrowUnsettled(Boolean(escrow?.exists) && !escrowReportsSettlement(escrow));
+  const unsettled = unsettledQuery.data?.unsettled ?? null;
+  const pendingLine = noEscrow ? null : pendingSettlementLine(pendingSettlement(escrow, unsettled));
+  // Passed and already out of the escrow on chain, in the dispute hold (BUG-R2-BUY-01): never part of the held figure.
+  const onChain = noEscrow ? null : onChainHeld(escrow);
 
   return (
     <div className="flex w-full flex-col gap-4 bg-02 px-4 py-5 tablet:gap-5 tablet:px-7 tablet:py-[22px]">
@@ -224,10 +244,21 @@ export function FundingView() {
             <span className="text-body-xs text-03">
               {money.symbol} on {money.chainName ?? "your chain"}
               {escrow?.openHolds && positive(escrow.openHolds)
-                ? ` · ${escrowHeldText(formatLimit(escrow.openHolds), openHoldIds, owedIntentIds)}`
+                ? ` · ${escrowHeldText(formatLimit(escrow.openHolds), openHoldIds, owedIntentIds, payingIds)}`
                 : ""}
             </span>
           )}
+          {onChain ? (
+            <span className="text-body-13 text-02" data-testid="funding-on-chain-held">
+              {onChainHeldText(formatLimit(onChain.amount), onChain.calls, onChain.endsAt)}. It already left your escrow, so it
+              is not counted in your escrow balance.
+            </span>
+          ) : null}
+          {pendingLine ? (
+            <span className="text-body-13 text-02" data-testid="funding-pending-settlement">
+              <span className="font-medium text-01">{pendingLine.label}:</span> {pendingLine.text}
+            </span>
+          ) : null}
           {confirming ? <ConfirmingNote line={confirming} /> : null}
           {uncredited ? (
             <span className="text-body-13 text-warning-700" data-testid="funding-uncredited">
@@ -295,8 +326,9 @@ export function FundingView() {
           matured={matured}
           withdrawalPending={withdrawalPending}
           freeOnly={freeOnly}
-          heldLabel={heldSegmentLabel(openHoldIds, owedIntentIds)}
+          heldLabel={heldSegmentLabel(openHoldIds, owedIntentIds, payingIds)}
           ready={confirmingOnChain(ledgerRow) || uncredited ? spendable : null}
+          unsettled={unsettled}
           onAction={onAction}
         />
       ) : null}
@@ -319,6 +351,7 @@ function EscrowCard({
   freeOnly,
   heldLabel,
   ready = null,
+  unsettled = null,
   onAction,
 }: {
   money: ReturnType<typeof useBuyerMoney>;
@@ -333,6 +366,8 @@ function EscrowCard({
    * `spendable` is shown as uncredited or confirming.
    */
   ready?: Money | null;
+  /** Passed, not settled on chain yet; null when unknown. */
+  unsettled?: UnsettledVouchers | null;
   onAction: (next: MoneyAction) => void;
 }) {
   const escrow = money.escrow!;
@@ -355,6 +390,16 @@ function EscrowCard({
   const notFinal = split.confirming;
   const notCredited = split.uncredited;
   const refillsAt = windowRefillAt(escrow.windowStartedAt, escrow.windowSeconds);
+  const window24h = signedInWindow(escrow, unsettled);
+  const settlingNote = withdrawalPending
+    ? withdrawSettlingNote({
+        requested,
+        balance,
+        pending: pendingSettlement(escrow, unsettled)?.amount,
+        upTo: escrow.withdrawableUpTo ?? null,
+        availableAt: escrow.withdrawableAt ?? escrow.withdrawAvailableAt,
+      })
+    : null;
 
   return (
     <section aria-label="Escrow" className="flex w-full flex-col gap-4 rounded-xl border border-01 bg-01 p-4 shadow-hair tablet:p-5">
@@ -420,8 +465,8 @@ function EscrowCard({
                 .
               </p>
               <CapMeter
-                label="Spent from your escrow in the last 24 hours, all agents"
-                used={escrow.spentInWindow ?? { amount: "0", asset: "", decimals: money.decimals }}
+                label={window24h.label}
+                used={window24h.used ?? { amount: "0", asset: "", decimals: money.decimals }}
                 limit={escrow.maxPerWindow}
                 refillsAt={refillsAt}
                 refillHint="24 h after the first payment in the window"
@@ -438,10 +483,14 @@ function EscrowCard({
       {/* Withdrawal in progress. */}
       {withdrawalPending && requested ? (
         <div className="flex w-full flex-col gap-3 rounded-lg border border-primary-20 bg-primary-5 p-3.5">
-          <p className="text-body-13 text-01">
-            Withdrawal of up to {formatLimit(requested)}. Every agent&apos;s paid calls on {money.chainName ?? "this chain"} are
-            paused until you claim or cancel it; free calls keep working.
+          <p className="text-body-13 text-01" data-testid="withdrawal-paused">
+            Withdrawal of up to {formatLimit(requested)}. {withdrawalPausedText(money.chainName)}
           </p>
+          {settlingNote ? (
+            <p className="text-body-13 text-02" data-testid="withdrawal-settling">
+              {settlingNote}
+            </p>
+          ) : null}
           <StatusTimeline
             label="Withdrawal"
             orientation="auto"
@@ -464,7 +513,7 @@ function EscrowCard({
               </Button>
             ) : null}
             <Button type="button" variant="secondary" onClick={() => onAction("cancel-withdraw")}>
-              Cancel request
+              Cancel withdrawal
             </Button>
           </div>
         </div>

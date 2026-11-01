@@ -33,6 +33,7 @@ import { Select } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { durationText } from "@/features/operator/arbiter";
 import { chainDisplayName } from "@/features/operator/call-summary";
+import { mayRunChannelActions } from "@/features/operator/channel-actions";
 import { ContractCallAction } from "@/features/operator/contract-call-action";
 import {
   PARAM_GROUPS,
@@ -54,6 +55,7 @@ import {
   type NewVerifierForm,
   type ParamsForm,
 } from "@/features/operator/contract-settings";
+import { PlatformChannelsCard } from "@/features/operator/platform-channels";
 import { ResultCard } from "@/features/operator/result-card";
 import { capabilitiesFor } from "@/features/operator/roles";
 import { useOperatorSession } from "@/features/operator/session-context";
@@ -94,6 +96,10 @@ import { cn } from "@/utils";
  *
  * The owner's doors (replacing the admin, upgrading the contracts) are shown
  * read-only: the owner is a cold key and those stay in the runbook.
+ *
+ * One card is not the chain's: "Payment channels" (BUG-R2-OPS-01) runs the
+ * platform's channel overrides through Assay's backend, for `SRE` and `TRE`,
+ * who see only that card here.
  */
 
 const DAY = 86_400;
@@ -143,6 +149,20 @@ function ContractsScreen() {
   }, [queryClient, chainId]);
 
   if (!isAdmin) {
+    if (mayRunChannelActions(me.roles)) {
+      // SRE / TRE: only the platform's payment-channel overrides (BUG-R2-OPS-01).
+      return (
+        <>
+          <header className="flex w-full flex-col gap-1">
+            <h1 className="text-heading-md text-01">Contracts</h1>
+            <p className="text-body-13 text-03">
+              The contracts&rsquo; settings are the admin&rsquo;s. Here you can run the payment-channel overrides.
+            </p>
+          </header>
+          <PlatformChannelsCard roles={me.roles} />
+        </>
+      );
+    }
     return (
       <PageState
         kind="blocked"
@@ -202,20 +222,29 @@ function ContractsScreen() {
       ) : null}
 
       {settings.isLoading ? (
-        <PageState kind="loading" rows={4} label="Reading the contracts" />
+        <>
+          <PageState kind="loading" rows={4} label="Reading the contracts" />
+          <PlatformChannelsCard roles={me.roles} />
+        </>
       ) : settings.isError || !data ? (
-        <PageState
-          kind="error"
-          title="The contracts could not be read"
-          description={`${chainDisplayName(chainId)}'s RPC did not answer. Nothing is shown rather than old values.`}
-          details={settings.error instanceof Error ? settings.error.message : null}
-          onRetry={() => void settings.refetch()}
-        />
+        <>
+          <PageState
+            kind="error"
+            title="The contracts could not be read"
+            description={`${chainDisplayName(chainId)}'s RPC did not answer. Nothing is shown rather than old values.`}
+            details={settings.error instanceof Error ? settings.error.message : null}
+            onRetry={() => void settings.refetch()}
+          />
+          {/* The channel overrides go through Assay's backend, not the RPC: an incident must not hide them. */}
+          <PlatformChannelsCard roles={me.roles} />
+        </>
       ) : (
         <>
           <SignerLine settings={data} adminConnected={adminConnected} />
 
           <PauseCard settings={data} onChange={() => setSheet("pause")} />
+
+          <PlatformChannelsCard roles={me.roles} />
 
           <SettingCard
             icon={PenLine}

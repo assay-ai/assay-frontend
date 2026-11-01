@@ -358,7 +358,7 @@ function PaidStep({ setup, onNext }: { setup: ProviderSetup; onNext: () => void 
   return (
     <Card
       title="Where you get paid"
-      description="Buyers' payments for your tool land in this wallet, on chain, as each call settles. Prove it is yours by signing a message: it is free and moves no money."
+      description="Buyers' payments for your tool land in this wallet, on chain, in scheduled payouts after a dispute hold. Prove it is yours by signing a message: it is free and moves no money."
     >
       {active.map((account) => (
         <Outcome key={account.chainId} tone="teal" icon={<CircleCheck />}>

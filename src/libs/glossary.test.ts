@@ -34,9 +34,12 @@ describe("glossary", () => {
     expect(GLOSSARY["stake-rule"].definition).toContain("maximum set on chain");
   });
 
-  it("says when a payment is final: after the 1-hour report window, then only the stake is at risk", () => {
+  it("says when a payment is final: held at least the hold after it is recorded on chain, then the next payout (SPEC-H H-4)", () => {
     const final = definitionOf("payout-final", TERMS);
-    expect(final).toContain("1 hour after the call, once a buyer can no longer report a bad result");
+    expect(final).toContain("held at least 1 hour after the payment is recorded on chain");
+    expect(final).toContain("then paid to the provider in the next payout run");
+    // A maximum from the scheduler, never a promise tied to the call itself.
+    expect(final).not.toMatch(/after the call|within minutes/);
     expect(final).toContain("a call that fails because of the provider");
     expect(final).toContain("After that, a payout is never clawed back, and only the provider's stake is at risk.");
     expect(GLOSSARY["penalty-example"].definition).toContain("maximum set on chain");
@@ -57,7 +60,7 @@ describe("glossary", () => {
   it("keeps no on-chain number of its own: the cap and the report window come from the chain", () => {
     expect(GLOSSARY["stake-rule"].definition).toContain("{{dailyCapPercent}}");
     expect(GLOSSARY["payout-final"].definition).toContain("{{holdWindow}}");
-    expect(definitionOf("payout-final", UNKNOWN_TERMS)).toContain("— after the call");
+    expect(definitionOf("payout-final", UNKNOWN_TERMS)).toContain("at least — after the payment is recorded on chain");
     for (const key of GLOSSARY_KEYS) {
       expect(definitionOf(key, TERMS)).not.toMatch(/\{\{/);
     }

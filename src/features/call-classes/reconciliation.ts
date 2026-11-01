@@ -89,13 +89,14 @@ const CLASS_NOTE: Record<string, string> = {
   PAID_UNCOLLECTED: "Passed; the buyer did not settle in 30 days. Written off, but still owed: you are paid if they settle.",
   PROVIDER_FORFEITED: "Not collected because your stake was below the minimum, or you were blocked.",
   PAID_UNCREDITED: "The result did not pass our checks, so the buyer was not charged.",
+  REFUNDED_UPHELD: "Passed our checks, then the buyer's report was upheld, so the buyer does not pay for it and it is not credited.",
   FREE: "Free-tier calls: nothing charged, nothing paid.",
   EXPLORATION: "Trial calls to a new listing. The buyer pays as usual; Assay pays only for the checks.",
   EXCLUDED: "Taken out of the count by our team, for example during an incident on our side.",
   TEST: "Your own test runs.",
   SYSTEM_ERROR: "Your endpoint timed out or returned a 5xx error.",
   REQUEST_ERROR: "Your endpoint refused the request with a 4xx error.",
-  PENDING: "Still being checked; usually settled within a minute.",
+  PENDING: "Still being checked or settling; credited when they are paid out, after the dispute hold.",
 };
 
 export function classNote(className: string, fallback?: string): string {

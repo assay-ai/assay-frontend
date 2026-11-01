@@ -33,7 +33,14 @@ export interface ProviderEarningsQuery extends ProviderReportWindow {
 }
 
 /** The per-call export classes a provider reads as "not credited". */
-export type NotCreditedClass = "PAID_UNCREDITED" | "SYSTEM_ERROR" | "REQUEST_ERROR";
+/**
+ * `REFUNDED_UPHELD`: a call that passed, then the buyer's report was upheld
+ * (BUG-R2-PRV-03): a held payment refunded, or a debt voided before the buyer
+ * ever paid (REVIEW L-1), so the buyer does not pay for it. Sent apart only by a newer server; an older one
+ * counts it under `PAID_UNCREDITED` (its per-call row: reason
+ * `voided:DISPUTE_UPHELD`).
+ */
+export type NotCreditedClass = "PAID_UNCREDITED" | "SYSTEM_ERROR" | "REQUEST_ERROR" | "REFUNDED_UPHELD";
 
 /** One not-credited reason: its calls and their worth. */
 export interface NotCreditedClassFigure {
@@ -96,12 +103,53 @@ export interface ProviderEarningsFigures {
   pendingInWindowCalls?: number;
 }
 
+/**
+ * Round-2 W2 payout stages (API-W2 §3.2, SPEC-W2 §11): the current state, not
+ * windowed, on the top level of `GET /providers/me/earnings`. All optional:
+ * older backends do not send them, and the screens keep their earlier lines.
+ */
+export interface ProviderPayoutState {
+  /** Passed, being recorded on chain. */
+  awaitingSettlement?: Money | null;
+  awaitingSettlementCalls?: number;
+  /** ISO-8601, the latest time the next settle round fires. */
+  nextSettleAt?: string | null;
+  /** On chain, in the dispute hold. */
+  inDisputeHold?: Money | null;
+  inDisputeHoldCalls?: number;
+  /** ISO-8601, the earliest hold end among those. */
+  disputeHoldEndsAt?: string | null;
+  /** The hold ended, paid in the next payout. */
+  readyForPayout?: Money | null;
+  readyForPayoutCalls?: number;
+  /**
+   * ISO-8601, the estimated next payout: the next payout slot after the
+   * earliest hold end (never before now), the earlier of the two payment doors.
+   * For per-call holds an upper bound.
+   */
+  nextPayoutAt?: string | null;
+  payoutCadence?: "HOURLY" | "EVERY_6_HOURS";
+  /**
+   * Paid out, but the token issuer blocked the transfer to the payout address
+   * (a freeze): the escrow keeps it as unpaid until the block lifts and the
+   * platform claims it. NOT in the provider's wallet.
+   */
+  unpaid?: Money | null;
+  /** ISO-8601, since when the oldest unpaid payout waits. */
+  unpaidSince?: string | null;
+  /**
+   * The unpaid payouts per asset, EVERY asset whatever the page asked for, so a
+   * block on another asset is never hidden. Absent on an older server.
+   */
+  unpaidByAsset?: { amount: Money; since: string | null }[];
+}
+
 export interface ProviderEarningsGroup extends ProviderEarningsFigures {
   /** The day (`YYYY-MM-DD`) or the tool id this row groups. */
   key: string;
 }
 
-export interface ProviderEarnings {
+export interface ProviderEarnings extends ProviderPayoutState {
   groups: ProviderEarningsGroup[];
   totals: ProviderEarningsFigures;
   /** CAIP-19 asset every total is denominated in. `null` when nothing matched. */

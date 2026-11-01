@@ -44,6 +44,8 @@ export interface ProviderPayout {
   chainTxRef: string | null;
   /** Calls this payment paid for. */
   calls: number | null;
+  /** Distinct buyers those calls came from (round-2 W2); absent on older servers. */
+  buyers?: number | null;
   createdAt: string;
 }
 
@@ -120,4 +122,28 @@ export interface ProvePayoutAddressResponse {
   payoutAccountId: string;
   provedAt: string;
   proof: PayoutProof;
+}
+
+// ── Payout cadence (round-2 SPEC-W2 §8) ────────────────────────────────────
+
+/**
+ * How often the provider's per-call holds and idle channels are paid out.
+ * `HOURLY` runs only once at least `hourlyMinimum` is ready; `EVERY_6_HOURS`
+ * is the default. There is no daily option: money left uncollected stays
+ * refundable by the redeemer key. Active channels are paid before each settle,
+ * whatever this says.
+ */
+export type PayoutCadence = "HOURLY" | "EVERY_6_HOURS";
+
+/** `GET /providers/me/payout-cadence` (API-W2 §3.1). Absent (404) on older servers. */
+export interface PayoutSchedule {
+  cadence: PayoutCadence;
+  /** The cadences the server accepts, in its order. */
+  options?: PayoutCadence[];
+  /** The ready amount below which an hourly run waits; $25 at launch. */
+  hourlyMinimum: Money | null;
+  /** ISO-8601, the last change; null when never changed. */
+  changedAt?: string | null;
+  /** ISO-8601, the scheduler's next payout run for this provider; null when none is planned. */
+  nextPayoutAt: string | null;
 }

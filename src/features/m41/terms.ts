@@ -41,8 +41,8 @@ export function designTerms(chain: ChainTerms): ProviderTermsSummary {
       {
         key: "payouts",
         label: "Payouts",
-        value: "as each call settles",
-        caption: `on chain; final ${chain.holdWindow} after each call`,
+        value: "on a schedule",
+        caption: `on chain, after a dispute hold of at least ${chain.holdWindow}`,
       },
       {
         key: "reserveHeld",

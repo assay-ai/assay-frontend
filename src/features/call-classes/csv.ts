@@ -51,6 +51,13 @@ export interface CallRow {
   priceAmount: string;
   asset: string;
   decimals: number;
+  /**
+   * Appended by round-2 W2 (SPEC-W2 §11); empty on older servers: when the
+   * payment's hold ends, when it was paid out, and the payout transaction.
+   */
+  collectableAt?: string;
+  collectedAt?: string;
+  payoutTxRef?: string;
 }
 
 /**
@@ -101,6 +108,7 @@ export function parseCallsCsv(csv: string): CallRow[] {
     return index === -1 ? "" : (cells[index] ?? "");
   };
 
+  const payoutColumns = header.includes("payout_tx_ref");
   return lines.slice(1).map((line) => {
     const cells = parseLine(line);
     return {
@@ -117,6 +125,14 @@ export function parseCallsCsv(csv: string): CallRow[] {
       priceAmount: at(cells, "price_amount") || "0",
       asset: at(cells, "asset"),
       decimals: Number(at(cells, "decimals") || "6"),
+      // Only on a server that appends them, so an older file parses as before.
+      ...(payoutColumns
+        ? {
+            collectableAt: at(cells, "collectable_at"),
+            collectedAt: at(cells, "collected_at"),
+            payoutTxRef: at(cells, "payout_tx_ref"),
+          }
+        : {}),
     };
   });
 }
@@ -149,7 +165,9 @@ function isCredited(row: CallRow): boolean {
     row.classification !== "PROVIDER_FORFEITED" &&
     row.classification !== "PAID_BUYER_DEBT" &&
     row.classification !== "PAID_UNCOLLECTED" &&
-    row.classification !== "PAID_UNCREDITED"
+    row.classification !== "PAID_UNCREDITED" &&
+    // Passed, then the buyer's report was upheld (refunded, or the debt voided; BUG-R2-PRV-03): not credited.
+    row.classification !== "REFUNDED_UPHELD"
   );
 }
 
@@ -268,6 +286,9 @@ export const PENDING_PAYMENT_NOTE =
  * blocked. Nobody was charged or credited and no fee was taken; the `reason`
  * column names the cause.
  *
+ * REFUNDED_UPHELD (BUG-R2-PRV-03) is a call that passed and was refunded to the
+ * buyer after an upheld report: not credited, listed beside PAID_UNCREDITED.
+ *
  * PENDING is the mirror image: the wire emits it and **neither design draws it**.
  * It is listed last because the totals have to add up — a screen whose job is
  * explaining a count difference cannot drop four calls to keep its layout.
@@ -279,6 +300,7 @@ export const CLASS_ORDER = [
   "PAID_UNCOLLECTED",
   "PROVIDER_FORFEITED",
   "PAID_UNCREDITED",
+  "REFUNDED_UPHELD",
   "FREE",
   "EXPLORATION",
   "EXCLUDED",

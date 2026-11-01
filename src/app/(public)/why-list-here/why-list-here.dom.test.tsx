@@ -29,7 +29,7 @@ describe("Why list here", () => {
     expect(text).toContain(
       `Payouts are never clawed back. ${definitionOf("payout-final", terms)} ${definitionOf("stake-rule", terms)}`,
     );
-    expect(definitionOf("payout-final", terms)).toContain("1 hour after the call");
+    expect(definitionOf("payout-final", terms)).toContain("at least 1 hour after the payment is recorded on chain");
   });
 
   // B5 review M1/M2: the stake is the only risk only after the report window, and a call is held for it.

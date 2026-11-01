@@ -15,7 +15,7 @@ import { routes } from "@/libs/routes";
 import { cn } from "@/utils";
 import { formatMoney } from "@/utils/money";
 
-import { debtStateOf, splitDebts } from "./debt-copy";
+import { CHANNEL_ROW_STATE, debtStateOf, isAgentSettledDebt, splitDebts } from "./debt-copy";
 import { debtBannerSummary } from "./debt-summary";
 import { useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
 import { useReplaceableNow } from "./use-replaceable-now";
@@ -43,6 +43,10 @@ function DebtRowText({
 }
 
 const ROW_STATE = { OPEN: null, REPLACING: "being collected", WRITTEN_OFF: "written off" } as const;
+
+/** The row's state words; a channel debt the agent settles says so (nothing to sign yet). */
+const rowState = (debt: BuyerDebt) =>
+  debtStateOf(debt) !== "REPLACING" && isAgentSettledDebt(debt) ? CHANNEL_ROW_STATE : ROW_STATE[debtStateOf(debt)];
 
 /**
  * The buyer-debt banner, mounted once in the buyer shell (see `BuyerBannerStack`
@@ -117,7 +121,7 @@ export function BuyerDebtBanner({ wrapperClassName, compact = false }: { wrapper
               <ul className="flex flex-col gap-1">
                 {all.map((debt) => (
                   <li key={debt.intentId} className="[overflow-wrap:anywhere]">
-                    <DebtRowText debt={debt} toolName={names.name("tool", debt.toolId)} state={ROW_STATE[debtStateOf(debt)]} elsewhere={others.includes(debt)} />
+                    <DebtRowText debt={debt} toolName={names.name("tool", debt.toolId)} state={rowState(debt)} elsewhere={others.includes(debt)} />
                   </li>
                 ))}
               </ul>
@@ -164,7 +168,7 @@ export function BuyerDebtBanner({ wrapperClassName, compact = false }: { wrapper
               </summary>
               <ul className="mt-1.5 flex flex-col gap-1">
                 {all.map((debt) => {
-                  const state = ROW_STATE[debtStateOf(debt)];
+                  const state = rowState(debt);
                   const elsewhere = others.includes(debt);
                   return (
                     <li key={debt.intentId} className="[overflow-wrap:anywhere]">

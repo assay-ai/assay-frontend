@@ -4,7 +4,7 @@ import * as React from "react";
 
 import type { BuyerDebts } from "@/interfaces/buyer-debt";
 
-import { debtsToSign, nextReplaceableAt, splitDebts } from "./debt-copy";
+import { debtsAgentRenews, debtsToSign, nextReplaceableAt, splitDebts } from "./debt-copy";
 
 /**
  * The time to judge `replaceableAt` against. A debt is signable only once its
@@ -15,7 +15,10 @@ import { debtsToSign, nextReplaceableAt, splitDebts } from "./debt-copy";
 export function useReplaceableNow(data: BuyerDebts | null | undefined, dataUpdatedAt: number): number {
   const [tick, setTick] = React.useState(() => Date.now());
   const now = Math.max(tick, dataUpdatedAt);
-  const wakeAt = nextReplaceableAt(debtsToSign(splitDebts(data).own), now);
+  const { own } = splitDebts(data);
+  // A channel debt the agent settles turns settleable here at its `replaceableAt`
+  // (= `settleInPortalFrom`, client review M-2): wake for it too.
+  const wakeAt = nextReplaceableAt([...debtsToSign(own, now), ...debtsAgentRenews(own, now)], now);
   React.useEffect(() => {
     if (wakeAt === null) return;
     // setTimeout holds at most ~24.8 days; a longer wait is caught by a refetch.

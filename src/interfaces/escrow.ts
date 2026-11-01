@@ -140,6 +140,34 @@ export interface BuyerEscrow {
    * (lot 1 D16). `null` unknown; absent on an older backend (no up-front check).
    */
   withdrawalsFrozen?: boolean | null;
+  /*
+   * Round-2 W2 (API-W2 §3.3). Absent on older servers: the screens then fall
+   * back to `GET /escrow/unsettled`, or leave the line out.
+   */
+  /** Calls admitted (both doors) whose money is still in the escrow balance. */
+  pendingSettlement?: Money | null;
+  pendingSettlementCalls?: number;
+  /** ISO-8601, the latest time the next settle round fires. */
+  nextSettleAt?: string | null;
+  /** Signed in the last 24 h, including not yet settled. */
+  signedLast24h?: Money | null;
+  /** `min(requested, balance − pendingSettlement)`; null when no withdrawal is pending. An upper bound. */
+  withdrawableUpTo?: Money | null;
+  /** ISO-8601, equal to `withdrawAvailableAt`. */
+  withdrawableAt?: string | null;
+  /*
+   * BUG-R2-BUY-01. Absent on older servers: nothing is said about it.
+   */
+  /**
+   * The payer's calls held ON CHAIN in the dispute hold (settled into a channel
+   * bucket, or a per-call payment redeemed into the hold), not collected, not
+   * refunded. Out of `balance`, `openHolds` and `pendingSettlement`.
+   */
+  onChainHeld?: Money | null;
+  /** How many calls `onChainHeld` covers (the `ON_CHAIN_HOLD` holds). */
+  onChainHeldCalls?: number;
+  /** ISO-8601, the latest `collectableAt` of those calls; null when there are none. */
+  onChainHoldEndsAt?: string | null;
 }
 
 /** `BuyerEscrow.lifetime`. */

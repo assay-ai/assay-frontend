@@ -166,7 +166,7 @@ describe("the report window on a receipt", () => {
     const fresh = { ...receipt, disputeWindowEndsAt: null, collectableAt: null };
     const view = reportWindow(fresh, t0 + 5 * 60_000);
     expect(view).toMatchObject({ open: true, guaranteed: true, holdEndsAt: null });
-    expect(view.text).toMatch(/not been collected yet.*refunded in full/);
+    expect(view.text).toMatch(/not recorded on chain yet.*refunded in full.*exact deadline appears once it is recorded/);
     expect(view.text).not.toMatch(/no refund/i);
   });
   // Wave-1 audit I1: the promise is the backend's (`refundableIfReportedNow`), never inferred from the hold fields.
@@ -329,5 +329,24 @@ describe("refundPlanText", () => {
     expect(refundPlanText("RELEASE_HELD", "OPEN")).toMatch(/^Upholding returns the held payment/);
     expect(refundPlanText("SOMETHING_NEW", "OPEN")).toBe("SOMETHING_NEW");
     expect(refundPlanText("ALREADY_REFUNDED", "UPHELD")).not.toMatch(/retried/);
+  });
+});
+
+describe("DISPUTE_COLLECTION_IN_PROGRESS on decide (round-2 B-3)", () => {
+  it("shows the server's own sentence, so a channel call says to decide again once the channel settles", () => {
+    const message =
+      "The call was paid on a payment channel that has not settled yet; the dispute keeps the payment in the dispute hold when it settles (usually within 30 minutes). Decide again then: an upheld decision refunds it on chain";
+    const text = disputeErrorText(new ApiError("DISPUTE_COLLECTION_IN_PROGRESS", message, 409, undefined, { channel: true }));
+    expect(text).toBe(`${message}.`);
+    expect(text).not.toContain("in a minute");
+  });
+
+  it("falls back to its own words only when the server sent no sentence", () => {
+    expect(disputeErrorText(new ApiError("DISPUTE_COLLECTION_IN_PROGRESS", "", 409, undefined, { channel: true }))).toContain(
+      "usually within 30 minutes",
+    );
+    expect(disputeErrorText(new ApiError("DISPUTE_COLLECTION_IN_PROGRESS", "", 409))).toBe(
+      "The payment is moving right now. Try again in a minute.",
+    );
   });
 });

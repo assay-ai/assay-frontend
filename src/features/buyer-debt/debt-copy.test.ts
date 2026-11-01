@@ -4,6 +4,7 @@ import type { BuyerDebt } from "@/interfaces/buyer-debt";
 import { ApiError } from "@/libs/ApiClient";
 import { timelineStamp } from "@/features/g30/receipt-collection";
 import { formatDateTime } from "@/libs/utc-time";
+import { inEscrowHolds, payingIntentIds } from "./use-open-hold-intent-ids";
 
 import {
   callPaymentNote,
@@ -18,10 +19,16 @@ import {
   debtRowText,
   debtSentence,
   debtsToSign,
+  debtsAgentRenews,
+  isChannelDebt,
+  isAgentSettledDebt,
+  isPortalSettleableChannelDebt,
+  channelFallbackSentence,
   escrowHeldText,
   heldCallsText,
   heldSegmentLabel,
   isReplaceable,
+  onChainHeldText,
   nextReplaceableAt,
   notYetReplaceableSentence,
   notYetSettleSentence,
@@ -82,7 +89,7 @@ describe("the debt banner", () => {
     const replacing = debt({ state: "REPLACING", replacedAt: "2026-10-16T00:05:00.000Z" });
     expect(debtBannerDescription([replacing])).toBe(
       "You signed the payment for a call your agent made, and it is being collected from your escrow " +
-        "(about a minute). Paid calls resume once it is collected. Free calls still work.",
+        "(usually within about 5 minutes). Paid calls resume once it is collected. Free calls still work.",
     );
     expect(debtBannerTitle([replacing])).toBe("Collecting the payment you signed");
     expect(debtBannerTitle([replacing, replacing])).toBe("Collecting 2 payments you signed");
@@ -273,6 +280,11 @@ describe("the settle refusals", () => {
       `${notYetReplaceableSentence(at)} Nothing was signed.`,
     );
     expect(settleDebtErrorSentence(err("PAYMENT_DEBT_NOT_YET_REPLACEABLE", 409))).toMatch(/in a few minutes/);
+    // M-2: a channel debt its channel can still collect (a clock race): the agent settles it.
+    expect(settleDebtErrorSentence(err("CHANNEL_NOT_OFFERED", 400))).toBe(
+      "Your agent's payment channel can still collect this payment, so it cannot be settled here yet: " +
+        "your agent settles it on its next paid call. Nothing was signed.",
+    );
     expect(settleDebtErrorSentence(err("PAYMENT_DEBT_REPLACEMENT_REFUSED", 409))).toBe(
       "This call changed while you were signing, so the payment was not accepted and nothing was charged. Try again.",
     );
@@ -353,36 +365,56 @@ describe("notYetSettleSentence (review P3-1)", () => {
 
 describe("Funding's held line (main d021840 / 49210cf in the redesign)", () => {
   const owed = new Set(["d1", "d2"]);
-  it("keeps the calls-being-checked wording when nothing is owed", () => {
-    expect(escrowHeldText("$1.00", ["a"], new Set())).toBe(
-      "$1.00 more is held by calls being checked; it comes back or goes to providers within minutes",
+  const EITHER = "being checked (minutes) or passed and being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)";
+  it("names both stages when the server does not say which (older backend), never 'within minutes' alone", () => {
+    expect(escrowHeldText("$1.00", ["a"], new Set())).toBe(`$1.00 more is held by 1 call ${EITHER}`);
+    expect(heldSegmentLabel(["a"], new Set())).toBe("Being checked or being paid to the provider");
+    expect(escrowHeldText("$1.00", ["a"], new Set())).not.toMatch(/within minutes|2 hours/);
+  });
+  it("splits being checked (minutes) from passed, being paid to the provider (at most about 9 hours) (SPEC-H H-2)", () => {
+    const paying = new Set(["p1", "p2"]);
+    expect(escrowHeldText("$1.00", ["a"], new Set(), new Set())).toBe("$1.00 more is held by 1 call being checked (minutes)");
+    expect(heldSegmentLabel(["a"], new Set(), new Set())).toBe("Being checked");
+    expect(escrowHeldText("$1.00", ["p1"], new Set(), paying)).toBe(
+      "$1.00 more is held by 1 call passed, being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)",
     );
-    expect(heldSegmentLabel(["a"], new Set())).toBe("Held by calls being checked");
+    expect(heldSegmentLabel(["p1"], new Set(), paying)).toBe("Passed, being paid to the provider");
+    expect(escrowHeldText("$3.00", ["a", "p1", "p2"], new Set(), paying)).toBe(
+      "$3.00 more is held by 1 call being checked (minutes) and 2 calls passed, being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)",
+    );
+    expect(heldSegmentLabel(["a", "p1"], new Set(), paying)).toBe("Being checked or being paid to the provider");
+    expect(withdrawAllHeldReason(["a"], new Set(), new Set())).toBe(
+      "Everything in your escrow is held by calls being checked. Try again in a few minutes.",
+    );
+    expect(withdrawAllHeldReason(["p1"], new Set(), paying)).toBe(
+      "Everything in your escrow is held by 1 call passed, being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours). Try again once those calls are paid out or released.",
+    );
   });
   it("never calls a held debt a call in flight, and says it is held until collected", () => {
     expect(escrowHeldText("$2.50", ["d1"], owed)).toBe(
       "$2.50 more is held for 1 unpaid call, held until it is collected (see the banner)",
     );
     expect(escrowHeldText("$5.00", ["a", "d1", "d2"], owed)).toBe(
-      "$5.00 more is held: 1 call being checked (it comes back or goes to providers within minutes) and 2 unpaid calls, held until they are collected",
+      `$5.00 more is held: 1 call ${EITHER}, and 2 unpaid calls, held until they are collected`,
+    );
+    expect(escrowHeldText("$5.00", ["a", "d1", "d2"], owed, new Set())).toBe(
+      "$5.00 more is held: 1 call being checked (minutes), and 2 unpaid calls, held until they are collected",
     );
     expect(heldSegmentLabel(["d1"], owed)).toBe("Held for unpaid calls");
-    expect(heldSegmentLabel(["a", "d1"], owed)).toBe("Held by calls being checked and unpaid calls");
+    expect(heldSegmentLabel(["a", "d1"], owed, new Set())).toBe("Being checked, and unpaid calls");
   });
-  it("Withdraw: a debt hold is held until collected and says to settle it; checking holds keep their wording", () => {
-    expect(withdrawHeldText("$1.00", ["a"], new Set())).toEqual({
-      text: "$1.00 is held by calls being checked; it comes back or goes to providers within minutes.",
+  it("Withdraw: a debt hold is held until collected and says to settle it; other holds name their stage", () => {
+    expect(withdrawHeldText("$1.00", ["a"], new Set(), new Set())).toEqual({
+      text: "$1.00 is held by 1 call being checked (minutes).",
       owed: 0,
     });
+    expect(withdrawHeldText("$1.00", ["a"], new Set())).toEqual({ text: `$1.00 is held by 1 call ${EITHER}.`, owed: 0 });
     expect(withdrawHeldText("$2.50", ["d1"], owed)).toEqual({
       text: "$2.50 is held for 1 unpaid call, held until its payment is collected. Settle it to free that money.",
       owed: 1,
     });
-    expect(withdrawHeldText("$5.00", ["a", "d1", "d2"], owed).text).toBe(
-      "$5.00 is held: 1 call being checked (it comes back or goes to providers within minutes) and 2 unpaid calls, held until their payments are collected. Settle them to free that money.",
-    );
-    expect(withdrawAllHeldReason(["a"], new Set())).toBe(
-      "Everything in your escrow is held by calls being checked. Try again in a few minutes.",
+    expect(withdrawHeldText("$5.00", ["a", "d1", "d2"], owed, new Set()).text).toBe(
+      "$5.00 is held: 1 call being checked (minutes), and 2 unpaid calls, held until their payments are collected. Settle them to free that money.",
     );
     expect(withdrawAllHeldReason(["d1"], owed)).toBe(
       "Everything in your escrow is held for 1 unpaid call, held until its payment is collected. Settle it first, then withdraw what is left.",
@@ -406,5 +438,97 @@ describe("callPaymentNote — a call refunded by an upheld report (BUG-X-01)", (
     expect(callPaymentNote({ debt: "VOIDED", refundedByReport: true })).toBe("Refunded after your report · not charged");
     expect(callPaymentNote({ debt: "VOIDED", refundedByReport: false })).toBe("Debt cancelled by a late verdict · not charged");
     expect(callPaymentNote({ debt: "VOIDED" })).toBe("Debt cancelled by a late verdict · not charged");
+  });
+});
+
+describe("channel debts (round-2 W2)", () => {
+  const channel = (overrides: Partial<BuyerDebt> = {}) => debt({ intentId: "int_ch", voucherFormat: "CHANNEL", ...overrides });
+
+  it("are never in the person's list to sign, but are in the agent's to renew", () => {
+    const list = [debt(), channel(), channel({ intentId: "int_r", state: "REPLACING" }), debt({ intentId: "int_legacy", voucherFormat: undefined })];
+    expect(debtsToSign(list).map((d) => d.intentId)).toEqual(["int_1", "int_legacy"]);
+    expect(debtsAgentRenews(list).map((d) => d.intentId)).toEqual(["int_ch"]);
+    expect(isChannelDebt({ voucherFormat: "PER_CALL" })).toBe(false);
+  });
+
+  it("say there is nothing to sign, in the sentence and the row", () => {
+    expect(debtSentence(channel())).toContain("Your agent signed this payment on a payment channel.");
+    expect(debtSentence(channel())).toContain("Nothing to sign here.");
+    expect(debtRowText(channel())).toContain("on a payment channel, your agent settles it on its next paid call");
+  });
+
+  it("a mixed description counts the channel ones apart", () => {
+    const text = debtBannerDescription([debt(), channel()]);
+    expect(text).toContain("2 calls your agents made could not be collected");
+    expect(text).toContain("1 was paid on your agent's payment channel: it is collected again automatically on the agent's next paid call");
+  });
+
+  it("M-2: settleable here once the channel cannot collect it (the flag, or its time passed); the agent's otherwise", () => {
+    const from = "2026-11-01T14:00:00.000Z";
+    const before = Date.parse(from) - 60_000;
+    const after = Date.parse(from) + 60_000;
+    const waiting = channel({ settleInPortal: false, settleInPortalFrom: from });
+    expect(isPortalSettleableChannelDebt(waiting, before)).toBe(false);
+    expect(isAgentSettledDebt(waiting, before)).toBe(true);
+    expect(isPortalSettleableChannelDebt(waiting, after)).toBe(true);
+    expect(isPortalSettleableChannelDebt(channel({ settleInPortal: true }), before)).toBe(true);
+    // An older server without the fields: the agent's, as before.
+    expect(isAgentSettledDebt(channel(), after)).toBe(true);
+    expect(isPortalSettleableChannelDebt(debt(), after)).toBe(false);
+    expect(debtsToSign([debt(), waiting], after).map((d) => d.intentId)).toEqual(["int_1", "int_ch"]);
+    expect(debtsAgentRenews([debt(), waiting], before).map((d) => d.intentId)).toEqual(["int_ch"]);
+  });
+
+  it("M-2: the agent-settled sentence adds the way out with its time; a settleable one reads like a per-call debt", () => {
+    const from = "2026-11-01T14:00:00.000Z";
+    const text = debtSentence(channel({ settleInPortal: false, settleInPortalFrom: "2999-01-01T00:00:00.000Z" }));
+    expect(text).toContain("Nothing to sign here.");
+    expect(text).toContain("If your agent no longer has its payment record (for example it moved to another computer), you can settle it here from");
+    const ready = channel({ settleInPortal: true, settleInPortalFrom: from });
+    expect(debtSentence(ready)).toContain("Paid calls are paused until you settle it.");
+    expect(debtRowText(ready)).not.toContain("your agent settles it");
+    expect(channelFallbackSentence(null)).toContain("once its payment channel can no longer collect it");
+    expect(channelFallbackSentence(from, { count: 2 })).toContain("you can settle them here from");
+  });
+});
+
+describe("Funding's held line with the on-chain dispute hold (BUG-R2-BUY-01)", () => {
+  // 11 calls on one lane: 9 settled on chain into the dispute hold, 2 not settled yet.
+  const holds = [
+    ...Array.from({ length: 9 }, (_, i) => ({ intentId: `h${i}`, stage: "ON_CHAIN_HOLD" as const })),
+    { intentId: "s1", stage: "SETTLING" as const },
+    { intentId: "s2", stage: "SETTLING" as const },
+  ];
+  const ids = inEscrowHolds(holds).map((hold) => hold.intentId);
+
+  it("counts only the calls whose money is still in the escrow, so the count matches openHolds", () => {
+    expect(escrowHeldText("$0.02", ids, new Set(), payingIntentIds(holds))).toBe(
+      "$0.02 more is held by 2 calls passed, being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)",
+    );
+    expect(heldSegmentLabel(ids, new Set(), payingIntentIds(holds))).toBe("Passed, being paid to the provider");
+    expect(withdrawHeldText("$0.02", ids, new Set(), payingIntentIds(holds)).text).toMatch(/^\$0\.02 is held by 2 calls passed/);
+  });
+
+  it("says the on-chain part apart, with its UTC time, never 'within minutes'", () => {
+    const now = Date.parse("2026-11-01T13:46:00.000Z");
+    expect(onChainHeldText("$0.09", 9, "2026-11-01T15:00:00.000Z", { now })).toBe(
+      "$0.09 in the dispute hold on chain for 9 calls (paid to the provider after 15:00 UTC unless reported)",
+    );
+    expect(onChainHeldText("$0.01", 1, "2026-11-02T00:30:00.000Z", { now })).toBe(
+      "$0.01 in the dispute hold on chain for 1 call (paid to the provider after tomorrow 00:30 UTC unless reported)",
+    );
+    expect(onChainHeldText("$0.09", null, null, { now })).toBe(
+      "$0.09 in the dispute hold on chain (paid to the provider after the 1-hour dispute hold unless reported)",
+    );
+    expect(onChainHeldText("$0.09", 9, null)).not.toMatch(/minutes/);
+  });
+
+  // REVIEW L-8: past its end, "after <a time already gone>" reads odd; the next payout run pays it.
+  it("once the hold end has passed, says the hold ended and the next payout run pays it", () => {
+    const now = Date.parse("2026-11-01T15:20:00.000Z");
+    expect(onChainHeldText("$0.06", 6, "2026-11-01T15:00:00.000Z", { now })).toBe(
+      "$0.06 in the dispute hold on chain for 6 calls (hold ended; paid to the provider in the next payout run unless reported)",
+    );
+    expect(onChainHeldText("$0.06", 6, "2026-11-01T15:20:00.000Z", { now })).toMatch(/hold ended/);
   });
 });

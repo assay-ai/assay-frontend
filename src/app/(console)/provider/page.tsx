@@ -26,6 +26,8 @@ import { StakeSheet } from "@/features/provider-stake/stake-sheet";
 import { stakeStatus } from "@/features/provider-stake/stake-status";
 import { useStakeStatus } from "@/features/provider-stake/use-stake-status";
 import { earningsSplit, homeUnpaidNotes } from "@/features/provider-earnings/earned-tile";
+import { payoutStages } from "@/features/provider-earnings/payout-stages";
+import { PayoutStagesList } from "@/features/provider-earnings/payout-stages-view";
 import { providerMoney } from "@/features/provider-earnings/not-credited";
 import type { BindingStatus, Money, ProviderEarnings, ToolBindingSummary } from "@/interfaces";
 import { routes } from "@/libs/routes";
@@ -248,6 +250,8 @@ function EarningsPanel({
   const totals = earnings?.totals;
   if (!totals) return null;
   const split = earningsSplit(totals);
+  // The four payout stages (round-2 W2); null on an older server.
+  const stages = payoutStages(earnings, split.inWallet, providerMoney);
   const unpaidNotes = homeUnpaidNotes(
     totals,
     providerMoney,
@@ -276,7 +280,7 @@ function EarningsPanel({
         <PanelTitles>
           <PanelTitle>This month</PanelTitle>
           <PanelDescription>
-            {totals.calls.toLocaleString("en-US")} call{totals.calls === 1 ? "" : "s"} · paid on chain as calls settle
+            {totals.calls.toLocaleString("en-US")} call{totals.calls === 1 ? "" : "s"} · paid on chain on a schedule, after a dispute hold
           </PanelDescription>
         </PanelTitles>
         <Button size="sm" variant="ghost" asChild>
@@ -289,6 +293,7 @@ function EarningsPanel({
           <span className="font-mono text-heading-md text-01">{providerMoney(split.inWallet)}</span>
         </div>
         {segments.length > 1 ? <MoneySplit segments={segments} /> : null}
+        {stages ? <PayoutStagesList stages={stages} compact /> : null}
         {/* Passed but not in the wallet: the same lines as Money (buyer debt, never collected, forfeits). */}
         {unpaidNotes.length > 0 ? (
           <ul className="flex flex-col gap-1.5" data-testid="provider-home-unpaid">
