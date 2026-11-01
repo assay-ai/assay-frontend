@@ -11,13 +11,26 @@
  * the health tiles, the dispute record and the action bodies.
  */
 import type { Money } from "./api";
-import type { SlashProposalEvent, SlashRestorationRow } from "./provider-disputes";
+import type {
+  SlashProposalEvent,
+  SlashRestorationRow,
+} from "./provider-disputes";
 import type { SlashProposalCaseDetail } from "./provider-slash-cases";
 
 /** assay-backend `src/modules/operator/domain/override-register.ts` `OperatorRole`. */
 export type OperatorRole =
-  | "SRE" | "ADJ" | "ADJL" | "POL" | "POLA" | "TRE" | "TREA"
-  | "BD" | "SUP" | "CMP" | "SEC" | "OPS_ADMIN";
+  | "SRE"
+  | "ADJ"
+  | "ADJL"
+  | "POL"
+  | "POLA"
+  | "TRE"
+  | "TREA"
+  | "BD"
+  | "SUP"
+  | "CMP"
+  | "SEC"
+  | "OPS_ADMIN";
 
 export type OperatorStatus = "ACTIVE" | "SUSPENDED" | "REMOVED";
 
@@ -92,7 +105,8 @@ export interface RemoveOperatorBody {
 
 // ── Two-person approvals ────────────────────────────────────────────────────
 
-export type OperatorApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+export type OperatorApprovalStatus =
+  "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 
 /** What a two-person route answers, with HTTP 202, when it queued the action. */
 export interface ApprovalQueued {
@@ -232,13 +246,26 @@ export interface ChainStateHealth {
  * to `CANCELLED`.
  */
 export type SlashProposalStatus =
-  | "PROPOSED" | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
-  | "REVERSED" | "WAIVED" | "CANCEL_REQUESTED" | "CANCELLED";
+  | "PROPOSED"
+  | "UPHELD"
+  | "OVERTURNED"
+  | "EXECUTING"
+  | "EXECUTED"
+  | "REVERSED"
+  | "WAIVED"
+  | "CANCEL_REQUESTED"
+  | "CANCELLED";
 
 /** assay-backend `src/modules/slash/domain/chain-slash-outcome.ts` `ChainProposalStatus`. */
 export type ChainProposalStatus =
-  | "NONE" | "PROPOSING" | "PENDING" | "CANCEL_REQUESTED" | "DISPUTED"
-  | "EXECUTED" | "CANCELLED" | "REFUSED";
+  | "NONE"
+  | "PROPOSING"
+  | "PENDING"
+  | "CANCEL_REQUESTED"
+  | "DISPUTED"
+  | "EXECUTED"
+  | "CANCELLED"
+  | "REFUSED";
 
 /**
  * Where a penalty stands, as `GET /operator/cases` groups it: the case status
@@ -825,7 +852,9 @@ export interface StoppedChannel {
   /** CAIP-10: the buyer's escrow account. */
   payer: string;
   /** ISO-8601: when the lane row last changed (the stop, or a settlement landing after it). */
-  stoppedAt: string;
+  lastUpdatedAt?: string;
+  /** Older servers' name for `lastUpdatedAt`. */
+  stoppedAt?: string;
   /** `RECONCILE`. */
   reason: string;
   /** Atomic decimal strings: accepted (cumulative) and booked as settled on the lane. */

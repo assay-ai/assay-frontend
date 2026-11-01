@@ -25,20 +25,30 @@ import { rolesPhrase } from "./roles";
 /** The roles `GET /operator/channels/stopped` serves (read only). */
 const LIST_ROLES: readonly OperatorRole[] = ["SRE", "TRE", "OPS_ADMIN"];
 
-export const STOPPED_CHANNELS_KEY = ["operator", "channels", "stopped"] as const;
+export const STOPPED_CHANNELS_KEY = [
+  "operator",
+  "channels",
+  "stopped",
+] as const;
 
 /** Whether these roles may read the list of stopped channels. Pure. */
-export function mayListStoppedChannels(roles: readonly OperatorRole[]): boolean {
+export function mayListStoppedChannels(
+  roles: readonly OperatorRole[],
+): boolean {
   return roles.some((role) => LIST_ROLES.includes(role));
 }
 
 /** "0x0c0c…0c0c" for a channel key or an id, so a row stays one line. Pure. */
 function shortId(value: string, edge = 6): string {
-  return value.length <= edge * 2 + 1 ? value : `${value.slice(0, edge)}…${value.slice(-4)}`;
+  return value.length <= edge * 2 + 1
+    ? value
+    : `${value.slice(0, edge)}…${value.slice(-4)}`;
 }
 
 /** The payer's address, short, from its CAIP-10 account. Pure. */
-export function stoppedChannelPayer(channel: Pick<StoppedChannel, "chainId" | "payer">): string {
+export function stoppedChannelPayer(
+  channel: Pick<StoppedChannel, "chainId" | "payer">,
+): string {
   const address = channel.payer.split(":").at(-1) ?? channel.payer;
   return shortAddress(channel.chainId, address);
 }
@@ -55,18 +65,33 @@ export function stoppedChannelPayer(channel: Pick<StoppedChannel, "chainId" | "p
  * read does the clear fall back to a row id typed from the reconciliation
  * finding (`channelRowId`).
  */
-export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[] }) {
+export function PlatformChannelsCard({
+  roles,
+}: {
+  roles: readonly OperatorRole[];
+}) {
   const allowed = mayRunChannelActions(roles);
   const mayList = mayListStoppedChannels(roles);
   const queryClient = useQueryClient();
-  const stopped = useQuery({ queryKey: STOPPED_CHANNELS_KEY, queryFn: listStoppedChannels, enabled: mayList, retry: 0 });
-  const [open, setOpen] = React.useState<{ kind: ChannelActionKind; rowId?: string } | null>(null);
+  const stopped = useQuery({
+    queryKey: STOPPED_CHANNELS_KEY,
+    queryFn: listStoppedChannels,
+    enabled: mayList,
+    retry: 0,
+  });
+  const [open, setOpen] = React.useState<{
+    kind: ChannelActionKind;
+    rowId?: string;
+  } | null>(null);
   const [rowId, setRowId] = React.useState("");
   const rowIdOk = isChannelRowId(rowId);
-  const [outcome, setOutcome] = React.useState<ChannelActionOutcome | null>(null);
+  const [outcome, setOutcome] = React.useState<ChannelActionOutcome | null>(
+    null,
+  );
   const done = (kind: ChannelActionKind) => (next: ChannelActionOutcome) => {
     setOutcome(next);
-    if (kind === "clear") void queryClient.invalidateQueries({ queryKey: STOPPED_CHANNELS_KEY });
+    if (kind === "clear")
+      void queryClient.invalidateQueries({ queryKey: STOPPED_CHANNELS_KEY });
   };
 
   return (
@@ -76,12 +101,16 @@ export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[]
       className="flex w-full flex-col gap-3 rounded-xl border border-01 bg-01 p-4"
     >
       <div className="flex w-full items-start gap-3">
-        <Waypoints aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-03" />
+        <Waypoints
+          aria-hidden="true"
+          className="mt-0.5 size-4 shrink-0 text-03"
+        />
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h2 className="text-label-sm text-01">Payment channels</h2>
           <p className="text-body-13 text-03">
-            Platform-wide: settle every provider&rsquo;s pending channels before a pause or an upgrade, claim payouts the token refused,
-            or clear a channel the reconciler stopped. The scheduler acts on its next tick.
+            Platform-wide: settle every provider&rsquo;s pending channels before
+            a pause or an upgrade, claim payouts the token refused, or clear a
+            channel the reconciler stopped. The scheduler acts on its next tick.
           </p>
         </div>
       </div>
@@ -89,18 +118,34 @@ export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[]
         {allowed ? (
           <div className="flex flex-wrap gap-2">
             {(["drain", "claim"] as const).map((kind) => (
-              <Button key={kind} size="sm" variant="secondary" onClick={() => setOpen({ kind })}>
+              <Button
+                key={kind}
+                size="sm"
+                variant="secondary"
+                onClick={() => setOpen({ kind })}
+              >
                 {channelActionCopy(kind, "platform").button}
               </Button>
             ))}
           </div>
         ) : null}
-        {outcome ? <ResultCard title={outcome.title} next={outcome.next} onDismiss={() => setOutcome(null)} /> : null}
+        {outcome ? (
+          <ResultCard
+            title={outcome.title}
+            next={outcome.next}
+            onDismiss={() => setOutcome(null)}
+          />
+        ) : null}
         {mayList ? (
-          <div className="flex w-full flex-col gap-2 border-t border-01 pt-3" data-testid="stopped-channels">
+          <div
+            className="flex w-full flex-col gap-2 border-t border-01 pt-3"
+            data-testid="stopped-channels"
+          >
             <h3 className="text-label-13 text-01">Stopped channels</h3>
             {stopped.isPending ? (
-              <p className="text-body-13 text-03">Loading the stopped channels&hellip;</p>
+              <p className="text-body-13 text-03">
+                Loading the stopped channels&hellip;
+              </p>
             ) : stopped.isError ? (
               <>
                 <p className="text-body-13 text-warning-700" role="alert">
@@ -121,7 +166,14 @@ export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[]
                         className="font-mono text-mono-xs"
                       />
                     </div>
-                    <Button size="sm" variant="secondary" disabled={!rowIdOk} onClick={() => setOpen({ kind: "clear", rowId: rowId.trim() })}>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={!rowIdOk}
+                      onClick={() =>
+                        setOpen({ kind: "clear", rowId: rowId.trim() })
+                      }
+                    >
                       {channelActionCopy("clear").button}
                     </Button>
                   </div>
@@ -138,17 +190,49 @@ export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[]
                     className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 border-t border-01 py-2.5 first:border-t-0"
                   >
                     <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="font-mono text-mono-xs text-01" title={channel.channelKey}>
+                      <span
+                        className="font-mono text-mono-xs text-01"
+                        title={channel.channelKey}
+                      >
                         Channel {shortId(channel.channelKey, 10)}
                       </span>
                       <span className="text-body-xs text-03">
-                        Provider <span title={channel.providerId}>{shortId(channel.providerId, 8)}</span> · payer{" "}
-                        <span title={channel.payer}>{stoppedChannelPayer(channel)}</span> · stopped{" "}
-                        <UtcTime value={channel.stoppedAt} alwaysDay midSentence /> · {channel.reason}
+                        Provider{" "}
+                        <span title={channel.providerId}>
+                          {shortId(channel.providerId, 8)}
+                        </span>{" "}
+                        · payer{" "}
+                        <span title={channel.payer}>
+                          {stoppedChannelPayer(channel)}
+                        </span>
+                        {(channel.lastUpdatedAt ?? channel.stoppedAt) ? (
+                          <>
+                            {" "}
+                            · last change{" "}
+                            <UtcTime
+                              value={
+                                (channel.lastUpdatedAt ??
+                                  channel.stoppedAt) as string
+                              }
+                              alwaysDay
+                              midSentence
+                            />
+                          </>
+                        ) : null}{" "}
+                        · {channel.reason}
                       </span>
                     </span>
                     {allowed ? (
-                      <Button size="sm" variant="secondary" onClick={() => setOpen({ kind: "clear", rowId: channel.channelRowId })}>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() =>
+                          setOpen({
+                            kind: "clear",
+                            rowId: channel.channelRowId,
+                          })
+                        }
+                      >
                         {channelActionCopy("clear").button}
                       </Button>
                     ) : null}
@@ -158,7 +242,11 @@ export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[]
             )}
           </div>
         ) : null}
-        {!allowed ? <p className="text-body-13 text-03">The overrides need the {rolesPhrase(["SRE", "TRE"])} role.</p> : null}
+        {!allowed ? (
+          <p className="text-body-13 text-03">
+            The overrides need the {rolesPhrase(["SRE", "TRE"])} role.
+          </p>
+        ) : null}
       </div>
       {open ? (
         <ChannelActionSheet
