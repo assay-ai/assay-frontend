@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -69,6 +69,13 @@ vi.mock("@/features/buyer-money/use-escrow-unsettled", () => ({
   }),
 }));
 vi.mock("@/features/buyer-debt/use-owed-intent-ids", () => ({ useOwedIntentIds: () => new Set<string>() }));
+vi.mock("@/services/escrow.service", () => ({
+  createEscrowWithdrawIntent: vi.fn(async () => ({})),
+  createEscrowClaimIntent: vi.fn(async () => ({})),
+}));
+vi.mock("@/features/escrow/relayed-submission", () => ({
+  runEscrowAction: vi.fn(async () => ({ kind: "signed", signature: "0xabc" })),
+}));
 vi.mock("@/features/buyer-debt/settle-debt-sheet", () => ({ useSettleDebt: () => ({ openSettle: () => undefined }) }));
 
 import { ClaimSheet, WithdrawSheet, withdrawalsFrozen, withdrawAcknowledgement, withdrawHeldNote, withdrawPauseWarning, withdrawReceiveNote } from "./withdraw-sheets";
@@ -122,6 +129,18 @@ describe("Withdraw: the pause is stated and acknowledged", () => {
     expect(button().disabled).toBe(true);
     fireEvent.click(box);
     expect(button().disabled).toBe(false);
+  });
+
+  // BUG-R2-BUY-08: the request just made is not "a request you already made".
+  it("says 'you already asked' before the request, and not once it went through", async () => {
+    money.requested = "1000000";
+    open();
+    enter("5");
+    expect(document.body.textContent).toContain("You already asked for $1.00.");
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /Request \$5\.00 \(free\)/ }));
+    await waitFor(() => expect(screen.getByText("Withdrawal requested")).toBeTruthy());
+    expect(document.body.textContent).not.toContain("You already asked");
   });
 
   // Wave-1 audit I2: the claim pays min(requested, balance); calls can land first.

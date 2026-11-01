@@ -123,10 +123,13 @@ export function WithdrawSheet({
   const [amount, setAmount] = React.useState("");
   // "Use all" is preselected once per opening (B7); the buyer can still change it.
   const [seeded, setSeeded] = React.useState(false);
+  // Once the request went through, the standing request IS this one (BUG-R2-BUY-08): no "you already asked".
+  const [justRequested, setJustRequested] = React.useState(false);
   React.useEffect(() => {
     if (!open) {
       setAmount("");
       setSeeded(false);
+      setJustRequested(false);
     }
   }, [open]);
 
@@ -274,6 +277,7 @@ export function WithdrawSheet({
         )
       }
       doneAction={{ label: "Close", onClick: () => onOpenChange(false) }}
+      onPhaseChange={(phase) => setJustRequested(phase === "success")}
     >
       {frozen ? <FrozenBanner /> : null}
       {cancelling ? null : (
@@ -313,7 +317,7 @@ export function WithdrawSheet({
               is not part of a withdrawal.
             </p>
           ) : null}
-          {standing ? (
+          {standing && !justRequested ? (
             <p className="rounded-lg bg-warning-10 px-3 py-2 text-body-13 text-warning-700">
               You already asked for {formatLimit(standing)}. A new request replaces it (it does not add to it) and starts the
               {" "}{chainTerms(money.chain).withdrawDelay} wait again.
