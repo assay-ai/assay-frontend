@@ -26,7 +26,6 @@ import { isTransactionRef } from "@/features/provider-earnings/payments";
 import { callsOfClass, earningsSplit, heldInWindowLine, unpaidLines, type EarningsSplit, type UnpaidLine } from "@/features/provider-earnings/earned-tile";
 import {
   callCount,
-  listsUpheldApart,
   notCreditedBreakdown,
   notCreditedReason,
   providerMoney,
@@ -150,15 +149,14 @@ export default function ProviderMoneyPage() {
   const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
   const classes = React.useMemo(() => foldClasses(rows), [rows]);
   /*
-    BUG-R2-PRV-03: a server that does not list upheld-report refunds apart
-    counts them as failed checks; once the per-call rows are here they move to
-    their own reason. Until then the failed-checks sentence says it may hold them.
+    BUG-R2-PRV-03: the server lists upheld-report refunds apart (REFUNDED_UPHELD).
+    An older one counts them as failed checks; once the per-call rows are here
+    they move to their own reason.
   */
   const notCredited = React.useMemo(
     () => splitUpheldRefunds(reported, calls.data ? rows : null),
     [reported, calls.data, rows],
   );
-  const mayIncludeUpheld = !listsUpheldApart(reported) && !(calls.data && !calls.meta?.truncated);
   /* Each reason card's amount, adjusted at the shown places so the cards add up to their total on screen. */
   const reasonAmounts = React.useMemo(() => shownReasonAmounts(notCredited.reasons), [notCredited.reasons]);
   const observedTake = React.useMemo(() => observedTakeRate(rows), [rows]);
@@ -377,7 +375,7 @@ export default function ProviderMoneyPage() {
             <PageState kind="loading" rows={2} bare label="Loading calls" />
           ) : notCredited.reasons.length > 0 ? (
             notCredited.reasons.map((bucket, index) => {
-              const reason = notCreditedReason(bucket.className, { mayIncludeUpheld });
+              const reason = notCreditedReason(bucket.className);
               const tools = toolsLine(bucket.toolIds, names.toolName, names.isPending, names.loaded);
               return (
                 <div key={bucket.className} className="flex w-full flex-col gap-1 rounded-lg border border-01 bg-02 p-3.5 tablet:flex-row tablet:items-start tablet:gap-4">

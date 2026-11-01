@@ -170,6 +170,23 @@ describe("PROVIDER_FORFEITED", () => {
   });
 });
 
+// BUG-R2-PRV-03: passed, then refunded to the buyer after an upheld report.
+describe("REFUNDED_UPHELD", () => {
+  const rows = [
+    row({ callId: "a" }),
+    row({ callId: "b", classification: "REFUNDED_UPHELD", reason: "voided:DISPUTE_UPHELD", providerAmount: "9000", platformFee: "0" }),
+  ];
+
+  it("is not credited: listed among the calls not credited, in its own bucket", () => {
+    const table = foldClasses(rows);
+    expect(table.buckets.find((b) => b.className === "REFUNDED_UPHELD")?.credited?.amount ?? "0").toBe("0");
+    expect(table.totalCredited?.amount).toBe("900000");
+    const failed = foldNotCredited(rows);
+    expect(failed.calls).toBe(1);
+    expect(failed.buckets[0]?.className).toBe("REFUNDED_UPHELD");
+  });
+});
+
 describe("foldClasses — settled with no credit recorded (BUG-R2-V3-03)", () => {
   it("credits nothing for a settled row the export marks PENDING", () => {
     const table = foldClasses([

@@ -255,8 +255,34 @@ describe("upheld-report refunds (BUG-R2-PRV-03)", () => {
     expect(splitUpheldRefunds(breakdown, [row("voided:FAIL")])).toBe(breakdown);
   });
 
-  it("the failed-checks sentence does not promise the buyer was not charged while it may hold refunds", () => {
-    expect(notCreditedReason("PAID_UNCREDITED", { mayIncludeUpheld: true }).detail).toContain("upheld buyer report may be counted here");
-    expect(notCreditedReason("PAID_UNCREDITED").detail).toMatch(/The buyer was not charged\.$/);
+  it("the failed-checks card keeps its own sentence, with no extra note about refunds", () => {
+    expect(notCreditedReason("PAID_UNCREDITED").detail).toBe(
+      "Your API answered, but the result did not pass the tool's checks (a value out of range, a missing field, stale data). The buyer was not charged.",
+    );
+  });
+
+  it("the server's REFUNDED_UPHELD entry is the primary path, even with 0 calls (API-fix §3)", () => {
+    const totals = {
+      withheldByClass: [
+        { class: "PAID_UNCREDITED", calls: 0, amount: m("0") },
+        { class: "REFUNDED_UPHELD", calls: 1, amount: m("9000") },
+        { class: "SYSTEM_ERROR", calls: 0, amount: m("0") },
+        { class: "REQUEST_ERROR", calls: 0, amount: m("0") },
+      ],
+      withheld: m("9000"),
+    } as unknown as Parameters<typeof notCreditedBreakdown>[0];
+    const reported = notCreditedBreakdown(totals);
+    expect(reported.reasons.map((r) => [r.className, r.calls, r.amount?.amount])).toEqual([["REFUNDED_UPHELD", 1, "9000"]]);
+    expect(notCreditedReason(reported.reasons[0]!.className).title).toBe("Refunded to the buyer after an upheld report");
+    // No refunds this month: the entry is still there (0 calls), so the per-call fallback stays off.
+    const none = notCreditedBreakdown({
+      ...totals,
+      withheldByClass: [
+        { class: "PAID_UNCREDITED", calls: 1, amount: m("9000") },
+        { class: "REFUNDED_UPHELD", calls: 0, amount: m("0") },
+      ],
+    } as unknown as Parameters<typeof notCreditedBreakdown>[0]);
+    expect(listsUpheldApart(none)).toBe(true);
+    expect(splitUpheldRefunds(none, [row("voided:DISPUTE_UPHELD")])).toBe(none);
   });
 });

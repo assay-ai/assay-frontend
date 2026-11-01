@@ -165,7 +165,9 @@ function isCredited(row: CallRow): boolean {
     row.classification !== "PROVIDER_FORFEITED" &&
     row.classification !== "PAID_BUYER_DEBT" &&
     row.classification !== "PAID_UNCOLLECTED" &&
-    row.classification !== "PAID_UNCREDITED"
+    row.classification !== "PAID_UNCREDITED" &&
+    // Passed, then refunded to the buyer after an upheld report (BUG-R2-PRV-03): not credited.
+    row.classification !== "REFUNDED_UPHELD"
   );
 }
 
@@ -284,6 +286,9 @@ export const PENDING_PAYMENT_NOTE =
  * blocked. Nobody was charged or credited and no fee was taken; the `reason`
  * column names the cause.
  *
+ * REFUNDED_UPHELD (BUG-R2-PRV-03) is a call that passed and was refunded to the
+ * buyer after an upheld report: not credited, listed beside PAID_UNCREDITED.
+ *
  * PENDING is the mirror image: the wire emits it and **neither design draws it**.
  * It is listed last because the totals have to add up — a screen whose job is
  * explaining a count difference cannot drop four calls to keep its layout.
@@ -295,6 +300,7 @@ export const CLASS_ORDER = [
   "PAID_UNCOLLECTED",
   "PROVIDER_FORFEITED",
   "PAID_UNCREDITED",
+  "REFUNDED_UPHELD",
   "FREE",
   "EXPLORATION",
   "EXCLUDED",
