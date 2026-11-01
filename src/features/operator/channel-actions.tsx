@@ -22,6 +22,7 @@ import { toast } from "@/utils/toast";
 
 import { operatorErrorSentence } from "./operator-errors";
 import { SHORT_NOTE_MIN_LENGTH } from "./reason-codes";
+import { ResultCard } from "./result-card";
 import { OPERATOR_SHEET_BUTTONS, OPERATOR_SHEET_FOOTER } from "./sheet-footer";
 
 /**
@@ -216,6 +217,19 @@ export function channelActionDone(
     : `${payouts} unpaid ${payouts === 1 ? "payout is" : "payouts are"} claimed on the scheduler's next tick.`;
 }
 
+/** What the sheet hands back once the backend took it: the result card's two lines. */
+export interface ChannelActionOutcome {
+  title: string;
+  next: string;
+}
+
+/** The result card's title, per action. Pure. */
+export function channelActionDoneTitle(kind: ChannelActionKind): string {
+  if (kind === "clear") return "Reconciler stop cleared";
+  if (kind === "drain") return "Channel settle round requested";
+  return "Unpaid payout claim requested";
+}
+
 /** The refusal in words; a refused clear says why (the backend's detail). Pure. */
 export function channelActionErrorSentence(error: unknown): string {
   if (error instanceof ApiError && error.code === "OPERATOR_CHANNEL_CLEAR_REFUSED") {
@@ -240,14 +254,18 @@ export function ChannelActions({
   payoutAddress?: string | null;
 }) {
   const [open, setOpen] = React.useState<ChannelActionKind | null>(null);
+  const [outcome, setOutcome] = React.useState<ChannelActionOutcome | null>(null);
   if (!mayRunChannelActions(roles)) return null;
   return (
-    <div className="flex flex-wrap gap-2 border-t border-01 px-4 py-2.5" data-testid="operator-channel-actions">
-      {(["drain", "claim"] as const).map((kind) => (
-        <Button key={kind} size="sm" variant="secondary" onClick={() => setOpen(kind)}>
-          {channelActionCopy(kind).button}
-        </Button>
-      ))}
+    <div className="flex flex-col gap-2 border-t border-01 px-4 py-2.5" data-testid="operator-channel-actions">
+      <div className="flex flex-wrap gap-2">
+        {(["drain", "claim"] as const).map((kind) => (
+          <Button key={kind} size="sm" variant="secondary" onClick={() => setOpen(kind)}>
+            {channelActionCopy(kind).button}
+          </Button>
+        ))}
+      </div>
+      {outcome ? <ResultCard title={outcome.title} next={outcome.next} onDismiss={() => setOutcome(null)} /> : null}
       {open ? (
         <ChannelActionSheet
           kind={open}
@@ -255,6 +273,7 @@ export function ChannelActions({
           payoutAddress={payoutAddress}
           open
           onOpenChange={(next) => (next ? undefined : setOpen(null))}
+          onDone={setOutcome}
         />
       ) : null}
     </div>
@@ -278,8 +297,11 @@ export function ChannelActionSheet({
   channelRowId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** After the backend took it (for example, to read a list again). */
-  onDone?: () => void;
+  /**
+   * After the backend took it: the caller shows the result card (and, for
+   * example, reads a list again). Without it, the outcome is a toast.
+   */
+  onDone?: (outcome: ChannelActionOutcome) => void;
 }) {
   const copy = channelActionCopy(kind, scope);
   const [input, setInput] = React.useState<ChannelActionInput>({
@@ -313,8 +335,9 @@ export function ChannelActionSheet({
           : kind === "claim"
             ? await claimUnpaidChannelPayouts(claimBody(input))
             : await clearChannelReconcileStop(clearBody(input));
-      toast.success(copy.title, { description: channelActionDone(kind, result) });
-      onDone?.();
+      const outcome = { title: channelActionDoneTitle(kind), next: channelActionDone(kind, result) };
+      if (onDone) onDone(outcome);
+      else toast.success(outcome.title, { description: outcome.next });
       onOpenChange(false);
     } catch (error) {
       setFailure({ sentence: channelActionErrorSentence(error), code: error instanceof ApiError ? error.code : null });

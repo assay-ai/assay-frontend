@@ -85,7 +85,7 @@ describe("ChannelActions", () => {
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(submit);
     fireEvent.click(submit);
-    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    const result = await screen.findByRole("status");
     expect(service.claimUnpaidChannelPayouts).toHaveBeenCalledTimes(1);
     expect(service.claimUnpaidChannelPayouts).toHaveBeenCalledWith({
       assetId: ASSET,
@@ -93,7 +93,10 @@ describe("ChannelActions", () => {
       reasonCode: "ISSUER_FREEZE_LIFTED",
       note: NOTE,
     });
-    expect(toast.success.mock.calls[0]![1]).toEqual({ description: "2 unpaid payouts are claimed on the scheduler's next tick." });
+    expect(result.textContent).toContain("Unpaid payout claim requested");
+    expect(result.textContent).toContain("2 unpaid payouts are claimed on the scheduler's next tick.");
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("L-5: the drain says it is every provider's, not this one's; the claim prefills this provider's payout address", () => {

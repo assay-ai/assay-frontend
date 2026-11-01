@@ -11,7 +11,15 @@ import type { OperatorRole, StoppedChannel } from "@/interfaces/operator";
 import { shortAddress } from "@/libs/chains/format";
 import { listStoppedChannels } from "@/services/operator.service";
 
-import { ChannelActionSheet, channelActionCopy, isChannelRowId, mayRunChannelActions, type ChannelActionKind } from "./channel-actions";
+import {
+  ChannelActionSheet,
+  channelActionCopy,
+  isChannelRowId,
+  mayRunChannelActions,
+  type ChannelActionKind,
+  type ChannelActionOutcome,
+} from "./channel-actions";
+import { ResultCard } from "./result-card";
 import { rolesPhrase } from "./roles";
 
 /** The roles `GET /operator/channels/stopped` serves (read only). */
@@ -55,7 +63,11 @@ export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[]
   const [open, setOpen] = React.useState<{ kind: ChannelActionKind; rowId?: string } | null>(null);
   const [rowId, setRowId] = React.useState("");
   const rowIdOk = isChannelRowId(rowId);
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: STOPPED_CHANNELS_KEY });
+  const [outcome, setOutcome] = React.useState<ChannelActionOutcome | null>(null);
+  const done = (kind: ChannelActionKind) => (next: ChannelActionOutcome) => {
+    setOutcome(next);
+    if (kind === "clear") void queryClient.invalidateQueries({ queryKey: STOPPED_CHANNELS_KEY });
+  };
 
   return (
     <section
@@ -83,6 +95,7 @@ export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[]
             ))}
           </div>
         ) : null}
+        {outcome ? <ResultCard title={outcome.title} next={outcome.next} onDismiss={() => setOutcome(null)} /> : null}
         {mayList ? (
           <div className="flex w-full flex-col gap-2 border-t border-01 pt-3" data-testid="stopped-channels">
             <h3 className="text-label-13 text-01">Stopped channels</h3>
@@ -156,7 +169,7 @@ export function PlatformChannelsCard({ roles }: { roles: readonly OperatorRole[]
           channelRowId={open.kind === "clear" ? (open.rowId ?? "") : ""}
           open
           onOpenChange={(next) => (next ? undefined : setOpen(null))}
-          onDone={open.kind === "clear" ? refresh : undefined}
+          onDone={done(open.kind)}
         />
       ) : null}
     </section>

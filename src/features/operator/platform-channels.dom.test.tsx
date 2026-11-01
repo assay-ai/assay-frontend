@@ -138,7 +138,12 @@ describe("PlatformChannelsCard", () => {
     fireEvent.change(screen.getByPlaceholderText(/Why now/), { target: { value: NOTE } });
     fireEvent.click(screen.getByRole("button", { name: "Settle channels" }));
     await waitFor(() => expect(service.drainChannels).toHaveBeenCalledWith({ reasonCode: "INCIDENT", note: NOTE }));
-    expect(toast.success.mock.calls[0]![1]).toEqual({ description: "4 channels are settled on the scheduler's next tick." });
+    // A visible result on the card, as for the other operator actions (not a toast).
+    const result = await screen.findByRole("status");
+    expect(result.textContent).toContain("Channel settle round requested");
+    expect(result.textContent).toContain("4 channels are settled on the scheduler's next tick.");
+    expect(screen.queryByTestId("channel-action-drain")).toBeNull();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it("only when the list cannot be read: keeps the clear disabled until a row id is entered, then sends it", async () => {
@@ -158,7 +163,7 @@ describe("PlatformChannelsCard", () => {
     fireEvent.change(screen.getByPlaceholderText(/Why now/), { target: { value: NOTE } });
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Clear the stop" }));
-    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    expect((await screen.findByRole("status")).textContent).toContain("Reconciler stop cleared");
     expect(service.clearChannelReconcileStop).toHaveBeenCalledWith({ channelRowId: ROW, reasonCode: "INVESTIGATED", note: NOTE });
   });
 });
