@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ChainListContext } from "@/hooks/useChainTerms";
+import type { Chain } from "@/interfaces/chain";
 import type {
   ClaimUnpaidBody,
   ClaimUnpaidResult,
@@ -141,6 +143,22 @@ export interface ChannelActionErrors {
   channelRowId?: string;
   reason?: string;
   note?: string;
+}
+
+/** The asset field's example when no chain is known: never a guess at another network's id. */
+export const NEUTRAL_ASSET_PLACEHOLDER = "CAIP-19 asset id";
+
+/**
+ * The asset field's example, from this console's own chains (`GET /chains`):
+ * the first settlement asset, its token shortened (`eip155:46630/erc20:0xDbbC…`),
+ * so a testnet console never shows a mainnet id. Pure.
+ */
+export function assetPlaceholder(chains: readonly Pick<Chain, "settlementAsset">[]): string {
+  const asset = chains.find((chain) => chain.settlementAsset)?.settlementAsset;
+  if (!asset) return NEUTRAL_ASSET_PLACEHOLDER;
+  const slash = asset.lastIndexOf(":");
+  const token = asset.slice(slash + 1);
+  return token.length > 8 ? `${asset.slice(0, slash + 1)}${token.slice(0, 6)}…` : asset;
 }
 
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
@@ -304,6 +322,7 @@ export function ChannelActionSheet({
   onDone?: (outcome: ChannelActionOutcome) => void;
 }) {
   const copy = channelActionCopy(kind, scope);
+  const placeholder = assetPlaceholder(React.useContext(ChainListContext));
   const [input, setInput] = React.useState<ChannelActionInput>({
     assetId: assetId ?? "",
     address: payoutAddress ?? "",
@@ -375,7 +394,7 @@ export function ChannelActionSheet({
               label={kind === "drain" ? "Asset (CAIP-19, empty for every asset)" : "Asset (CAIP-19)"}
               value={input.assetId}
               onChange={(event) => set("assetId")(event.target.value)}
-              placeholder="eip155:4663/erc20:0x…"
+              placeholder={placeholder}
               maxLength={256}
               error={errors.assetId}
               className="font-mono text-mono-xs"

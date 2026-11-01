@@ -14,6 +14,7 @@ const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/utils/toast", () => ({ toast }));
 
 import {
+  assetPlaceholder,
   channelActionCopy,
   channelActionDone,
   channelActionErrors,
@@ -21,6 +22,7 @@ import {
   claimBody,
   drainBody,
   mayRunChannelActions,
+  NEUTRAL_ASSET_PLACEHOLDER,
 } from "./channel-actions";
 
 afterEach(() => {
@@ -119,5 +121,18 @@ describe("ChannelActions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Settle channels" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Your roles do not allow this action."));
     expect(service.drainChannels).toHaveBeenCalledWith({ reasonCode: "INCIDENT", note: NOTE });
+  });
+});
+
+describe("assetPlaceholder", () => {
+  it("takes the example from the console's own chain, token shortened", () => {
+    expect(assetPlaceholder([{ settlementAsset: "eip155:46630/erc20:0xDbbC0000000000000000000000000000000000aA" }])).toBe(
+      "eip155:46630/erc20:0xDbbC…",
+    );
+  });
+
+  it("is neutral before the chains are known, never another network's id", () => {
+    expect(assetPlaceholder([])).toBe("CAIP-19 asset id");
+    expect(NEUTRAL_ASSET_PLACEHOLDER).toBe("CAIP-19 asset id");
   });
 });
