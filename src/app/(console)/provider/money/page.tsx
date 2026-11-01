@@ -234,7 +234,7 @@ export default function ProviderMoneyPage() {
               <span className="font-mono text-heading-md text-01">{providerMoney(split.inWallet)}</span>
             </div>
             {stages ? <PayoutStagesList stages={stages} /> : null}
-            {stages ? <PayoutCadenceSetting now={now.getTime()} /> : null}
+            {stages ? <PayoutCadenceSetting now={now.getTime()} ready={earnings.data?.readyForPayout ?? null} /> : null}
             {heldInWindow && !stagesReplaceHeldLine(earnings.data) ? (
               <div className="flex flex-col gap-0.5" data-testid="money-held-in-window">
                 <span className="text-body-13 text-02">Held in the dispute window</span>

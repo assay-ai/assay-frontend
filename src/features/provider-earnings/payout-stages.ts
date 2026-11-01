@@ -158,10 +158,55 @@ export function cadenceLabel(cadence: PayoutCadence, minimum: string | null = nu
     : "Every 6 hours (default)";
 }
 
-/** "Next payout about 18:00 UTC", or null when no run is planned or the server does not say. */
-export function nextPayoutLine(nextPayoutAt: string | null | undefined, now: number = Date.now()): string | null {
+/** What the hourly reason needs: the schedule's cadence and floor, and the ready figure from the earnings. */
+export interface HourlyWaitInputs {
+  readonly cadence: PayoutCadence;
+  /** `hourlyMinimum` of `GET /providers/me/payout-cadence`; null when the server names none. */
+  readonly minimum: Money | null | undefined;
+  /** `readyForPayout` of `GET /providers/me/earnings`; null or absent when unknown. */
+  readonly ready: Money | null | undefined;
+}
+
+const HOUR_MS = 3_600_000;
+
+/**
+ * Why an hourly schedule shows a later run (BUG-R2-PRV-02): with `HOURLY`
+ * the next run is the next hour only once the hourly minimum is ready;
+ * below it the money waits for the 6-hour run. Said only when the shown run
+ * is more than an hour away and the ready figure is not known to have
+ * reached the minimum. Names the minimum when the server sends one. Pure.
+ */
+export function hourlyWaitReason(
+  nextPayoutAt: string | null | undefined,
+  inputs: HourlyWaitInputs | null | undefined,
+  format: (value: Money | null) => string,
+  now: number = Date.now(),
+): string | null {
+  if (!inputs || inputs.cadence !== "HOURLY" || !nextPayoutAt) return null;
+  const at = Date.parse(nextPayoutAt);
+  if (Number.isNaN(at) || at - now <= HOUR_MS) return null;
+  const { minimum, ready } = inputs;
+  const comparable = minimum && ready && minimum.asset === ready.asset && minimum.decimals === ready.decimals;
+  if (comparable && BigInt(ready.amount) >= BigInt(minimum.amount)) return null;
+  return minimum && isPositive(minimum)
+    ? `hourly payouts start once at least ${format(minimum)} is ready`
+    : "hourly payouts start once enough is ready";
+}
+
+/**
+ * "Next payout about 18:00 UTC", or null when no run is planned or the server
+ * does not say. With `hourly`, a later run on the hourly schedule says why:
+ * "Next payout about 18:00 UTC (hourly payouts start once at least $25.00 is ready)".
+ */
+export function nextPayoutLine(
+  nextPayoutAt: string | null | undefined,
+  now: number = Date.now(),
+  hourly?: { inputs: HourlyWaitInputs; format: (value: Money | null) => string },
+): string | null {
   const about = aboutTime(nextPayoutAt, now);
-  return about ? `Next payout ${about}` : null;
+  if (!about) return null;
+  const reason = hourly ? hourlyWaitReason(nextPayoutAt, hourly.inputs, hourly.format, now) : null;
+  return reason ? `Next payout ${about} (${reason})` : `Next payout ${about}`;
 }
 
 /** Said beside the setting: what it covers and when a change applies. */

@@ -83,6 +83,32 @@ describe("payout cadence and payment rows (SPEC-W2 §8, §11)", () => {
     expect(nextPayoutLine(null, NOW)).toBeNull();
   });
 
+  it("BUG-R2-PRV-02: says why an hourly schedule shows the 6-hour run", () => {
+    const hourly = (ready: ReturnType<typeof usd> | null, minimum: ReturnType<typeof usd> | null = usd("10000")) => ({
+      inputs: { cadence: "HOURLY" as const, minimum, ready },
+      format: providerMoney,
+    });
+    // 18:00 is more than an hour after 12:10, and $0.009 is below the $0.01 minimum.
+    expect(nextPayoutLine("2026-10-31T18:00:00.000Z", NOW, hourly(usd("9000")))).toBe(
+      "Next payout about 18:00 UTC (hourly payouts start once at least $0.01 is ready)",
+    );
+    // Nothing ready yet (all still in the hold): the same reason.
+    expect(nextPayoutLine("2026-10-31T18:00:00.000Z", NOW, hourly(null))).toMatch(/at least \$0\.01 is ready\)$/);
+    // No minimum from the server: no number.
+    expect(nextPayoutLine("2026-10-31T18:00:00.000Z", NOW, hourly(usd("9000"), null))).toBe(
+      "Next payout about 18:00 UTC (hourly payouts start once enough is ready)",
+    );
+    // Within the hour, or the minimum is ready, or the 6-hour cadence: no reason.
+    expect(nextPayoutLine("2026-10-31T13:00:00.000Z", NOW, hourly(usd("9000")))).toBe("Next payout about 13:00 UTC");
+    expect(nextPayoutLine("2026-10-31T18:00:00.000Z", NOW, hourly(usd("10000")))).toBe("Next payout about 18:00 UTC");
+    expect(
+      nextPayoutLine("2026-10-31T18:00:00.000Z", NOW, {
+        inputs: { cadence: "EVERY_6_HOURS", minimum: usd("10000"), ready: null },
+        format: providerMoney,
+      }),
+    ).toBe("Next payout about 18:00 UTC");
+  });
+
   it("titles a payment as one transfer for many calls, buyers only when known", () => {
     const tx = "0xabc";
     expect(paymentRowTitle({ calls: 12, buyers: 3, chainTxRef: tx }, true)).toBe("Paid for 12 calls (from 3 buyers) in one transfer");

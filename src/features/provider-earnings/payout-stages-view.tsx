@@ -6,7 +6,7 @@ import * as React from "react";
 
 import { ApiErrorSentence } from "@/components/patterns/api-error-sentence";
 import { Radio } from "@/components/ui/radio";
-import type { PayoutCadence, PayoutSchedule } from "@/interfaces";
+import type { Money, PayoutCadence, PayoutSchedule } from "@/interfaces";
 import { getPayoutSchedule, setPayoutCadence } from "@/services/provider-payouts.service";
 import { cn } from "@/utils";
 import { toast } from "@/utils/toast";
@@ -63,7 +63,14 @@ export function usePayoutSchedule() {
  * hour once at least the hourly minimum is ready, and when the next run is.
  * Hidden on a server that does not have it.
  */
-export function PayoutCadenceSetting({ now }: { now: number }) {
+export function PayoutCadenceSetting({
+  now,
+  ready,
+}: {
+  now: number;
+  /** `readyForPayout` from the earnings: says why an hourly schedule shows a later run. */
+  ready?: Money | null;
+}) {
   const queryClient = useQueryClient();
   const schedule = usePayoutSchedule();
   const save = useMutation({
@@ -77,7 +84,10 @@ export function PayoutCadenceSetting({ now }: { now: number }) {
   const data = schedule.data;
   if (!data) return null;
   const minimum = data.hourlyMinimum ? providerMoney(data.hourlyMinimum) : null;
-  const next = nextPayoutLine(data.nextPayoutAt, now);
+  const next = nextPayoutLine(data.nextPayoutAt, now, {
+    inputs: { cadence: data.cadence, minimum: data.hourlyMinimum, ready },
+    format: providerMoney,
+  });
   const current = save.isPending && save.variables ? save.variables : data.cadence;
   return (
     <fieldset
