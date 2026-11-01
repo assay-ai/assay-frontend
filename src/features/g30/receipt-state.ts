@@ -668,6 +668,8 @@ function holdRows(receipt: Receipt, now: number, report: ReceiptReportState): Re
   const rows: ReceiptTimelineRow[] = [];
   const reportable = Boolean(receipt.disputeFilingClosesAt);
   const windowEnds = receipt.disputeWindowEndsAt ?? null;
+  // The deadline moved later when a settle folded the call into a later channel bucket (SPEC-W2 §5).
+  const extended = receipt.channel?.refundWindowExtended === true ? { meta: REFUND_WINDOW_EXTENDED } : {};
   if (windowEnds) {
     const open = now < Date.parse(windowEnds);
     const refundable = report === "open" || (report === "none" && refundPromiseLive(receipt, now));
@@ -677,30 +679,59 @@ function holdRows(receipt: Receipt, now: number, report: ReceiptReportState): Re
       rows.push({
         at: windowEnds,
         label: "Refundable until then",
-        meta: report === "none" ? "report a bad result for a full refund" : "you reported it",
+        meta:
+          report === "none"
+            ? `report a bad result for a full refund${extended.meta ? ` · ${extended.meta}` : ""}`
+            : "you reported it",
         tone: "primary",
       });
     } else if (open) {
-      rows.push({ at: windowEnds, label: "Hold ends", ...(report === "none" ? {} : { meta: "you reported it" }), tone: "neutral" });
+      rows.push({ at: windowEnds, label: "Hold ends", ...(report === "none" ? extended : { meta: "you reported it" }), tone: "neutral" });
     } else {
       rows.push({ at: windowEnds, label: "Refundable hour ended", ...(report === "none" ? {} : { meta: "you reported it" }), tone: "neutral" });
     }
   }
   const collectable = receipt.collectableAt ?? null;
-  if (collectable) {
+  const bucket = receipt.channel?.bucketMaturesAt ?? null;
+  const collectedAt = receipt.collectedAt ?? null;
+  if (collectedAt && report !== "open") {
+    // Paid out (API-W2 §3.4c): the one row that may say the provider was paid.
+    rows.push({ at: collectedAt, label: "Paid to the provider", meta: charged(receipt), tone: "neutral" });
+  } else if (collectable) {
     if (report === "open") {
       rows.push({ at: collectable, label: "Held for your report until it is decided", meta: charged(receipt), tone: "primary" });
     } else {
+      // Never "Released": the hold ending is not the payout, which goes in the next payout run (SPEC-H H-3).
       rows.push({
         at: collectable,
-        label: now >= Date.parse(collectable) ? "Released to the provider" : "Goes to the provider after the hold",
-        meta: charged(receipt),
+        label: now >= Date.parse(collectable) ? HOLD_ENDED_NEXT_PAYOUT : "Goes to the provider in the payout after the hold",
+        meta: bucket ? `${charged(receipt)} · with its channel bucket` : charged(receipt),
         tone: "neutral",
       });
     }
+  } else if (bucket && report !== "open") {
+    rows.push({
+      at: bucket,
+      label: now >= Date.parse(bucket) ? HOLD_ENDED_NEXT_PAYOUT : "Channel bucket matures; paid to the provider in the next payout",
+      meta: charged(receipt),
+      tone: "neutral",
+    });
   }
   return rows.sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
 }
+
+/** After the hold, before the payout run collects it (SPEC-H H-3). */
+export const HOLD_ENDED_NEXT_PAYOUT = "Hold ended. Paid to the provider in the next payout.";
+
+/** A later channel bucket now holds the call, so the refund deadline moved later (SPEC-W2 §5). */
+export const REFUND_WINDOW_EXTENDED = "refund window extended";
+
+/**
+ * A charged call whose payment is not recorded on chain yet (`disputeWindowEndsAt`
+ * null) while the backend still promises a full refund (SPEC-H H-3).
+ */
+export const REFUNDABLE_BEFORE_RECORDED =
+  "Refundable: report now for a full refund. The exact deadline appears once the payment is recorded on chain.";
 
 /**
  * "Refundable until 18:58 UTC", the shared wording for the 1-hour hold, or

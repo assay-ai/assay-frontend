@@ -194,7 +194,7 @@ export function createDebtVoucherIntent(intentId: string): Promise<DebtVoucherIn
 
 /**
  * `POST /escrow/debts/:intentId/voucher` — settle one debt with the signed
- * voucher. Answers `REPLACING`: the debt is collected within about a minute.
+ * voucher. Answers `REPLACING`: the debt is usually collected within about 5 minutes.
  * See `settleDebtErrorSentence` for the refusals.
  */
 export function submitDebtVoucher(intentId: string, body: SettleDebtBody): Promise<SettleDebtResult> {

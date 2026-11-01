@@ -84,6 +84,17 @@ export interface Hold {
   createdAt: string;
   ageSeconds: number;
   expiresAt: string;
+  /**
+   * The call's stage while the hold is open (round-2 W2, SPEC-H H-2):
+   * `CHECKING` (admission and serving: minutes) or `SETTLING` (passed, waiting
+   * for the settlement round, the dispute hold and the next payout run, every
+   * 6 hours by default: at most about 9 hours).
+   * `DEBT` (round-2 review M10): buyer debt, the payment being collected
+   * again after it could not be collected the first time; the copy calls it
+   * an unpaid call, held until it is collected (as the debts list does).
+   * Absent on older servers: the copy then names both stages.
+   */
+  stage?: "CHECKING" | "SETTLING" | "DEBT" | null;
 }
 
 /**

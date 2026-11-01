@@ -95,7 +95,7 @@ const CLASS_NOTE: Record<string, string> = {
   TEST: "Your own test runs.",
   SYSTEM_ERROR: "Your endpoint timed out or returned a 5xx error.",
   REQUEST_ERROR: "Your endpoint refused the request with a 4xx error.",
-  PENDING: "Still being checked; usually settled within a minute.",
+  PENDING: "Still being checked or settling; credited when they are paid out, after the dispute hold.",
 };
 
 export function classNote(className: string, fallback?: string): string {

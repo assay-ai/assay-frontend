@@ -51,6 +51,13 @@ export interface CallRow {
   priceAmount: string;
   asset: string;
   decimals: number;
+  /**
+   * Appended by round-2 W2 (SPEC-W2 §11); empty on older servers: when the
+   * payment's hold ends, when it was paid out, and the payout transaction.
+   */
+  collectableAt?: string;
+  collectedAt?: string;
+  payoutTxRef?: string;
 }
 
 /**
@@ -101,6 +108,7 @@ export function parseCallsCsv(csv: string): CallRow[] {
     return index === -1 ? "" : (cells[index] ?? "");
   };
 
+  const payoutColumns = header.includes("payout_tx_ref");
   return lines.slice(1).map((line) => {
     const cells = parseLine(line);
     return {
@@ -117,6 +125,14 @@ export function parseCallsCsv(csv: string): CallRow[] {
       priceAmount: at(cells, "price_amount") || "0",
       asset: at(cells, "asset"),
       decimals: Number(at(cells, "decimals") || "6"),
+      // Only on a server that appends them, so an older file parses as before.
+      ...(payoutColumns
+        ? {
+            collectableAt: at(cells, "collectable_at"),
+            collectedAt: at(cells, "collected_at"),
+            payoutTxRef: at(cells, "payout_tx_ref"),
+          }
+        : {}),
     };
   });
 }

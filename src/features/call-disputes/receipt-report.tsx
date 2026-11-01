@@ -8,7 +8,7 @@ import * as React from "react";
 
 import { UtcTime } from "@/components/patterns/utc-time";
 import { Button } from "@/components/ui/button";
-import { refundableUntil, type ReceiptReportState } from "@/features/g30/receipt-state";
+import { REFUNDABLE_BEFORE_RECORDED, refundableUntil, type ReceiptReportState } from "@/features/g30/receipt-state";
 import type { Receipt } from "@/features/g30/wire";
 import { formatRemaining } from "@/hooks/useCountdown";
 import { routes } from "@/libs/routes";
@@ -65,7 +65,7 @@ export function RefundableNow({ receipt, toolName, now: nowProp }: { receipt: Re
   const line =
     hold.holdEndsAt && until
       ? `${until} · ${formatRemaining(Date.parse(hold.holdEndsAt) - now)} left to report it for a full refund.`
-      : `Refundable: the ${terms.holdCompound} hold starts when the payment is collected.`;
+      : REFUNDABLE_BEFORE_RECORDED;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-1.5" data-testid="receipt-refundable">
       <p className="text-body-13 text-02">{line}</p>

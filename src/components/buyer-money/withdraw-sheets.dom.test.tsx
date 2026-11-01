@@ -12,7 +12,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
   and paid calls can land before the request is on chain).
 */
 const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x1", decimals: 6 });
-const money = vi.hoisted(() => ({ openHolds: "0", frozen: undefined as boolean | null | undefined, pending: false, requested: "0" }));
+const money = vi.hoisted(() => ({
+  openHolds: "0",
+  frozen: undefined as boolean | null | undefined,
+  pending: false,
+  requested: "0",
+  unsettled: null as { count: number; amount: string } | null,
+}));
 
 vi.mock("./use-buyer-money", () => ({
   useBuyerMoney: () => ({
@@ -42,7 +48,22 @@ vi.mock("./use-buyer-money", () => ({
   requireSigner: () => ({}),
 }));
 vi.mock("@/features/account-block/use-account-block", () => ({ useAccountReadOnly: () => false }));
-vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIntentIds: () => ["i1"] }));
+vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIntentIds: () => ["i1"], usePayingIntentIds: () => null }));
+vi.mock("@/features/buyer-money/use-escrow-unsettled", () => ({
+  useEscrowUnsettled: () => ({
+    data: money.unsettled
+      ? {
+          unsettled: {
+            count: money.unsettled.count,
+            amount: usd(money.unsettled.amount),
+            largest: usd(money.unsettled.amount),
+            windowNeeds: usd(money.unsettled.amount),
+            redeemableUntil: null,
+          },
+        }
+      : undefined,
+  }),
+}));
 vi.mock("@/features/buyer-debt/use-owed-intent-ids", () => ({ useOwedIntentIds: () => new Set<string>() }));
 vi.mock("@/features/buyer-debt/settle-debt-sheet", () => ({ useSettleDebt: () => ({ openSettle: () => undefined }) }));
 
@@ -54,6 +75,7 @@ afterEach(() => {
   money.frozen = undefined;
   money.pending = false;
   money.requested = "0";
+  money.unsettled = null;
 });
 
 function open() {
@@ -103,11 +125,28 @@ describe("Withdraw: the pause is stated and acknowledged", () => {
     open();
     enter("5");
     expect(screen.getByTestId("withdraw-held-receive").textContent).toBe(
-      "$0.40 is held by calls being checked and is not part of this request. You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
+      "$0.40 is held by calls being checked or being paid to the provider and is not part of this request. You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
     );
     // Said once: the older held line gives way to it.
     expect(screen.queryByTestId("withdraw-held-note")).toBeNull();
     expect(document.body.textContent).not.toMatch(/you receive the \$|amount you ask for\./);
+  });
+
+  // Round-2 W2 §11: earlier calls still settling are paid first; the pause warning stays above the button.
+  it("with earlier calls still settling: says they are paid first, what is left and when", () => {
+    money.unsettled = { count: 2, amount: "13000000" };
+    open();
+    enter("5");
+    expect(screen.getByTestId("withdraw-settling").textContent).toBe(
+      "About $13.00 from earlier calls is still settling and is paid first; you will receive up to $0.24 (available about 3 hours after you ask).",
+    );
+    expect(screen.getByTestId("withdraw-pause-warning")).toBeTruthy();
+  });
+
+  it("with nothing settling: no settling line", () => {
+    open();
+    enter("5");
+    expect(screen.queryByTestId("withdraw-settling")).toBeNull();
   });
 
   it("with nothing held: still up to the amount, never a promise of all of it", () => {
@@ -127,7 +166,7 @@ describe("withdraw copy", () => {
 
   it("never promises the full amount, never subtracts the held amount, and is silent with nothing held", () => {
     expect(withdrawHeldNote(usd("100000"), usd("400000"), 0)).toBe(
-      "$0.40 is held by calls being checked and is not part of this request. You receive up to $0.10. It can be less if paid calls land before the request is on chain; never more.",
+      "$0.40 is held by calls being checked or being paid to the provider and is not part of this request. You receive up to $0.10. It can be less if paid calls land before the request is on chain; never more.",
     );
     expect(withdrawHeldNote(usd("100000"), usd("0"), 0)).toBeNull();
     expect(withdrawHeldNote(null, usd("400000"), 0)).toBeNull();

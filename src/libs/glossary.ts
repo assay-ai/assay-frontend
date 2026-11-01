@@ -90,7 +90,7 @@ export const GLOSSARY = {
   "refundable-until": {
     term: "Refundable until",
     definition:
-      "The {{holdWindow}} after a call is charged. Report a bad result before this time (shown in UTC) and the payment is held back until the report is decided.",
+      "At least {{holdWindow}} after the payment is recorded on chain (for a channel payment, rounded up to the next full hour). Report a bad result before this time (shown in UTC) and the payment is held back until the report is decided.",
   },
   report: {
     term: "Report a bad result (a dispute)",
@@ -117,7 +117,7 @@ export const GLOSSARY = {
   },
   "payout-final": {
     term: "When a payment is final",
-    definition: `Each paid call's payment becomes the provider's {{holdWindow}} after the call, once a buyer can no longer report a bad result, and a call that fails because of the provider (for example, its stake fell below the minimum) is not paid. After that, a payout is never clawed back, and only the provider's stake is at risk.`,
+    definition: `Each paid call's payment is held at least {{holdWindow}} after the payment is recorded on chain (a channel payment's hold is rounded up to the next full hour), while a buyer can still report a bad result, then paid to the provider in the next payout run; a call that fails because of the provider (for example, its stake fell below the minimum) is not paid. After that, a payout is never clawed back, and only the provider's stake is at risk.`,
   },
   "penalty-example": {
     term: "Penalty example",

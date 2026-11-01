@@ -5,9 +5,14 @@ import type { BuyerDebt, BuyerDebts, CallDebt } from "@/interfaces/buyer-debt";
 import { formatMoney, toDecimal } from "@/utils/money";
 
 import {
+  channelDebtSentence,
+  channelFallbackSentence,
   debtDeadline,
+  debtsAgentRenews,
   debtStateOf,
   debtsToSign,
+  earliestPortalSettleFrom,
+  isAgentSettledDebt,
   isReplaceable,
   nextReplaceableAt,
   notYetSettleSentence,
@@ -43,7 +48,11 @@ function totalText(debts: readonly Pick<BuyerDebt, "amount">[]): string {
   return total ? formatMoney(total, { decimals: 4 }) : plural(debts.length, "payment");
 }
 
-export type DebtBannerKind = "settle" | "other-wallet" | "collecting";
+/**
+ * `agent`: only channel debts are left to settle — the agent renews them on
+ * its next paid call, and the person has nothing to sign (round-2 W2).
+ */
+export type DebtBannerKind = "settle" | "other-wallet" | "agent" | "collecting";
 
 export interface DebtBannerSummary {
   kind: DebtBannerKind;
@@ -120,13 +129,25 @@ export function debtBannerSummary(
   const { own, others } = splitDebts(data);
   const all = [...own, ...others];
   if (all.length === 0) return null;
-  const toSign = debtsToSign(own);
-  const othersToSign = debtsToSign(others);
+  // A channel debt its channel can no longer collect is signed here like a
+  // per-call one (client review M-2); the others are the agent's to renew.
+  const toSign = debtsToSign(own, now);
+  const othersToSign = debtsToSign(others, now);
   const collecting = all.filter((debt) => debtStateOf(debt) === "REPLACING");
+  // Channel debts, every wallet's: the agent's own lane key renews them, nobody signs them here yet.
+  const agentRenews = debtsAgentRenews(all, now);
 
   const extra: string[] = [];
   if (collecting.length > 0 && collecting.length < all.length) {
     extra.push(`${plural(collecting.length, "more payment")} you signed ${collecting.length === 1 ? "is" : "are"} being collected.`);
+  }
+  const signable = toSign.length > 0 || othersToSign.length > 0;
+  if (agentRenews.length > 0 && signable) {
+    extra.push(
+      `${totalText(agentRenews)} more for ${plural(agentRenews.length, "call")} was paid on your agent's payment channel: ` +
+        "it is collected again automatically on the agent's next paid call. Nothing to sign for it here yet. " +
+        channelFallbackSentence(earliestPortalSettleFrom(agentRenews), { count: agentRenews.length, now }),
+    );
   }
   // The headline names the other wallet's part, so it counts every call the Details list shows.
   const othersPart =
@@ -161,9 +182,10 @@ export function debtBannerSummary(
     const ready = toSign.filter((debt) => isReplaceable(debt, now));
     return {
       kind: "settle",
-      title: othersPart
-        ? `You owe ${totalText(toSign)} for ${plural(toSign.length, "call")}${othersPart}. Paid calls are paused until all of it is settled.`
-        : `You owe ${totalText(toSign)} for ${plural(toSign.length, "call")}. Paid calls are paused until you settle.`,
+      title:
+        othersPart || agentRenews.length > 0
+          ? `You owe ${totalText(toSign)} for ${plural(toSign.length, "call")}${othersPart}. Paid calls are paused until all of it is settled.`
+          : `You owe ${totalText(toSign)} for ${plural(toSign.length, "call")}. Paid calls are paused until you settle.`,
       detail: [...when, ...extra, ...(freeOnlyNote ? [freeOnlyNote] : []), "Free calls still work."].join(" "),
       toSign,
       ready,
@@ -192,14 +214,31 @@ export function debtBannerSummary(
     };
   }
 
+  if (agentRenews.length > 0) {
+    return {
+      kind: "agent",
+      title: `Your agent owes ${totalText(agentRenews)} for ${plural(agentRenews.length, "call")} on its payment channel. Paid calls are paused until it is collected.`,
+      detail: [
+        agentRenewsSentence(agentRenews, now),
+        ...extra,
+        "Free calls still work.",
+      ].join(" "),
+      toSign: [],
+      ready: [],
+      waitingNote: null,
+      actionLabel: null,
+      actionDisabled: false,
+    };
+  }
+
   return {
     kind: "collecting",
     // The person's own Pause all still holds once this is collected: never promise a restart over it.
     title: pausedByYou
       ? `Collecting ${totalText(collecting)} you signed. Paid calls stay paused by you.`
-      : `Collecting ${totalText(collecting)} you signed. Paid calls resume in about a minute.`,
+      : `Collecting ${totalText(collecting)} you signed. Paid calls usually resume within about 5 minutes.`,
     detail: pausedByYou
-      ? "Nothing to do: it is collected from your escrow within about a minute. Resume in the banner below to restart paid calls. Free calls still work."
+      ? "Nothing to do: it is usually collected from your escrow within about 5 minutes. Resume in the banner below to restart paid calls. Free calls still work."
       : "Nothing to do: it is collected from your escrow, then paid calls resume. Free calls still work.",
     toSign: [],
     ready: [],
@@ -217,11 +256,21 @@ export type OwedCallState =
   | { kind: "collecting"; debt: BuyerDebt }
   /** Another wallet of the organization owes it. */
   | { kind: "other-wallet"; debt: BuyerDebt }
+  /** Paid on the agent's payment channel: the agent renews it, nothing to sign. */
+  | { kind: "agent"; debt: BuyerDebt }
   /** Not in the debts list (settled since, or the list could not be read). */
   | { kind: "unknown" };
 
-export function owedCallState(data: BuyerDebts | null | undefined, intentId: string): OwedCallState {
+export function owedCallState(
+  data: BuyerDebts | null | undefined,
+  intentId: string,
+  now: number = Date.now(),
+): OwedCallState {
   const { own, others } = splitDebts(data);
+  const listed = [...own, ...others].find((debt) => debt.intentId === intentId);
+  if (listed && debtStateOf(listed) !== "REPLACING" && isAgentSettledDebt(listed, now)) {
+    return { kind: "agent", debt: listed };
+  }
   const mine = own.find((debt) => debt.intentId === intentId);
   if (mine) return debtStateOf(mine) === "REPLACING" ? { kind: "collecting", debt: mine } : { kind: "settle", debt: mine };
   const theirs = others.find((debt) => debt.intentId === intentId);
@@ -421,7 +470,7 @@ export function settleEscrowCheck(
 
 /**
  * The settle sheet's summary while signing is blocked: what is owed and what
- * is missing — never the outcome ("$0.00", "Resume in about a minute"), since
+ * is missing — never the outcome ("$0.00", "Resume, usually within about 5 minutes"), since
  * nothing can be signed yet (verify-r12 P3). The next step is a numbered list
  * of its own, `settleNextSteps`.
  */
@@ -496,7 +545,8 @@ export function debtDeadlineLine(debt: Pick<BuyerDebt, "state" | "writeOffAt">):
 /** The earliest write-off among the debts still open (every wallet's), or `null`. */
 export function earliestWriteOff(data: BuyerDebts | null | undefined): string | null {
   const { own, others } = splitDebts(data);
-  const open = [...own, ...others].filter((debt) => debtStateOf(debt) === "OPEN");
+  // A channel debt is the agent's to renew: its write-off is not a deadline the person can meet.
+  const open = [...own, ...others].filter((debt) => debtStateOf(debt) === "OPEN" && !isAgentSettledDebt(debt));
   if (open.length === 0) return null;
   return open.reduce((first, debt) => (debt.writeOffAt < first.writeOffAt ? debt : first)).writeOffAt;
 }
@@ -515,6 +565,11 @@ export function owedRowText(
   switch (state.kind) {
     case "collecting":
       return "Signed · being collected. Paid calls resume once it is.";
+    case "agent":
+      return (
+        "Paid on your agent's payment channel · your agent settles this automatically on its next paid call · nothing to sign yet. " +
+        channelFallbackSentence(state.debt.settleInPortalFrom)
+      );
     case "other-wallet": {
       const deadline = debtStateOf(state.debt) === "OPEN" ? ` by ${debtDeadline(state.debt.writeOffAt)}` : "";
       return `Owed by another wallet of your organization: sign in with it to settle${deadline}.`;
@@ -561,7 +616,7 @@ export function paidCallsAfterSettling({
         "Once it is collected nothing is owed, but paid calls stay paused because you paused all paid calls: Resume in the banner to restart them.",
     };
   }
-  return { short: "Resume in about a minute", sentence: "Paid calls resume once it is collected, in about a minute." };
+  return { short: "Resume, usually within about 5 minutes", sentence: "Paid calls resume once it is collected, usually within about 5 minutes." };
 }
 
 /**
@@ -582,11 +637,11 @@ export function owedCallsFromDebts(data: BuyerDebts | null | undefined, toolId?:
 /**
  * Whether a debt still stops paid calls: one that needs a signature, this
  * wallet's or another wallet's of the organization. One being collected
- * clears on its own within about a minute.
+ * usually clears on its own within about 5 minutes.
  */
 export function debtBlocksPaidCalls(data: BuyerDebts | null | undefined): boolean {
   const kind = debtBannerSummary(data)?.kind;
-  return kind === "settle" || kind === "other-wallet";
+  return kind === "settle" || kind === "other-wallet" || kind === "agent";
 }
 
 /**
@@ -607,4 +662,21 @@ export function resumeSheetCopy(debtOwed: boolean): { description: string; after
         after: "Running",
         toast: "Paid calls are running again.",
       };
+}
+
+/**
+ * What the channel debts the agent settles mean, with the way out when the
+ * agent lost its payment record (client review M-2): one sentence for one
+ * debt, the plural for several.
+ */
+export function agentRenewsSentence(
+  agentRenews: readonly Pick<BuyerDebt, "voucherFormat" | "settleInPortal" | "settleInPortalFrom">[],
+  now: number = Date.now(),
+): string {
+  if (agentRenews.length === 1) return channelDebtSentence(agentRenews[0], { now });
+  return (
+    "Your agent signed these payments on a payment channel. They are collected again automatically on the agent's next paid call; " +
+    "paid calls usually resume within about 5 minutes after that. Nothing to sign here yet. " +
+    channelFallbackSentence(earliestPortalSettleFrom(agentRenews), { count: agentRenews.length, now })
+  );
 }

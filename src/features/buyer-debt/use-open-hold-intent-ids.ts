@@ -12,14 +12,55 @@ import { getHolds } from "@/services/balances.service";
  * from calls being checked. Empty until read.
  */
 export function useOpenHoldIntentIds(): string[] {
+  const open = useOpenHolds();
+  return React.useMemo(() => open.map((hold) => hold.intentId), [open]);
+}
+
+/**
+ * The open holds whose call passed and is being paid on chain (`stage`
+ * `SETTLING`), or null when any open hold does not say its stage (an older
+ * server): the copy then names both stages rather than guess (SPEC-H H-2).
+ */
+export function usePayingIntentIds(): ReadonlySet<string> | null {
+  const open = useOpenHolds();
+  return React.useMemo(() => payingIntentIds(open), [open]);
+}
+
+const KNOWN_STAGES: readonly (string | null | undefined)[] = ["CHECKING", "SETTLING", "DEBT"];
+
+/** Pure: see `usePayingIntentIds`. A `DEBT` hold is a known stage, never "being paid". */
+export function payingIntentIds(open: readonly Pick<Hold, "intentId" | "stage">[]): ReadonlySet<string> | null {
+  if (open.some((hold) => !KNOWN_STAGES.includes(hold.stage))) return null;
+  return new Set(open.filter((hold) => hold.stage === "SETTLING").map((hold) => hold.intentId));
+}
+
+/**
+ * The open holds the backend calls buyer debt (`stage` `DEBT`: the payment is
+ * being collected again after it could not be collected the first time). They
+ * are unpaid calls, never calls being checked, even before the debts list loads.
+ * Reads the shared `["holds"]` cache only: it never sends a request of its own,
+ * so a page that does not read the holds asks for nothing more.
+ */
+export function useDebtStageIntentIds(): ReadonlySet<string> {
+  const open = useOpenHolds({ fetch: false });
+  return React.useMemo(() => debtStageIntentIds(open), [open]);
+}
+
+/** Pure: see `useDebtStageIntentIds`. */
+export function debtStageIntentIds(open: readonly Pick<Hold, "intentId" | "stage">[]): ReadonlySet<string> {
+  return new Set(open.filter((hold) => hold.stage === "DEBT").map((hold) => hold.intentId));
+}
+
+function useOpenHolds({ fetch = true }: { fetch?: boolean } = {}): Hold[] {
   const holds = useQuery({
     queryKey: ["holds"],
     retry: 0,
+    enabled: fetch,
     queryFn: () => getHolds() as Promise<{ items?: Hold[] } | Hold[]>,
   });
   return React.useMemo(() => {
     const data = holds.data;
     const items = Array.isArray(data) ? data : (data?.items ?? []);
-    return items.filter((hold) => !hold.status || hold.status === "OPEN").map((hold) => hold.intentId);
+    return items.filter((hold) => !hold.status || hold.status === "OPEN");
   }, [holds.data]);
 }

@@ -475,8 +475,11 @@ export default function GuaranteePage() {
           <div className="flex flex-col gap-1.5">
             <h3 className="text-label-13 text-01">How to report a bad result</h3>
             <p className="text-body-13 text-02">
-              Open the call and choose Report a bad result. On chains with the {chainTerms.holdCompound} hold, a charge
-              is refundable for {chainTerms.holdWindow} if your report is accepted; the call&apos;s receipt says whether this one still is. Otherwise
+              Open the call and choose Report a bad result. On chains with the {chainTerms.holdCompound}{" "}hold, if you
+              report a charge before at least {chainTerms.holdWindow}{" "}after its payment is recorded on chain (a channel
+              payment&apos;s hold is rounded up to the next full hour), and the report is accepted, it is refunded; a report
+              filed before the payment is recorded is refunded the same way. The call&apos;s receipt says whether this one
+              still is. Otherwise
               there is no refund, but your report counts against the provider&apos;s quality and can lead to a
               penalty on their stake.
             </p>

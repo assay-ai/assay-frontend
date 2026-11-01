@@ -1,5 +1,6 @@
 import type { DebtOutstandingContext } from "@/interfaces/buyer-debt";
 import {
+  CHANNEL_NOT_OFFERED,
   PAYMENT_DEBT_NOT_FOUND,
   PAYMENT_DEBT_NOT_YET_REPLACEABLE,
   PAYMENT_DEBT_OUTSTANDING,
@@ -47,7 +48,7 @@ export function debtRefusalSentence(error: unknown): string | null {
   }
   if (err?.code === PAYMENT_DEBT_REPLACEMENT_PENDING) {
     return (
-      "This call is signed already and its payment is being collected from your escrow (about a minute). " +
+      "This call is signed already and its payment is being collected from your escrow (usually within about 5 minutes). " +
       "Nothing to sign; paid calls resume once it is collected."
     );
   }
@@ -107,6 +108,12 @@ export function settleDebtErrorSentence(error: unknown): string | null {
   if (code === PAYMENT_DEBT_NOT_YET_REPLACEABLE) {
     const at = err?.context?.replaceableAt;
     return `${notYetReplaceableSentence(typeof at === "string" ? at : null)} Nothing was signed.`;
+  }
+  if (code === CHANNEL_NOT_OFFERED) {
+    return (
+      "Your agent's payment channel can still collect this payment, so it cannot be settled here yet: " +
+      "your agent settles it on its next paid call. Nothing was signed."
+    );
   }
   if (code === PAYMENT_DEBT_REPLACEMENT_REFUSED) {
     return "This call changed while you were signing, so the payment was not accepted and nothing was charged. Try again.";

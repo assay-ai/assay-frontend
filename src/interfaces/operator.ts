@@ -723,3 +723,66 @@ export interface ArbiterBlockBody {
   note: string;
   ticketRef?: string;
 }
+
+/**
+ * `GET /operator/providers/{providerId}/settlement` (round-2 API-W2 §3.7): the
+ * provider's payout cadence and next run, and the last CONFIRMED settle and
+ * collect. 404 on older servers.
+ */
+export interface OperatorProviderSettlement {
+  providerId: string;
+  payoutCadence: "HOURLY" | "EVERY_6_HOURS";
+  nextPayoutAt: string | null;
+  lastSettleAt: string | null;
+  lastCollectAt: string | null;
+  openChannels: number;
+  pendingSettlement: Money | null;
+  /** The payout address the provider's newest channel pays (`0x…`); absent on an older server. */
+  payoutAddress?: string | null;
+}
+
+/**
+ * `POST /operator/channels/drain` — override `M-2`, `SRE` or `TRE`, one
+ * operator, recorded (round-2 API-W2 §3.8): every channel with value to
+ * settle (one asset, or all) gets an urgent round on the next scheduler tick.
+ * Idempotent.
+ */
+export interface DrainChannelsBody {
+  /** CAIP-19; absent = every asset. */
+  assetId?: string;
+  reasonCode: string;
+  /** At least 20 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+export interface DrainChannelsResult {
+  assetId: string | null;
+  /** Channels marked for an urgent round. */
+  channels: number;
+}
+
+/**
+ * `POST /operator/channels/claim-unpaid` — override `M-3`, `SRE` or `TRE`,
+ * one operator, recorded: claim an address's unpaid channel payouts (the
+ * token refused the transfer, so the escrow set them aside) once the issuer's
+ * block has lifted. The scheduler sends the claim on its next tick. Idempotent.
+ */
+export interface ClaimUnpaidBody {
+  /** CAIP-19, required. */
+  assetId: string;
+  /** The payout address, `0x` + 40 hex. */
+  address: string;
+  reasonCode: string;
+  /** At least 20 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+export interface ClaimUnpaidResult {
+  assetId: string;
+  /** Lower case. */
+  address: string;
+  /** Unpaid payouts marked for the claim. */
+  payouts: number;
+}

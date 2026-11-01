@@ -176,7 +176,7 @@ function Calculator({
                   nodes={[
                     { label: "Buyer pays", amount: result.perCall.price },
                     { label: `Assay fee ${feePercent}`, amount: result.perCall.fee, tone: "neutral" },
-                    { label: "You receive", amount: result.perCall.youGet, tone: "success", note: "on chain, as calls settle" },
+                    { label: "You receive", amount: result.perCall.youGet, tone: "success", note: "on chain, in scheduled payouts" },
                   ]}
                 />
                 <p className="text-body-xs text-03">

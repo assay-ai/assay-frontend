@@ -9,7 +9,8 @@ import { describe, expect, it } from "vitest";
   are the other runs it hit; each keeps its space as `{" "}`.
 */
 const CASES = [
-  ["src/app/(console)/provider/money/page.tsx", "from the buyer's escrow"],
+  ["src/app/(console)/provider/money/page.tsx", "from this month's file"],
+  ["src/app/(main)/guarantee/page.tsx", "after its payment is recorded on chain"],
   ["src/app/(operator)/operator/cases/view/_components/more-actions.tsx", "from the treasury"],
   ["src/app/(public)/catalogue/view/page.tsx", "only: it is one maker"],
   ["src/components/buyer-money/funding-view.tsx", "a call, for all your agents"],

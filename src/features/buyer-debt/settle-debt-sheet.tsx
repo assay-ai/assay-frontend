@@ -156,10 +156,10 @@ function SettleDebtSheet({
   const [openingIds, setOpeningIds] = React.useState<ReadonlySet<string> | null>(null);
   const now = useReplaceableNow(query.data, query.dataUpdatedAt);
   if (open && openingIds === null && query.data) {
-    const own = debtsToSign(splitDebts(query.data).own);
+    const own = debtsToSign(splitDebts(query.data).own, now);
     setOpeningIds(new Set((intentId ? own.filter((debt) => debt.intentId === intentId) : own).map((debt) => debt.intentId)));
   }
-  const ownToSign = debtsToSign(splitDebts(query.data).own);
+  const ownToSign = debtsToSign(splitDebts(query.data).own, now);
   const toSign = openingIds ? ownToSign.filter((debt) => openingIds.has(debt.intentId)) : [];
   const [frozen, setFrozen] = React.useState<BuyerDebt[] | null>(null);
   const signedIds = React.useRef(new Set<string>());
@@ -236,7 +236,7 @@ function SettleDebtSheet({
   const nothingToSign = query.data !== undefined && settling.length === 0;
   const nothingReason = nothingToSign
     ? (waitingNote ??
-      "Nothing left for this wallet to sign: it is settled, being collected, or owed by another wallet.")
+      "Nothing left for this wallet to sign: it is settled, being collected, owed by another wallet, or paid on your agent's payment channel (the agent settles that on its next paid call; if it cannot, you can settle it here once its channel can no longer collect it).")
     : null;
   const holdReason =
     holding && refusal
@@ -255,7 +255,7 @@ function SettleDebtSheet({
           : walletBlocker;
 
   // While signing is blocked these before → after rows would promise the outcome
-  // ("$0.00", "Resume in about a minute"), so the sheet shows them only when it
+  // ("$0.00", "Resume, usually within about 5 minutes"), so the sheet shows them only when it
   // can sign; the blocked section says what is owed, what is missing and the next step.
   const changes = [
     // A debt that is not ready stays owed: "after" says how much (review P2-1).
@@ -280,7 +280,7 @@ function SettleDebtSheet({
       onOpenChange={onOpenChange}
       chain={chain}
       title={settling.length > 1 ? `Settle ${totalText} for ${settling.length} calls` : `Settle ${totalText} owed for a call`}
-      description="Your agent already made and used this call, but its payment could not be collected. You sign the payment again; it is taken from your escrow within about a minute and paid to the provider."
+      description="Your agent already made and used this call, but its payment could not be collected. You sign the payment again; it is usually taken from your escrow within about 5 minutes and paid to the provider."
       changes={settling.length > 0 && blocks.length === 0 ? changes : undefined}
       steps={steps}
       label={settling.length > 1 ? `Sign ${settling.length} payments · ${totalText} (free)` : `Sign to pay ${totalText} (free, no gas)`}

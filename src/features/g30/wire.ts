@@ -127,6 +127,28 @@ export interface Receipt {
    * the filing guard). Null when it is false or no end is known yet.
    */
   refundableIfReportedUntil?: string | null;
+  /** How the call was paid (API-W2 §3.4). Absent on older servers. */
+  voucherFormat?: "PER_CALL" | "CHANNEL";
+  /**
+   * When the held payment (per call) or the channel bucket holding the call
+   * was paid to the provider (API-W2 §3.4c). Null until then; absent on older
+   * servers.
+   */
+  collectedAt?: string | null;
+  /** A channel-voucher call's lane and bucket; null for a per-call payment, absent on older servers. */
+  channel?: ReceiptChannel | null;
+}
+
+/** `Receipt.channel` (API-W2 §3.4). */
+export interface ReceiptChannel {
+  cumulative: string;
+  calls: number;
+  /** The channel settlement covering this call landed on chain. */
+  settled: boolean;
+  /** When the bucket holding this call's payment matures; equals `collectableAt` and `disputeWindowEndsAt`. */
+  bucketMaturesAt: string | null;
+  /** A later fold moved the bucket's maturity later (SPEC-W2 §5). */
+  refundWindowExtended: boolean;
 }
 
 /* ------------------------------------------------------------------- summary */

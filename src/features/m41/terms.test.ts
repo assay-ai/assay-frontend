@@ -15,9 +15,9 @@ describe("provider terms copy (BUG-R5-03)", () => {
 
   it("states payouts the way every earnings screen does", () => {
     const row = (key: string) => DESIGN_TERMS.commercialTerms.find((term) => term.key === key);
-    expect(row("payouts")?.value).toBe("as each call settles");
-    // A payment is final only after the 1-hour report window.
-    expect(row("payouts")?.caption).toBe("on chain; final 1 hour after each call");
+    // Payouts run on a schedule, after the dispute hold (SPEC-H H-4): never "as each call settles".
+    expect(row("payouts")?.value).toBe("on a schedule");
+    expect(row("payouts")?.caption).toBe("on chain, after a dispute hold of at least 1 hour");
     expect(row("slashedWhen")?.value).not.toContain("DATA_FAIL");
   });
 

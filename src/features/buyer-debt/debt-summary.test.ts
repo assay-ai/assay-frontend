@@ -131,7 +131,7 @@ describe("debtBannerSummary", () => {
   it("says a signed debt is being collected, with nothing to do", () => {
     const summary = debtBannerSummary({ account: ACCOUNT, debts: [debt({ state: "REPLACING" })] })!;
     expect(summary.kind).toBe("collecting");
-    expect(summary.title).toBe("Collecting $2.50 you signed. Paid calls resume in about a minute.");
+    expect(summary.title).toBe("Collecting $2.50 you signed. Paid calls usually resume within about 5 minutes.");
     expect(summary.actionLabel).toBeNull();
   });
 
@@ -304,7 +304,7 @@ describe("settleBlockedSummary (verify-r12 P3)", () => {
     ]);
     const text = rows.map((row) => row.value).join(" ");
     expect(text).not.toContain("$0.00");
-    expect(text).not.toContain("about a minute");
+    expect(text).not.toContain("about 5 minutes");
   });
 
   it("is empty when nothing blocks signing", () => {
@@ -337,7 +337,7 @@ describe("settleNextSteps (verify-r13 P3)", () => {
 
 describe("paidCallsAfterSettling (P2-5)", () => {
   it("promises a resume only when nothing else stops paid calls", () => {
-    expect(paidCallsAfterSettling({ resumes: true, pausedByYou: false, blocked: false }).short).toBe("Resume in about a minute");
+    expect(paidCallsAfterSettling({ resumes: true, pausedByYou: false, blocked: false }).short).toBe("Resume, usually within about 5 minutes");
     expect(paidCallsAfterSettling({ resumes: true, pausedByYou: true, blocked: false }).sentence).toContain(
       "you paused all paid calls: Resume in the banner",
     );
@@ -515,5 +515,113 @@ describe("waiting for replaceableAt (main b6ca73a)", () => {
     expect(skewed).toContain("Your device's clock looks ahead of Assay's");
     expect(settleDebtFailure(refusal(), now)).toMatch(/^Assay can accept this payment only a little later:/);
     expect(notYetRefusalSentence({ serverAt: null, retryAt: now - 1 }, now)).toMatch(/You can try again now\.$/);
+  });
+});
+
+describe("channel debts (round-2 W2): the agent renews them, nothing to sign", () => {
+  const channel = (overrides: Partial<BuyerDebt> = {}) =>
+    debt({ intentId: "int_ch", voucherFormat: "CHANNEL", channel: { cumulative: "300000", calls: 3 }, ...overrides });
+
+  it("is its own banner kind with no action when only channel debts are left, and still blocks paid calls", () => {
+    const summary = debtBannerSummary({ account: ACCOUNT, debts: [channel()] })!;
+    expect(summary.kind).toBe("agent");
+    expect(summary.actionLabel).toBeNull();
+    expect(summary.toSign).toEqual([]);
+    expect(summary.detail).toContain("It is collected again automatically on the agent's next paid call");
+    expect(summary.detail).toContain("Free calls still work.");
+    expect(debtBlocksPaidCalls({ account: ACCOUNT, debts: [channel()] })).toBe(true);
+  });
+
+  it("several channel debts: one total, plural copy", () => {
+    const summary = debtBannerSummary({ account: ACCOUNT, debts: [channel(), channel({ intentId: "int_ch2" })] })!;
+    expect(summary.title).toBe("Your agent owes $5.00 for 2 calls on its payment channel. Paid calls are paused until it is collected.");
+    expect(summary.detail).toContain("Your agent signed these payments on a payment channel.");
+  });
+
+  it("Settle all skips channel debts: the button total and toSign cover per-call debts only", () => {
+    const summary = debtBannerSummary({ account: ACCOUNT, debts: [debt(), channel(), debt({ intentId: "int_2", state: "WRITTEN_OFF" })] })!;
+    expect(summary.kind).toBe("settle");
+    expect(summary.toSign.map((d) => d.intentId)).toEqual(["int_1", "int_2"]);
+    expect(summary.actionLabel).toBe("Settle $5.00");
+    expect(summary.title).toBe("You owe $5.00 for 2 calls. Paid calls are paused until all of it is settled.");
+    expect(summary.detail).toContain("$2.50 more for 1 call was paid on your agent's payment channel");
+  });
+
+  it("a channel debt being renewed (REPLACING) reads as being collected", () => {
+    const summary = debtBannerSummary({ account: ACCOUNT, debts: [channel({ state: "REPLACING" })] })!;
+    expect(summary.kind).toBe("collecting");
+  });
+
+  it("an owed row or receipt for a channel debt says the agent settles it, for any wallet", () => {
+    const data = { account: ACCOUNT, debts: [channel(), channel({ intentId: "int_x", payer: OTHER })] };
+    const state = owedCallState(data, "int_ch");
+    expect(state.kind).toBe("agent");
+    expect(owedCallState(data, "int_x").kind).toBe("agent");
+    expect(owedRowText(state)).toBe(
+      "Paid on your agent's payment channel · your agent settles this automatically on its next paid call · nothing to sign yet. " +
+        "If your agent no longer has its payment record (for example it moved to another computer), you can settle it here " +
+        "once its payment channel can no longer collect it.",
+    );
+  });
+
+  it("settling the per-call debts does not promise paid calls back while a channel debt is left", () => {
+    const own = debt();
+    expect(resumesAfterSettling({ account: ACCOUNT, debts: [own, channel()] }, [own])).toBe(false);
+  });
+
+  it("a channel debt's write-off is not a deadline the person is asked to meet", () => {
+    expect(earliestWriteOff({ account: ACCOUNT, debts: [channel()] })).toBeNull();
+  });
+
+  describe("client review M-2: a channel debt the agent cannot renew is settled here once its channel cannot collect it", () => {
+    const NOW = Date.parse("2026-11-01T12:00:00Z");
+    const FROM = "2026-11-01T14:00:00Z";
+
+    it("before settleInPortalFrom: the agent settles it, and the copy says from when it can be settled here", () => {
+      const data = { account: ACCOUNT, debts: [channel({ settleInPortal: false, settleInPortalFrom: FROM, replaceableAt: FROM })] };
+      const summary = debtBannerSummary(data, { now: NOW })!;
+      expect(summary.kind).toBe("agent");
+      expect(summary.actionLabel).toBeNull();
+      expect(summary.detail).toContain("Nothing to sign here.");
+      expect(summary.detail).toContain(
+        "If your agent no longer has its payment record (for example it moved to another computer), you can settle it here from",
+      );
+      expect(summary.detail).toContain("14:00 UTC");
+      const state = owedCallState(data, "int_ch", NOW);
+      expect(state.kind).toBe("agent");
+      expect(owedRowText(state)).toContain("you can settle it here from");
+    });
+
+    it("once settleable (the server flag): the normal Settle flow, like a per-call debt", () => {
+      const data = { account: ACCOUNT, debts: [channel({ settleInPortal: true, settleInPortalFrom: FROM, replaceableAt: FROM })] };
+      const summary = debtBannerSummary(data, { now: Date.parse(FROM) + 1_000 })!;
+      expect(summary.kind).toBe("settle");
+      expect(summary.toSign.map((d) => d.intentId)).toEqual(["int_ch"]);
+      expect(summary.actionLabel).toBe("Settle $2.50");
+      expect(owedCallState(data, "int_ch", Date.parse(FROM) + 1_000).kind).toBe("settle");
+    });
+
+    it("settleInPortalFrom passed since the list was read: settleable without a refetch", () => {
+      const data = { account: ACCOUNT, debts: [channel({ settleInPortal: false, settleInPortalFrom: FROM, replaceableAt: FROM })] };
+      expect(debtBannerSummary(data, { now: Date.parse(FROM) + 1_000 })!.kind).toBe("settle");
+    });
+
+    it("mixed list: per-call + settleable channel are signed, the agent-renewed one is counted apart; totals add up", () => {
+      const data = {
+        account: ACCOUNT,
+        debts: [
+          debt(),
+          channel({ intentId: "int_ready", settleInPortal: true, settleInPortalFrom: "2026-11-01T10:00:00Z", replaceableAt: "2026-11-01T10:00:00Z" }),
+          channel({ intentId: "int_agent", settleInPortal: false, settleInPortalFrom: FROM, replaceableAt: FROM }),
+        ],
+      };
+      const summary = debtBannerSummary(data, { now: NOW })!;
+      expect(summary.kind).toBe("settle");
+      expect(summary.toSign.map((d) => d.intentId)).toEqual(["int_1", "int_ready"]);
+      expect(summary.actionLabel).toBe("Settle $5.00");
+      expect(summary.title).toBe("You owe $5.00 for 2 calls. Paid calls are paused until all of it is settled.");
+      expect(summary.detail).toContain("$2.50 more for 1 call was paid on your agent's payment channel");
+      expect(summary.detail).toContain("you can settle it here from");
+    });
   });
 });

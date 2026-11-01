@@ -7,6 +7,7 @@ import {
   foldClasses,
   foldNotCredited,
   observedTakeRate,
+  parseCallsCsv,
   pendingNote,
   PENDING_PAYMENT_NOTE,
   rowsInAsset,
@@ -248,5 +249,19 @@ describe("assetScopeNote", () => {
     expect(note).toContain("4 calls in USDG on Robinhood Chain testnet");
     expect(note).toContain("50,000 calls in every asset");
     expect(note).toContain("other 49,996 are in another asset");
+  });
+});
+
+describe("parseCallsCsv: the payout columns (round-2 W2)", () => {
+  const HEAD = "call_id,intent_id,created_at,tool_id,status,classification,reason,verification_verdict,provider_amount,platform_fee,price_amount,asset,decimals";
+  const ROW = "c1,i1,2026-10-31T10:00:00.000Z,t1,SETTLED,PAID,,PASS,900,100,1000,eip155:1/erc20:0x1,6";
+  it("reads collectable_at, collected_at and payout_tx_ref when the server appends them", () => {
+    const [row] = parseCallsCsv(`${HEAD},collectable_at,collected_at,payout_tx_ref\n${ROW},2026-10-31T11:00:00.000Z,2026-10-31T12:00:00.000Z,0xabc`);
+    expect(row).toMatchObject({ collectableAt: "2026-10-31T11:00:00.000Z", collectedAt: "2026-10-31T12:00:00.000Z", payoutTxRef: "0xabc" });
+  });
+  it("parses an older file exactly as before, with no payout fields", () => {
+    const [row] = parseCallsCsv(`${HEAD}\n${ROW}`);
+    expect(row).not.toHaveProperty("payoutTxRef");
+    expect(row?.providerAmount).toBe("900");
   });
 });

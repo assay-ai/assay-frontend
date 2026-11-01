@@ -426,7 +426,7 @@ export function reportWindow(
     return { open, guaranteed, holdEndsAt: promiseEnds, text: "The payment is still held. Report it now and, if your report is accepted, you are refunded in full." };
   }
   if (guaranteed && holdEnds === null) {
-    return { open, guaranteed, holdEndsAt: null, text: "The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full." };
+    return { open, guaranteed, holdEndsAt: null, text: "The payment is not recorded on chain yet. Report it now and, if your report is accepted, you are refunded in full. The exact deadline appears once it is recorded." };
   }
   if (holdEnds !== null && !inHold) {
     return { open, guaranteed, holdEndsAt: null, text: `The ${hold} hold has ended, so ${AFTER_HOLD_OUTCOME}` };
@@ -530,6 +530,21 @@ export function refundPlanText(plan: string, disputeState: string): string {
 
 /* ----------------------------------------------------------------- errors */
 
+/** A channel call's 409 when the server sent no message (round-2 B-3): the wait is the channel settle, not a minute. */
+const CHANNEL_COLLECTION_TEXT =
+  "The call was paid on a payment channel that has not settled yet. The dispute keeps the payment in the dispute hold when it settles (usually within 30 minutes). Decide again then: an upheld decision refunds it on chain.";
+
+/**
+ * 409 `DISPUTE_COLLECTION_IN_PROGRESS`: the server's own sentence, which says
+ * how long to wait (a channel call waits for its channel to settle, a per-call
+ * payment for its collection). The generic line only when it sent none.
+ */
+function collectionInProgressText(error: ApiError): string {
+  const message = error.message?.trim();
+  if (message && message !== error.code) return /[.!?]$/.test(message) ? message : `${message}.`;
+  return error.context?.channel === true ? CHANNEL_COLLECTION_TEXT : "The payment is moving right now. Try again in a minute.";
+}
+
 export function disputeErrorText(error: unknown): string {
   if (!(error instanceof ApiError)) return error instanceof Error ? error.message : "That did not work. Try again.";
   switch (error.code) {
@@ -548,7 +563,7 @@ export function disputeErrorText(error: unknown): string {
     case "DISPUTE_NOT_DECIDABLE":
       return "This report was already decided or withdrawn.";
     case "DISPUTE_COLLECTION_IN_PROGRESS":
-      return "The payment is moving right now. Try again in a minute.";
+      return collectionInProgressText(error);
     case "DISPUTE_NOT_WITHDRAWABLE":
       return "This report can no longer be withdrawn.";
     case "DISPUTE_NOT_FOUND":

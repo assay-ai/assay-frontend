@@ -57,6 +57,7 @@ import { ManualActionSheet } from "./_components/manual-action-sheet";
 import { MoreActions } from "./_components/more-actions";
 import { WhyNotLine } from "./_components/why-not-line";
 import { operatorQueries } from "@/features/operator/queries";
+import { ProviderSettlementFacts } from "@/features/operator/provider-settlement";
 
 /**
  * A penalty, route `/operator/cases/view?id=`.
@@ -478,6 +479,7 @@ export default function OperatorCasePage() {
               </Fact>
             ) : null}
           </dl>
+          <ProviderSettlementFacts providerId={proposal.providerId} now={now} roles={identity.roles} />
         </aside>
 
         <div className="w-full min-w-0 xl:col-start-1 xl:row-start-2">
