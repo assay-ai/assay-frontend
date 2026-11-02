@@ -507,7 +507,7 @@ export function escrowHeldText(
  * dispute hold on chain for 9 calls (paid to the provider after 15:00 UTC
  * unless reported)". It is not in the escrow's balance or held figure, so it
  * is said apart from them. The time is the server's `onChainHoldEndsAt` (the
- * last of those calls to leave the hold), in UTC; without it, the 1-hour hold
+ * last of those calls to leave the hold), in UTC; without it, the dispute hold
  * is named instead (never "within minutes"). Once that time has passed, the
  * line says the hold ended and the next payout run pays it.
  */
@@ -523,7 +523,7 @@ export function onChainHeldText(
   if (Number.isFinite(ends) && ends <= now) {
     return `${amount} in the dispute hold on chain${forCalls} (hold ended; paid to the provider in the next payout run unless reported)`;
   }
-  const when = endsAt ? `after ${formatDateTime(endsAt, { now, midSentence: true })}` : "after the 1-hour dispute hold";
+  const when = endsAt ? `after ${formatDateTime(endsAt, { now, midSentence: true })}` : "after the dispute hold";
   return `${amount} in the dispute hold on chain${forCalls} (paid to the provider ${when} unless reported)`;
 }
 
@@ -536,7 +536,13 @@ export function heldSegmentLabel(
   openHoldIntentIds: readonly string[],
   owedIntentIds: ReadonlySet<string>,
   payingIntentIds: ReadonlySet<string> | null = null,
+  /** Holds said on the "Pending settlement" line instead, left out of `openHoldIntentIds` (BUG-R2-DEV-01). */
+  { pendingSettlementCalls = 0 }: { pendingSettlementCalls?: number } = {},
 ): string {
+  if (pendingSettlementCalls > 0) {
+    if (openHoldIntentIds.length === 0) return "Pending settlement";
+    return `${heldSegmentLabel(openHoldIntentIds, owedIntentIds, payingIntentIds)}, and pending settlement`;
+  }
   const split = heldSplit(openHoldIntentIds, owedIntentIds, payingIntentIds);
   const stage =
     split.checking === null || split.paying === null || (split.checking > 0 && split.paying > 0)

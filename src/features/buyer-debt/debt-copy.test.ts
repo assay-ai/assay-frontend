@@ -518,7 +518,7 @@ describe("Funding's held line with the on-chain dispute hold (BUG-R2-BUY-01)", (
       "$0.01 in the dispute hold on chain for 1 call (paid to the provider after tomorrow 00:30 UTC unless reported)",
     );
     expect(onChainHeldText("$0.09", null, null, { now })).toBe(
-      "$0.09 in the dispute hold on chain (paid to the provider after the 1-hour dispute hold unless reported)",
+      "$0.09 in the dispute hold on chain (paid to the provider after the dispute hold unless reported)",
     );
     expect(onChainHeldText("$0.09", 9, null)).not.toMatch(/minutes/);
   });

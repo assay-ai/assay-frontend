@@ -193,7 +193,7 @@ describe("the receipt page tells one story", () => {
     expect(labels).toEqual(["Call made", "Money held", "Result checked", "Charged", "Refundable hour ended", "Hold ended. Paid to the provider in the next payout."]);
     expect(words).not.toContain("Paid to provider");
     expect(words).toContain(
-      "The 1-hour hold has ended, so there is no refund for this call. If your report is accepted, it counts against the provider's quality and can lead to a penalty on their stake",
+      "The dispute hold has ended, so there is no refund for this call. If your report is accepted, it counts against the provider's quality and can lead to a penalty on their stake",
     );
   });
 

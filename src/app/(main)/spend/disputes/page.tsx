@@ -17,6 +17,7 @@ import { routes } from "@/libs/routes";
 import { listCallDisputes } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { useChainTerms } from "@/hooks/useChainTerms";
+import { disputeHoldText } from "@/libs/chain-terms";
 
 /**
  * Reports — route `/spend/disputes`: every call this organization reported as
@@ -41,7 +42,7 @@ export default function ReportsPage() {
     <div className="flex w-full flex-col gap-4 px-4 py-5 tablet:gap-[18px] tablet:px-7 tablet:py-[22px]">
       <PageHeader title="Reports" />
       <p className="-mt-2 text-body-13 text-03">
-        Calls you reported as a bad result. Report one from its receipt under Calls: on chains with the {chainTerms.holdCompound} hold, a report accepted inside it is refunded in full, and the receipt says when that applies. {BUYER_COPY.limit}
+        Calls you reported as a bad result. Report one from its receipt under Calls: on chains with {disputeHoldText(chainTerms.holdWindow)}, a report accepted inside it is refunded in full, and the receipt says when that applies. {BUYER_COPY.limit}
       </p>
       {list.isPending ? (
         <PageState kind="loading" rows={4} label="Loading your reports" />

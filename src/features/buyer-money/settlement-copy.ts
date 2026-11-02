@@ -62,8 +62,9 @@ export function onChainHeld(
  * Funding's "Pending settlement" line, or null when nothing is pending or the
  * server could not say. It says the maximum wait, never the server's
  * `nextSettleAt`: that is a moving "now + 30 minutes" while calls keep
- * coming, so a clock time would slide (review 2026-10-31). The calls are
- * also in the held figure (being paid to the provider): the two lines overlap.
+ * coming, so a clock time would slide (review 2026-10-31). Its calls are
+ * said here only: Funding's held line leaves them out (`heldBesidePending`,
+ * BUG-R2-DEV-01) until the settle lands and they move to the dispute hold.
  */
 export function pendingSettlementLine(pending: ReturnType<typeof pendingSettlement>): { label: string; text: string } | null {
   if (!pending) return null;
