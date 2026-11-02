@@ -11,8 +11,11 @@ import type {
   CompensationIntent, OperatorCaseBrief, OperatorDashboardData, OperatorIdentity, PlatformHealth,
   ListOperatorCasesQuery, OperatorCaseListRow,
   RecordCompensationBody,
-  ManualCaseActionBody, ManualCaseActionResult,
+  ManualCaseActionBody, ManualCaseActionResult, OperatorProviderSettlement,
+  DrainChannelsBody, DrainChannelsResult, ClaimUnpaidBody, ClaimUnpaidResult, ClearReconcileBody, ClearReconcileResult,
+  StoppedChannel,
 } from "@/interfaces/operator";
+import { ApiError } from "@/libs/ApiClient";
 
 import { operatorApi } from "./operator-api";
 
@@ -53,6 +56,41 @@ export function getOperatorIdentity(): Promise<OperatorIdentity> {
 /** `GET /operator/health` — the six tiles. */
 export function getPlatformHealth(): Promise<PlatformHealth> {
   return operatorApi.get<PlatformHealth>("/operator/health");
+}
+
+/**
+ * `GET /operator/providers/{providerId}/settlement` — payout cadence, next run,
+ * last settle and last collect (round-2 API-W2 §3.7). `null` on a server
+ * without it (404).
+ */
+export async function getOperatorProviderSettlement(providerId: string): Promise<OperatorProviderSettlement | null> {
+  try {
+    return await operatorApi.get<OperatorProviderSettlement>(`/operator/providers/${encodeURIComponent(providerId)}/settlement`);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/** `POST /operator/channels/drain` — override `M-2`, `SRE` or `TRE`, one operator (API-W2 §3.8). */
+export function drainChannels(body: DrainChannelsBody): Promise<DrainChannelsResult> {
+  return operatorApi.post<DrainChannelsResult>("/operator/channels/drain", body);
+}
+
+/** `POST /operator/channels/claim-unpaid` — override `M-3`, `SRE` or `TRE`, one operator. */
+export function claimUnpaidChannelPayouts(body: ClaimUnpaidBody): Promise<ClaimUnpaidResult> {
+  return operatorApi.post<ClaimUnpaidResult>("/operator/channels/claim-unpaid", body);
+}
+
+/** `POST /operator/channels/clear-reconcile` — override `M-4`, `SRE` or `TRE`, one operator. */
+export function clearChannelReconcileStop(body: ClearReconcileBody): Promise<ClearReconcileResult> {
+  return operatorApi.post<ClearReconcileResult>("/operator/channels/clear-reconcile", body);
+}
+
+/** `GET /operator/channels/stopped` — the lanes the reconciler stopped and nobody cleared yet; `SRE`, `TRE` or `OPS_ADMIN`, read only. */
+export async function listStoppedChannels(): Promise<StoppedChannel[]> {
+  const page = await operatorApi.get<{ items?: StoppedChannel[] }>("/operator/channels/stopped");
+  return page.items ?? [];
 }
 
 /** `GET /operator/dashboard/data.json` — any operator; the console reads its reconciliation rows. */

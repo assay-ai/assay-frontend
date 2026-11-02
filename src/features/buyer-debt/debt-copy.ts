@@ -48,12 +48,98 @@ export function debtStateOf(debt: Pick<BuyerDebt, "state">): BuyerDebtState {
   return debt.state;
 }
 
+type DebtFormat = Pick<BuyerDebt, "voucherFormat" | "settleInPortal" | "settleInPortalFrom">;
+
+/** A debt paid on the agent's payment channel (round-2 W2), whoever settles it. */
+export function isChannelDebt(debt: DebtFormat): boolean {
+  return debt.voucherFormat === "CHANNEL";
+}
+
 /**
- * The debts that still need a signature: `OPEN` and `WRITTEN_OFF`. A
- * `REPLACING` one is signed already and only waits for its collection.
+ * A channel debt the person can settle here like a per-call one (client
+ * review M-2): its channel can no longer collect it on chain. The server's
+ * flag, or its `settleInPortalFrom` passed since the list was read.
  */
-export function debtsToSign<T extends Pick<BuyerDebt, "state">>(debts: readonly T[]): T[] {
-  return debts.filter((debt) => debtStateOf(debt) !== "REPLACING");
+export function isPortalSettleableChannelDebt(debt: DebtFormat, nowMs: number = Date.now()): boolean {
+  if (!isChannelDebt(debt)) return false;
+  if (debt.settleInPortal === true) return true;
+  const from = debt.settleInPortalFrom ? Date.parse(debt.settleInPortalFrom) : Number.NaN;
+  return !Number.isNaN(from) && from <= nowMs;
+}
+
+/** A channel debt only the agent can settle yet (its renew): nothing to sign here. */
+export function isAgentSettledDebt(debt: DebtFormat, nowMs: number = Date.now()): boolean {
+  return isChannelDebt(debt) && !isPortalSettleableChannelDebt(debt, nowMs);
+}
+
+/**
+ * The debts that still need the person's signature: `OPEN` and
+ * `WRITTEN_OFF`, per call — and a channel one once its channel can no longer
+ * collect it. A `REPLACING` one is signed already and only waits for its
+ * collection; any other channel one is renewed by the agent.
+ */
+export function debtsToSign<T extends Pick<BuyerDebt, "state"> & DebtFormat>(
+  debts: readonly T[],
+  nowMs: number = Date.now(),
+): T[] {
+  return debts.filter((debt) => debtStateOf(debt) !== "REPLACING" && !isAgentSettledDebt(debt, nowMs));
+}
+
+/**
+ * The channel debts the agent still has to renew (not `REPLACING`, not yet
+ * settleable here): they pause paid calls like any debt, but there is
+ * nothing to sign in the portal yet.
+ */
+export function debtsAgentRenews<T extends Pick<BuyerDebt, "state"> & DebtFormat>(
+  debts: readonly T[],
+  nowMs: number = Date.now(),
+): T[] {
+  return debts.filter((debt) => debtStateOf(debt) !== "REPLACING" && isAgentSettledDebt(debt, nowMs));
+}
+
+/** What a channel debt means for the person: the agent settles it, nothing to sign. */
+export const CHANNEL_DEBT_SENTENCE =
+  "Your agent signed this payment on a payment channel. It is collected again automatically on the agent's next paid call; " +
+  "paid calls usually resume within about 5 minutes after that. Nothing to sign here.";
+
+/**
+ * The way out when the agent cannot renew (client review M-2): from
+ * `settleInPortalFrom` the person settles it here. `count` > 1 for several
+ * (`from` is then the earliest).
+ */
+export function channelFallbackSentence(
+  from: string | null | undefined,
+  { count = 1, ...options }: DeadlineOptions & { count?: number } = {},
+): string {
+  const valid = from && !Number.isNaN(Date.parse(from));
+  const when = valid ? `from ${debtDeadline(from, options)}` : "once its payment channel can no longer collect it";
+  return count === 1
+    ? `If your agent no longer has its payment record (for example it moved to another computer), you can settle it here ${when}.`
+    : `If your agent no longer has its payment records (for example it moved to another computer), you can settle them here ${when}.`;
+}
+
+/** One channel debt the agent settles: the sentence, then the way out. */
+export function channelDebtSentence(debt: DebtFormat, options: DeadlineOptions = {}): string {
+  return `${CHANNEL_DEBT_SENTENCE} ${channelFallbackSentence(debt.settleInPortalFrom, options)}`;
+}
+
+/** The earliest `settleInPortalFrom` among channel debts, or `null`. */
+export function earliestPortalSettleFrom(debts: readonly DebtFormat[]): string | null {
+  let first: string | null = null;
+  for (const debt of debts) {
+    const from = debt.settleInPortalFrom;
+    if (!from || Number.isNaN(Date.parse(from))) continue;
+    if (first === null || Date.parse(from) < Date.parse(first)) first = from;
+  }
+  return first;
+}
+
+/** In a list of several debts: how many of them the agent settles on its payment channel. */
+export function channelDebtsSentence(count: number): string {
+  return (
+    `${count} ${count === 1 ? "was" : "were"} paid on your agent's payment channel: ` +
+    `${count === 1 ? "it is" : "they are"} collected again automatically on the agent's next paid call, with nothing to sign here.`
+  );
 }
 
 /**
@@ -102,8 +188,14 @@ export function notYetSettleSentence(
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 
-export function debtBannerTitle(debts: readonly Pick<BuyerDebt, "amount" | "state">[]): string {
+export function debtBannerTitle(debts: readonly (Pick<BuyerDebt, "amount" | "state"> & DebtFormat)[]): string {
   const toSign = debtsToSign(debts);
+  const renews = debtsAgentRenews(debts);
+  if (toSign.length === 0 && renews.length > 0) {
+    return renews.length === 1
+      ? "Your agent settles a payment it owes on its next paid call"
+      : `Your agents settle ${renews.length} payments they owe on their next paid call`;
+  }
   if (toSign.length === 0) {
     return debts.length === 1
       ? "Collecting the payment you signed"
@@ -116,12 +208,18 @@ export function debtBannerTitle(debts: readonly Pick<BuyerDebt, "amount" | "stat
 }
 
 /** The sentence for one debt, in plain words, by its state. */
-export function debtSentence(debt: Pick<BuyerDebt, "cause" | "writeOffAt" | "state">): string {
+export function debtSentence(debt: Pick<BuyerDebt, "cause" | "writeOffAt" | "state"> & DebtFormat): string {
   const state = debtStateOf(debt);
+  if (state !== "REPLACING" && isAgentSettledDebt(debt)) {
+    return (
+      `A call your agent made could not be collected from your escrow (${debtCauseText(debt.cause)}). ` +
+      `${channelDebtSentence(debt)} Free calls still work.`
+    );
+  }
   if (state === "REPLACING") {
     return (
       "You signed the payment for a call your agent made, and it is being collected from your escrow " +
-      "(about a minute). Paid calls resume once it is collected. Free calls still work."
+      "(usually within about 5 minutes). Paid calls resume once it is collected. Free calls still work."
     );
   }
   const why = `A call your agent made could not be collected from your escrow (${debtCauseText(debt.cause)})`;
@@ -143,10 +241,12 @@ export function debtSentence(debt: Pick<BuyerDebt, "cause" | "writeOffAt" | "sta
 export function debtBannerDescription(debts: readonly BuyerDebt[]): string {
   if (debts.length === 0) return "";
   if (debts.length === 1) return debtSentence(debts[0]);
-  const open = debts.filter((debt) => debtStateOf(debt) === "OPEN");
-  const writtenOff = debts.filter((debt) => debtStateOf(debt) === "WRITTEN_OFF");
-  const replacing = debts.length - open.length - writtenOff.length;
-  if (open.length + writtenOff.length === 0) {
+  const renews = debtsAgentRenews(debts);
+  const toSign = debtsToSign(debts);
+  const open = toSign.filter((debt) => debtStateOf(debt) === "OPEN");
+  const writtenOff = toSign.filter((debt) => debtStateOf(debt) === "WRITTEN_OFF");
+  const replacing = debts.length - toSign.length - renews.length;
+  if (toSign.length + renews.length === 0) {
     return (
       `You signed the payments for ${debts.length} calls your agents made, and they are being collected ` +
       "from your escrow. Paid calls resume once they are collected. Free calls still work."
@@ -165,6 +265,10 @@ export function debtBannerDescription(debts: readonly BuyerDebt[]): string {
   }
   if (replacing > 0) {
     parts.push(`${replacing} ${plural(replacing, "is", "are")} signed and being collected.`);
+  }
+  if (renews.length > 0) {
+    parts.push(channelDebtsSentence(renews.length));
+    parts.push(channelFallbackSentence(earliestPortalSettleFrom(renews), { count: renews.length }));
   }
   if (open.length > 0) {
     const earliest = open.reduce((first, debt) => (debt.writeOffAt < first.writeOffAt ? debt : first));
@@ -188,8 +292,17 @@ const ROW_STATE: Record<BuyerDebtState, string | null> = {
  * `toolName` resolves the tool id (the catalogue's `nameOf`); without it, or
  * for a tool the catalogue does not know, the row shows a short id.
  */
+/** A Details row's state words; a channel debt says the agent settles it. */
+export function debtRowState(debt: Pick<BuyerDebt, "state"> & DebtFormat): string | null {
+  if (debtStateOf(debt) !== "REPLACING" && isAgentSettledDebt(debt)) return CHANNEL_ROW_STATE;
+  return ROW_STATE[debtStateOf(debt)];
+}
+
+/** The row words for a channel debt: nothing to sign. */
+export const CHANNEL_ROW_STATE = "on a payment channel, your agent settles it on its next paid call";
+
 export function debtRowText(debt: BuyerDebt, toolName?: (toolId: string) => string): string {
-  const state = ROW_STATE[debtStateOf(debt)];
+  const state = debtRowState(debt);
   const named = toolName?.(debt.toolId);
   const tool = named && named !== debt.toolId ? named : shortToolId(debt.toolId);
   return (
@@ -204,7 +317,7 @@ export function debtRowText(debt: BuyerDebt, toolName?: (toolId: string) => stri
  */
 export function settledToast(remaining: number): string {
   return remaining === 0
-    ? "Signed. The payment is collected from your escrow within about a minute; paid calls resume once it is."
+    ? "Signed. The payment is usually collected from your escrow within about 5 minutes; paid calls resume once it is."
     : `Signed. ${remaining} more call${remaining === 1 ? " is" : "s are"} still to settle before paid calls resume.`;
 }
 
@@ -307,39 +420,153 @@ export function heldCallsText(
   return parts.join(" · ");
 }
 
-/** How many open holds are buyer debt (held until collected) and how many are calls being checked. */
-function heldSplit(openHoldIntentIds: readonly string[], owedIntentIds: ReadonlySet<string>) {
-  const owed = openHoldIntentIds.filter((id) => owedIntentIds.has(id)).length;
-  return { owed, inFlight: openHoldIntentIds.length - owed };
+/**
+ * The two stages a call that is not buyer debt holds money in (SPEC-H H-2):
+ * still being checked (admission and serving: minutes), or passed and being
+ * paid to the provider after the dispute hold. A passed call's hold stays
+ * open until the provider is paid: up to 30 minutes to settle, the 1-hour
+ * hold, then up to 6 hours to the payout run (about 7.5 hours per call, about
+ * 9 hours for an idle channel). The second promise is that maximum (owner
+ * wording), never "within minutes".
+ */
+export const CHECKING_PHRASE = "being checked (minutes)";
+export const PAYING_PHRASE = "passed, being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)";
+/** Said when the backend does not tell the two stages apart (older servers). */
+const EITHER_PHRASE =
+  "being checked (minutes) or passed and being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)";
+
+interface HeldSplit {
+  owed: number;
+  /** Not buyer debt: being checked or being paid. */
+  inFlight: number;
+  /** Of `inFlight`, still being checked; null when the backend does not say. */
+  checking: number | null;
+  /** Of `inFlight`, passed and being paid to the provider; null when the backend does not say. */
+  paying: number | null;
 }
 
 /**
- * Funding's line about the escrow's held amount. Calls being checked come back
- * or go to providers within minutes; an unpaid call's price stays held until
- * its payment is collected, signed or not, so it is never called in flight.
+ * How many open holds are buyer debt (held until collected), how many are
+ * calls being checked and how many passed and are being paid. `payingIntentIds`
+ * is null when the stage is unknown.
+ */
+function heldSplit(
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+  payingIntentIds: ReadonlySet<string> | null = null,
+): HeldSplit {
+  const owed = openHoldIntentIds.filter((id) => owedIntentIds.has(id)).length;
+  const inFlight = openHoldIntentIds.length - owed;
+  if (!payingIntentIds) return { owed, inFlight, checking: null, paying: null };
+  const paying = openHoldIntentIds.filter((id) => !owedIntentIds.has(id) && payingIntentIds.has(id)).length;
+  return { owed, inFlight, checking: inFlight - paying, paying };
+}
+
+const callsText = (n: number) => `${n} ${n === 1 ? "call" : "calls"}`;
+
+/**
+ * The calls that are not buyer debt, by stage: "2 calls being checked
+ * (minutes) and 1 call passed, being paid to the provider after the dispute
+ * hold (…)".
+ * Without the stage, one phrase that is true of both.
+ */
+function inFlightPhrase(split: HeldSplit, { counted = true }: { counted?: boolean } = {}): string {
+  if (split.checking === null || split.paying === null) {
+    return counted ? `${callsText(split.inFlight)} ${EITHER_PHRASE}` : `calls ${EITHER_PHRASE}`;
+  }
+  const parts: string[] = [];
+  if (split.checking > 0) parts.push(counted ? `${callsText(split.checking)} ${CHECKING_PHRASE}` : `calls ${CHECKING_PHRASE}`);
+  if (split.paying > 0) parts.push(counted ? `${callsText(split.paying)} ${PAYING_PHRASE}` : "calls that passed and are being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)");
+  return parts.join(" and ");
+}
+
+/**
+ * Funding's line about the escrow's held amount. A call being checked comes
+ * back or goes to the provider within minutes; one that passed is paid to the
+ * provider after the dispute hold (at most about 9 hours); an unpaid call's price stays held until its
+ * payment is collected, signed or not, so it is never called in flight.
  */
 export function escrowHeldText(
   amount: string,
   openHoldIntentIds: readonly string[],
   owedIntentIds: ReadonlySet<string>,
+  payingIntentIds: ReadonlySet<string> | null = null,
 ): string {
-  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
-  const checking = "it comes back or goes to providers within minutes";
-  if (owed === 0) return `${amount} more is held by calls being checked; ${checking}`;
+  const split = heldSplit(openHoldIntentIds, owedIntentIds, payingIntentIds);
+  const { owed, inFlight } = split;
+  if (owed === 0) return `${amount} more is held by ${inFlightPhrase(split, { counted: inFlight > 0 })}`;
   const unpaid = `${owed} unpaid ${owed === 1 ? "call" : "calls"}`;
   const until = `held until ${owed === 1 ? "it is" : "they are"} collected`;
   if (inFlight === 0) return `${amount} more is held for ${unpaid}, ${until} (see the banner)`;
-  return `${amount} more is held: ${inFlight} ${inFlight === 1 ? "call" : "calls"} being checked (${checking}) and ${unpaid}, ${until}`;
+  return `${amount} more is held: ${inFlightPhrase(split)}, and ${unpaid}, ${until}`;
+}
+
+/**
+ * The money of calls that passed and already left the escrow on chain into the
+ * dispute hold (`GET /escrow` `onChainHeld`, BUG-R2-BUY-01): "$0.09 in the
+ * dispute hold on chain for 9 calls (paid to the provider after 15:00 UTC
+ * unless reported)". It is not in the escrow's balance or held figure, so it
+ * is said apart from them. The time is the server's `onChainHoldEndsAt` (the
+ * last of those calls to leave the hold), in UTC; without it, the dispute hold
+ * is named instead (never "within minutes"). Once that time has passed, the
+ * line says the hold ended and the next payout run pays it.
+ */
+export function onChainHeldText(
+  amount: string,
+  calls: number | null | undefined,
+  endsAt: string | null | undefined,
+  { now = Date.now() }: { now?: number } = {},
+): string {
+  const forCalls = calls && calls > 0 ? ` for ${callsText(calls)}` : "";
+  const ends = endsAt ? Date.parse(endsAt) : Number.NaN;
+  // Past its end, the hold waits for the payout run: "after <a time already gone>" reads odd (REVIEW L-8).
+  if (Number.isFinite(ends) && ends <= now) {
+    return `${amount} in the dispute hold on chain${forCalls} (hold ended; paid to the provider in the next payout run unless reported)`;
+  }
+  const when = endsAt ? `after ${formatDateTime(endsAt, { now, midSentence: true })}` : "after the dispute hold";
+  return `${amount} in the dispute hold on chain${forCalls} (paid to the provider ${when} unless reported)`;
 }
 
 /**
  * The held segment's label in the escrow split. One name for the held figure
- * on every Funding line: "calls being checked", or the debt's own words.
+ * on every Funding line: the stage of the calls holding it, or the debt's own
+ * words.
  */
-export function heldSegmentLabel(openHoldIntentIds: readonly string[], owedIntentIds: ReadonlySet<string>): string {
-  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
-  if (owed === 0) return "Held by calls being checked";
-  return inFlight === 0 ? "Held for unpaid calls" : "Held by calls being checked and unpaid calls";
+export function heldSegmentLabel(
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+  payingIntentIds: ReadonlySet<string> | null = null,
+  /** Holds said on the "Pending settlement" line instead, left out of `openHoldIntentIds` (BUG-R2-DEV-01). */
+  { pendingSettlementCalls = 0 }: { pendingSettlementCalls?: number } = {},
+): string {
+  if (pendingSettlementCalls > 0) {
+    if (openHoldIntentIds.length === 0) return "Pending settlement";
+    return `${heldSegmentLabel(openHoldIntentIds, owedIntentIds, payingIntentIds)}, and pending settlement`;
+  }
+  const split = heldSplit(openHoldIntentIds, owedIntentIds, payingIntentIds);
+  const stage =
+    split.checking === null || split.paying === null || (split.checking > 0 && split.paying > 0)
+      ? "Being checked or being paid to the provider"
+      : split.paying > 0
+        ? "Passed, being paid to the provider"
+        : "Being checked";
+  if (split.owed === 0) return stage;
+  return split.inFlight === 0 ? "Held for unpaid calls" : `${stage}, and unpaid calls`;
+}
+
+/**
+ * What holds the in-flight (not owed) part, by stage: "1 call passed, being
+ * paid to the provider after the dispute hold (…)". The Withdraw sheet's two
+ * held lines (the amount's own line and the "not part of this request" note)
+ * both use it, so Custom and Use all say the same thing.
+ */
+export function withdrawHeldBy(
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+  payingIntentIds: ReadonlySet<string> | null = null,
+): string {
+  const split = heldSplit(openHoldIntentIds, owedIntentIds, payingIntentIds);
+  return inFlightPhrase(split, { counted: split.inFlight > 0 });
 }
 
 /**
@@ -352,33 +579,39 @@ export function withdrawHeldText(
   amount: string,
   openHoldIntentIds: readonly string[],
   owedIntentIds: ReadonlySet<string>,
+  payingIntentIds: ReadonlySet<string> | null = null,
 ): { text: string; owed: number } {
-  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
-  const checking = "it comes back or goes to providers within minutes";
-  if (owed === 0) return { text: `${amount} is held by calls being checked; ${checking}.`, owed };
+  const split = heldSplit(openHoldIntentIds, owedIntentIds, payingIntentIds);
+  const { owed, inFlight } = split;
+  if (owed === 0) return { text: `${amount} is held by ${withdrawHeldBy(openHoldIntentIds, owedIntentIds, payingIntentIds)}.`, owed };
   const unpaid = `${owed} unpaid ${owed === 1 ? "call" : "calls"}`;
   const until = `held until ${owed === 1 ? "its payment is" : "their payments are"} collected`;
   const settle = `Settle ${owed === 1 ? "it" : "them"} to free that money.`;
   if (inFlight === 0) return { text: `${amount} is held for ${unpaid}, ${until}. ${settle}`, owed };
-  return {
-    text:
-      `${amount} is held: ${inFlight} ${inFlight === 1 ? "call" : "calls"} being checked (${checking}) and ${unpaid}, ` +
-      `${until}. ${settle}`,
-    owed,
-  };
+  return { text: `${amount} is held: ${inFlightPhrase(split)}, and ${unpaid}, ${until}. ${settle}`, owed };
 }
 
 /** Why nothing can be withdrawn while everything in the escrow is held. */
-export function withdrawAllHeldReason(openHoldIntentIds: readonly string[], owedIntentIds: ReadonlySet<string>): string {
-  const { owed, inFlight } = heldSplit(openHoldIntentIds, owedIntentIds);
-  if (owed === 0) return "Everything in your escrow is held by calls being checked. Try again in a few minutes.";
+export function withdrawAllHeldReason(
+  openHoldIntentIds: readonly string[],
+  owedIntentIds: ReadonlySet<string>,
+  payingIntentIds: ReadonlySet<string> | null = null,
+): string {
+  const split = heldSplit(openHoldIntentIds, owedIntentIds, payingIntentIds);
+  const { owed, inFlight } = split;
+  const onlyChecking = split.paying === 0;
+  if (owed === 0) {
+    return onlyChecking
+      ? "Everything in your escrow is held by calls being checked. Try again in a few minutes."
+      : `Everything in your escrow is held by ${inFlightPhrase(split, { counted: inFlight > 0 })}. Try again once those calls are paid out or released.`;
+  }
   const unpaid = `${owed} unpaid ${owed === 1 ? "call" : "calls"}`;
   const until = `held until ${owed === 1 ? "its payment is" : "their payments are"} collected`;
   if (inFlight === 0) {
     return `Everything in your escrow is held for ${unpaid}, ${until}. Settle ${owed === 1 ? "it" : "them"} first, then withdraw what is left.`;
   }
   return (
-    `Everything in your escrow is held: by calls being checked (back within minutes) and by ${unpaid}, ${until}. ` +
+    `Everything in your escrow is held: by ${inFlightPhrase(split, { counted: false })}, and by ${unpaid}, ${until}. ` +
     `Settle ${owed === 1 ? "it" : "them"}, then withdraw what is left.`
   );
 }

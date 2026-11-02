@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -12,7 +12,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
   and paid calls can land before the request is on chain).
 */
 const usd = (amount: string) => ({ amount, asset: "eip155:46630/erc20:0x1", decimals: 6 });
-const money = vi.hoisted(() => ({ openHolds: "0", frozen: undefined as boolean | null | undefined, pending: false, requested: "0" }));
+const money = vi.hoisted(() => ({
+  openHolds: "0",
+  frozen: undefined as boolean | null | undefined,
+  pending: false,
+  requested: "0",
+  unsettled: null as { count: number; amount: string } | null,
+  onChain: undefined as { amount: string; calls: number; endsAt: string } | undefined,
+  paying: null as Set<string> | null,
+}));
 
 vi.mock("./use-buyer-money", () => ({
   useBuyerMoney: () => ({
@@ -25,6 +33,9 @@ vi.mock("./use-buyer-money", () => ({
       withdrawRequested: usd(money.requested),
       withdrawAvailableAt: null,
       withdrawalsFrozen: money.frozen,
+      ...(money.onChain
+        ? { onChainHeld: usd(money.onChain.amount), onChainHeldCalls: money.onChain.calls, onChainHoldEndsAt: money.onChain.endsAt }
+        : {}),
     },
     chain: {
       chainId: "eip155:46630",
@@ -42,8 +53,30 @@ vi.mock("./use-buyer-money", () => ({
   requireSigner: () => ({}),
 }));
 vi.mock("@/features/account-block/use-account-block", () => ({ useAccountReadOnly: () => false }));
-vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIntentIds: () => ["i1"] }));
+vi.mock("@/features/buyer-debt/use-open-hold-intent-ids", () => ({ useOpenHoldIntentIds: () => ["i1"], usePayingIntentIds: () => money.paying }));
+vi.mock("@/features/buyer-money/use-escrow-unsettled", () => ({
+  useEscrowUnsettled: () => ({
+    data: money.unsettled
+      ? {
+          unsettled: {
+            count: money.unsettled.count,
+            amount: usd(money.unsettled.amount),
+            largest: usd(money.unsettled.amount),
+            windowNeeds: usd(money.unsettled.amount),
+            redeemableUntil: null,
+          },
+        }
+      : undefined,
+  }),
+}));
 vi.mock("@/features/buyer-debt/use-owed-intent-ids", () => ({ useOwedIntentIds: () => new Set<string>() }));
+vi.mock("@/services/escrow.service", () => ({
+  createEscrowWithdrawIntent: vi.fn(async () => ({})),
+  createEscrowClaimIntent: vi.fn(async () => ({})),
+}));
+vi.mock("@/features/escrow/relayed-submission", () => ({
+  runEscrowAction: vi.fn(async () => ({ kind: "signed", signature: "0xabc" })),
+}));
 vi.mock("@/features/buyer-debt/settle-debt-sheet", () => ({ useSettleDebt: () => ({ openSettle: () => undefined }) }));
 
 import { ClaimSheet, WithdrawSheet, withdrawalsFrozen, withdrawAcknowledgement, withdrawHeldNote, withdrawPauseWarning, withdrawReceiveNote } from "./withdraw-sheets";
@@ -54,6 +87,9 @@ afterEach(() => {
   money.frozen = undefined;
   money.pending = false;
   money.requested = "0";
+  money.unsettled = null;
+  money.onChain = undefined;
+  money.paying = null;
 });
 
 function open() {
@@ -97,17 +133,86 @@ describe("Withdraw: the pause is stated and acknowledged", () => {
     expect(button().disabled).toBe(false);
   });
 
+  // BUG-R2-BUY-08: the request just made is not "a request you already made".
+  it("says 'you already asked' before the request, and not once it went through", async () => {
+    money.requested = "1000000";
+    open();
+    enter("5");
+    expect(document.body.textContent).toContain("You already asked for $1.00.");
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: /Request \$5\.00 \(free\)/ }));
+    await waitFor(() => expect(screen.getByText("Withdrawal requested")).toBeTruthy());
+    expect(document.body.textContent).not.toContain("You already asked");
+  });
+
   // Wave-1 audit I2: the claim pays min(requested, balance); calls can land first.
   it("with calls held: the held money is not part of the request, and you receive up to the amount", () => {
     money.openHolds = "400000";
     open();
     enter("5");
     expect(screen.getByTestId("withdraw-held-receive").textContent).toBe(
-      "$0.40 is held by calls being checked and is not part of this request. You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
+      "$0.40 is held by 1 call being checked (minutes) or passed and being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours) and is not part of this request. You receive up to $5.00. It can be less if paid calls land before the request is on chain; never more.",
     );
     // Said once: the older held line gives way to it.
     expect(screen.queryByTestId("withdraw-held-note")).toBeNull();
     expect(document.body.textContent).not.toMatch(/you receive the \$|amount you ask for\./);
+  });
+
+  // Round-2 W2 §11: earlier calls still settling are paid first; the pause warning stays above the button.
+  it("with earlier calls still settling: says they are paid first, what is left and when", () => {
+    money.unsettled = { count: 2, amount: "13000000" };
+    open();
+    enter("5");
+    expect(screen.getByTestId("withdraw-settling").textContent).toBe(
+      "About $13.00 from earlier calls is still settling and is paid first; you will receive up to $0.24 (available about 3 hours after you ask).",
+    );
+    expect(screen.getByTestId("withdraw-pause-warning")).toBeTruthy();
+  });
+
+  // BUG-R2-BUY-01: money already in the on-chain dispute hold is not in the escrow, so never part of a withdrawal.
+  it("with calls in the on-chain dispute hold: says so apart, and never counts it as held in the escrow", () => {
+    money.openHolds = "20000";
+    // Ends in the future, so the line names the time (a past end says the hold ended).
+    money.onChain = { amount: "90000", calls: 9, endsAt: new Date(Date.now() + 2 * 3_600_000).toISOString() };
+    open();
+    enter("5");
+    expect(screen.getByTestId("withdraw-on-chain-held").textContent).toMatch(
+      /^\$0\.09 in the dispute hold on chain for 9 calls \(paid to the provider after .*\d\d:\d\d UTC unless reported\)\. It already left your escrow, so it is not part of a withdrawal\.$/,
+    );
+    expect(screen.getByTestId("withdraw-held-receive").textContent).toMatch(/^\$0\.02 is held by 1 call/);
+  });
+
+  // R2 buyer retest: Custom and Use all named the held part with different words.
+  it("says what holds the money in the same stage-aware words in Custom and in Use all", () => {
+    money.openHolds = "10000";
+    money.paying = new Set(["i1"]);
+    money.unsettled = { count: 1, amount: "10000" };
+    const phrase =
+      "$0.01 is held by 1 call passed, being paid to the provider after the dispute hold (in the next payout run, every 6 hours by default; at most about 9 hours)";
+    open();
+    // Use all (preselected).
+    const useAll = document.body.textContent ?? "";
+    expect(useAll).toContain(phrase);
+    expect(useAll).not.toContain("being checked or being paid");
+    cleanup();
+    open();
+    enter("5");
+    const custom = document.body.textContent ?? "";
+    expect(custom).toContain(phrase);
+    expect(custom).not.toContain("being checked or being paid");
+  });
+
+  it("on an older server (no on-chain fields): no on-chain line", () => {
+    money.openHolds = "20000";
+    open();
+    enter("5");
+    expect(screen.queryByTestId("withdraw-on-chain-held")).toBeNull();
+  });
+
+  it("with nothing settling: no settling line", () => {
+    open();
+    enter("5");
+    expect(screen.queryByTestId("withdraw-settling")).toBeNull();
   });
 
   it("with nothing held: still up to the amount, never a promise of all of it", () => {
@@ -127,7 +232,7 @@ describe("withdraw copy", () => {
 
   it("never promises the full amount, never subtracts the held amount, and is silent with nothing held", () => {
     expect(withdrawHeldNote(usd("100000"), usd("400000"), 0)).toBe(
-      "$0.40 is held by calls being checked and is not part of this request. You receive up to $0.10. It can be less if paid calls land before the request is on chain; never more.",
+      "$0.40 is held by calls being checked or being paid to the provider and is not part of this request. You receive up to $0.10. It can be less if paid calls land before the request is on chain; never more.",
     );
     expect(withdrawHeldNote(usd("100000"), usd("0"), 0)).toBeNull();
     expect(withdrawHeldNote(null, usd("400000"), 0)).toBeNull();

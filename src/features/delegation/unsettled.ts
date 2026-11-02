@@ -134,7 +134,7 @@ export function loweringBeforeSignNote(
 export const LOWERING_UNREAD_NOTE =
   "Lower than now. Its payments may pause briefly while the lower limits land. Payments still being settled " +
   "could not be checked: if any no longer fit, each becomes a payment you owe, and paid calls pause until you " +
-  "sign it again. Waiting about a minute after its last call avoids this.";
+  "sign it again. Waiting until its last payments settle (up to about an hour after its last call) avoids this.";
 
 /** True when `next` lowers either cap, or (when both carry one) the expiry. */
 export function lowersCaps(current: AtomicCaps, next: AtomicCaps): boolean {
@@ -244,7 +244,7 @@ export function strandWarning(reasons: readonly StrandReason[], count: number): 
   return (
     `This change would leave ${them} unredeemable${why ? ` (${why})` : ""}: the chain refuses ` +
     `${them}, so the provider is not paid for work already done. Unless you undo the change within about ` +
-    `30 minutes, each one ${STRAND_CONSEQUENCE} They usually settle within a minute, so waiting avoids this.`
+    `30 minutes, each one ${STRAND_CONSEQUENCE} They settle within about an hour, so waiting avoids this.`
   );
 }
 
@@ -265,7 +265,7 @@ export function strandAcknowledgement(unsettled: UnsettledVouchers | null | unde
     `${line.charAt(0).toUpperCase()}${line.slice(1)} would no longer fit. I accept that the chain then refuses ` +
     `${one ? "it" : "them"} and, unless I undo this change within about 30 minutes, the ${amount} ` +
     `becomes a payment I owe: my paid calls pause until I sign ${one ? "it" : "them"} again (Settle in the banner). ` +
-    `Free calls keep working. (Waiting about a minute for ${one ? "it" : "them"} to settle avoids this.)`
+    `Free calls keep working. (Waiting for ${one ? "it" : "them"} to settle, up to about an hour, avoids this.)`
   );
 }
 

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import * as React from "react";
 import { describe, expect, it } from "vitest";
 
+import { ConfirmingNote } from "@/components/buyer-money/funding-view";
 import type { FullBalance } from "@/features/g30/balance";
 
 import {
@@ -85,8 +86,10 @@ describe("money still confirming on chain (BUG-A-06)", () => {
 });
 
 describe("ConfirmingNote", () => {
-  it("renders the line with when paid calls can use it", async () => {
-    const { ConfirmingNote } = await import("@/components/buyer-money/funding-view");
+  // Imported statically: a dynamic import of the funding view (about 1.3 s of
+  // transform alone) counted against the 5 s test timeout and timed out
+  // under a full parallel run, though the assertion never failed.
+  it("renders the line with when paid calls can use it", () => {
     const html = renderToStaticMarkup(React.createElement(ConfirmingNote, { line: confirmingLine(row())! }));
     expect(html).toContain("$20.00 still confirming on chain (usually a few seconds). Paid calls can use it once the chain confirms it.");
   });

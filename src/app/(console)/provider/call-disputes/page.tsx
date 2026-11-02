@@ -20,6 +20,7 @@ import { listProviderCallDisputes, type CallDisputeState } from "@/services/call
 import { formatMoney } from "@/utils/money";
 import { OPEN_REPORTS_PAGE, providerQueries } from "@/features/provider-home/queries";
 import { useChainTerms } from "@/hooks/useChainTerms";
+import { disputeHoldText } from "@/libs/chain-terms";
 
 /**
  * Bad-result reports — route `/provider/call-disputes`: buyers' reports about
@@ -68,7 +69,7 @@ export default function ProviderReportsPage() {
               <li>{DISPUTE_COPY.reply} You can reply once.</li>
               <li>{DISPUTE_COPY.silent}</li>
               <li>{DISPUTE_COPY.decides}</li>
-              <li>A report filed during the {chainTerms.holdCompound} hold keeps the payment held until it is decided; if upheld, the buyer gets it back and you are not paid for that call.</li>
+              <li>A report filed during {disputeHoldText(chainTerms.holdWindow)} keeps the payment held until it is decided; if upheld, the buyer gets it back and you are not paid for that call.</li>
               <li>A report filed after the hold: the payment was already collected. If upheld, it counts against your listing&apos;s quality.</li>
             </ul>
           </details>

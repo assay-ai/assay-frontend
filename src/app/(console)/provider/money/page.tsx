@@ -31,6 +31,7 @@ import {
   providerMoney,
   settlementShown,
   shownReasonAmounts,
+  splitUpheldRefunds,
   toolsLine,
   unpaidCallAmount,
 } from "@/features/provider-earnings/not-credited";
@@ -45,6 +46,8 @@ import { cn } from "@/utils";
 import { toDecimal } from "@/utils/money";
 import { toast } from "@/utils/toast";
 import { earningsKey, monthWindow } from "@/features/provider-home/report-windows";
+import { paymentRowTitle, payoutStages, stagesReplaceHeldLine } from "@/features/provider-earnings/payout-stages";
+import { PayoutCadenceSetting, PayoutStagesList } from "@/features/provider-earnings/payout-stages-view";
 
 /**
  * Money — "how much did I earn, and is it in my wallet?"
@@ -108,12 +111,10 @@ export default function ProviderMoneyPage() {
     reasons. Overdue and forfeited calls passed the check: they are explained
     under "Passed, but not paid", not here.
   */
-  const notCredited = React.useMemo(
+  const reported = React.useMemo(
     () => notCreditedBreakdown(earnings.data?.totals, earnings.data?.groups),
     [earnings.data],
   );
-  /* Each reason card's amount, adjusted at the shown places so the cards add up to their total on screen. */
-  const reasonAmounts = React.useMemo(() => shownReasonAmounts(notCredited.reasons), [notCredited.reasons]);
   const passedUnpaidCalls = (earnings.data?.totals.uncollectedCalls ?? 0) + (earnings.data?.totals.forfeitedCalls ?? 0);
   /* The wallet figure and the fee come rounded once, at the shown places: the same figures Home and the Explain drawer's Gross − fee = Net show. */
   const split = earningsSplit(earnings.data?.totals);
@@ -121,6 +122,10 @@ export default function ProviderMoneyPage() {
   const unpaid = unpaidLines(earnings.data?.totals, providerMoney);
   // Passed, still held while the buyer can dispute (lot 1 D15).
   const heldInWindow = heldInWindowLine(earnings.data?.totals, providerMoney);
+  // The four payout stages (round-2 W2); null on an older server, which keeps the held line above.
+  const stages = payoutStages(earnings.data, split.inWallet, providerMoney, now.getTime());
+  // A payment row opens its calls: the per-call file's `payout_tx_ref` (W2), loaded on demand.
+  const [openPayout, setOpenPayout] = React.useState<ProviderPayout | null>(null);
   const monthName = MONTH.format(now);
   // The home's "Details" link lands on the block, which renders only once the month has loaded.
   const hasUnpaid = unpaid.length > 0;
@@ -143,6 +148,17 @@ export default function ProviderMoneyPage() {
   const calls = useCallsExport(month, { enabled: callsWanted || (explainOpen && ledger.isError) });
   const rows = React.useMemo(() => (assetPending ? [] : rowsInAsset(calls.rows, displayAsset)), [calls.rows, assetPending, displayAsset]);
   const classes = React.useMemo(() => foldClasses(rows), [rows]);
+  /*
+    BUG-R2-PRV-03: the server lists upheld-report refunds apart (REFUNDED_UPHELD).
+    An older one counts them as failed checks; once the per-call rows are here
+    they move to their own reason.
+  */
+  const notCredited = React.useMemo(
+    () => splitUpheldRefunds(reported, calls.data ? rows : null),
+    [reported, calls.data, rows],
+  );
+  /* Each reason card's amount, adjusted at the shown places so the cards add up to their total on screen. */
+  const reasonAmounts = React.useMemo(() => shownReasonAmounts(notCredited.reasons), [notCredited.reasons]);
   const observedTake = React.useMemo(() => observedTakeRate(rows), [rows]);
   const recon = React.useMemo(
     () => (ledger.data ? fromLedger(ledger.data) : ledger.isError && calls.data ? fromExport(classes, observedTake) : null),
@@ -175,7 +191,10 @@ export default function ProviderMoneyPage() {
       <header className="flex w-full flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
           <h1 className="text-heading-sm text-01 tablet:text-heading-md">Money</h1>
-          <p className="text-body-13 text-03">Paid to your wallet, on chain, as each call settles. Nothing to withdraw.</p>
+          <p className="text-body-13 text-03">
+            Paid to your wallet on chain, automatically. Payouts run on a schedule, after a dispute hold of at least 1 hour.
+            Nothing to withdraw.
+          </p>
           <p className="text-body-13 text-03" data-testid="money-add-funds-line">
             Add funds tops up your balance for paid calls and a public name; it is not stake and not earnings.
           </p>
@@ -224,7 +243,9 @@ export default function ProviderMoneyPage() {
               <span className="text-body-13 text-02">In your wallet this month</span>
               <span className="font-mono text-heading-md text-01">{providerMoney(split.inWallet)}</span>
             </div>
-            {heldInWindow ? (
+            {stages ? <PayoutStagesList stages={stages} /> : null}
+            {stages ? <PayoutCadenceSetting now={now.getTime()} ready={earnings.data?.readyForPayout ?? null} /> : null}
+            {heldInWindow && !stagesReplaceHeldLine(earnings.data) ? (
               <div className="flex flex-col gap-0.5" data-testid="money-held-in-window">
                 <span className="text-body-13 text-02">Held in the dispute window</span>
                 <span className="font-mono text-mono-13 font-semibold text-01">{heldInWindow.amount}</span>
@@ -292,7 +313,7 @@ export default function ProviderMoneyPage() {
         <PanelHeader>
           <PanelTitles>
             <PanelTitle>Recent payments</PanelTitle>
-            <PanelDescription>money sent to your wallet, each one a transaction you can check on the explorer</PanelDescription>
+            <PanelDescription>money sent to your wallet; one transfer pays many calls, and each is a transaction you can check on the explorer</PanelDescription>
           </PanelTitles>
         </PanelHeader>
         <PanelBody className="p-2">
@@ -310,12 +331,33 @@ export default function ProviderMoneyPage() {
           ) : (
             <ul className="flex flex-col">
               {payoutItems.map((payout) => (
-                <PaymentRow key={payout.id} payout={payout} chains={chains} />
+                <PaymentRow
+                  key={payout.id}
+                  payout={payout}
+                  chains={chains}
+                  onOpen={
+                    isTransactionRef(payout.chainTxRef)
+                      ? () => {
+                          setCallsWanted(true);
+                          setOpenPayout(payout);
+                        }
+                      : undefined
+                  }
+                />
               ))}
             </ul>
           )}
         </PanelBody>
       </Panel>
+
+      <PayoutCallsSheet
+        payout={openPayout}
+        onClose={() => setOpenPayout(null)}
+        rows={calls.data ? rows : null}
+        failed={calls.isError}
+        truncated={Boolean(calls.meta?.truncated)}
+        toolName={(id) => names.toolName(id) ?? "A tool no longer listed"}
+      />
 
       {/* ── Not credited ───────────────────────────────────────────── */}
       <Panel className="w-full">
@@ -423,7 +465,16 @@ export default function ProviderMoneyPage() {
   );
 }
 
-function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: ReturnType<typeof useChains>["chains"] }) {
+function PaymentRow({
+  payout,
+  chains,
+  onOpen,
+}: {
+  payout: ProviderPayout;
+  chains: ReturnType<typeof useChains>["chains"];
+  /** Opens the calls this payment paid for; absent when it has no transaction to match them by. */
+  onOpen?: () => void;
+}) {
   const chainId = chainIdOfAsset(payout.amount.asset);
   const chain = chains.find((c) => c.chainId === chainId);
   // Only a real transaction gets a link: an unobserved redemption has no ref, and a ledger marker is not one.
@@ -432,10 +483,19 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
   return (
     <li className="flex w-full flex-wrap items-center gap-x-4 gap-y-1 rounded-md px-3 py-3 hover:bg-02">
       <span className="flex min-w-0 flex-1 flex-col">
-        {/* Rail B: the buyer's escrow paid this transaction on chain, for these calls. */}
-        <span className="text-body-13 text-01">
-          Paid for {payout.calls != null ? callCount(payout.calls) : "calls"}{" "}from the buyer&apos;s escrow
-        </span>
+        {/* One transfer on chain pays many calls, from one or more buyers' escrows (round-2 W2). */}
+        {onOpen ? (
+          <button
+            type="button"
+            onClick={onOpen}
+            className="self-start text-left text-body-13 text-01 underline-offset-2 hover:underline"
+            data-testid="payment-row-open"
+          >
+            {paymentRowTitle(payout, true)}
+          </button>
+        ) : (
+          <span className="text-body-13 text-01">{paymentRowTitle(payout, isTransactionRef(payout.chainTxRef))}</span>
+        )}
         <span className="text-body-xs text-03">
           Sent to your wallet · <UtcTime value={payout.createdAt} />
         </span>
@@ -456,6 +516,82 @@ function PaymentRow({ payout, chains }: { payout: ProviderPayout; chains: Return
         </span>
       )}
     </li>
+  );
+}
+
+/**
+ * The calls one payment paid for: the month's per-call file, matched by its
+ * `payout_tx_ref` column (round-2 W2). An older server has no such column, and
+ * the file covers this month only, so the sheet says when it cannot list them
+ * all rather than show a short list as complete.
+ */
+function PayoutCallsSheet({
+  payout,
+  onClose,
+  rows,
+  failed,
+  truncated,
+  toolName,
+}: {
+  payout: ProviderPayout | null;
+  onClose: () => void;
+  rows: readonly CallRow[] | null;
+  failed: boolean;
+  truncated: boolean;
+  toolName: (toolId: string) => string;
+}) {
+  const ref = payout?.chainTxRef?.toLowerCase() ?? null;
+  const matched = rows && ref ? rows.filter((row) => row.payoutTxRef && row.payoutTxRef.toLowerCase() === ref) : [];
+  const hasColumn = Boolean(rows?.some((row) => row.payoutTxRef !== undefined));
+  const short = payout?.calls != null && matched.length < payout.calls;
+  return (
+    <Sheet open={payout !== null} onOpenChange={(next) => (next ? undefined : onClose())}>
+      <SheetContent>
+        <SheetHeader className="tablet:pt-5">
+          <SheetTitle className="pr-8">{payout ? paymentRowTitle(payout, true) : "Payment"}</SheetTitle>
+          <SheetDescription>
+            {payout ? (
+              <>
+                {providerMoney(payout.amount)} sent to your wallet <UtcTime value={payout.createdAt} />. One transaction on
+                the explorer pays all of these calls.
+              </>
+            ) : null}
+          </SheetDescription>
+        </SheetHeader>
+        <div className="flex w-full flex-col gap-2 overflow-y-auto px-[18px] pb-6 pt-4" data-testid="payout-calls">
+          {failed ? (
+            <p className="text-body-13 text-02">The calls could not be loaded right now.</p>
+          ) : rows === null ? (
+            <PageState kind="loading" rows={3} bare label="Loading the calls" />
+          ) : !hasColumn ? (
+            <p className="text-body-13 text-02">This server does not list the calls of a payment yet. The month&apos;s CSV has every call.</p>
+          ) : matched.length === 0 ? (
+            <p className="text-body-13 text-02">None of this month&apos;s calls are in this payment; it paid for earlier calls.</p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-01">
+              {matched.map((row) => (
+                <li key={row.intentId || row.callId} className="flex items-center justify-between gap-3 py-2 text-body-13">
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-01">{toolName(row.toolId)}</span>
+                    <span className="text-body-xs text-03">
+                      <UtcTime value={row.createdAt} />
+                    </span>
+                  </span>
+                  <span className="font-mono text-mono-13 text-01">
+                    {providerMoney({ amount: row.providerAmount, asset: row.asset, decimals: row.decimals })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {hasColumn && (short || truncated) && matched.length > 0 ? (
+            <p className="text-body-xs text-03">
+              Showing the {callCount(matched.length)} from this month&apos;s file; the rest were made earlier or are past the file&apos;s limit.
+            </p>
+          ) : null}
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
@@ -702,7 +838,7 @@ function ExplainSheet({
             <ul className="flex list-disc flex-col gap-1.5 pl-5">
               <li>Free calls and test calls are served but earn nothing.</li>
               <li>A call whose answer fails Assay&apos;s check is not charged to the buyer, so it is not credited to you.</li>
-              <li>Calls still being checked are credited when the check finishes, usually within a minute.</li>
+              <li>Calls still being checked or settling are credited when they are paid out, after the dispute hold.</li>
               <li>Retries: if your API failed and Assay tried another provider, you see the request but no payment.</li>
             </ul>
           </section>

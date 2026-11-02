@@ -40,7 +40,27 @@ export interface BuyerDebt {
    * settle routes answer `PAYMENT_DEBT_NOT_YET_REPLACEABLE`.
    */
   replaceableAt: string;
+  /**
+   * How the call was paid (round-2 W2). `CHANNEL`: on the agent's payment
+   * channel. The agent's own lane key renews it; the person signs it in the
+   * portal only once `settleInPortal` (before that the per-call routes answer
+   * `CHANNEL_NOT_OFFERED`). Absent on an older server: `PER_CALL`.
+   */
+  voucherFormat?: DebtVoucherFormat;
+  /** A `CHANNEL` debt: the stored pair the agent renews, and its lane. `null`/absent otherwise. */
+  channel?: { cumulative: string; calls: number; channelId?: string | null } | null;
+  /**
+   * A `CHANNEL` debt (client review M-2): `true` once its payment channel can
+   * no longer collect it on chain. The payer can then settle it here like a
+   * per-call debt (a per-call voucher of the same amount to the same
+   * provider); the agent can no longer renew it after that. Absent otherwise.
+   */
+  settleInPortal?: boolean;
+  /** A `CHANNEL` debt: from when `settleInPortal` is true (ISO 8601). */
+  settleInPortalFrom?: string | null;
 }
+
+export type DebtVoucherFormat = "PER_CALL" | "CHANNEL";
 
 /**
  * Where one debt stands. Every state refuses the payer's paid calls.
@@ -139,6 +159,8 @@ export interface DebtOutstandingContext {
 
 export const PAYMENT_DEBT_OUTSTANDING = "PAYMENT_DEBT_OUTSTANDING";
 export const PAYMENT_DEBT_NOT_FOUND = "PAYMENT_DEBT_NOT_FOUND";
+/** A channel debt its payment channel can still collect: the agent renews it; not settleable here yet. */
+export const CHANNEL_NOT_OFFERED = "CHANNEL_NOT_OFFERED";
 export const PAYMENT_DEBT_REPLACEMENT_PENDING = "PAYMENT_DEBT_REPLACEMENT_PENDING";
 /** 409: the original voucher is still inside its on-chain window; `context.replaceableAt` says until when. */
 export const PAYMENT_DEBT_NOT_YET_REPLACEABLE = "PAYMENT_DEBT_NOT_YET_REPLACEABLE";

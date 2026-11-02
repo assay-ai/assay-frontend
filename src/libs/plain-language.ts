@@ -404,7 +404,11 @@ const ERRORS: Record<string, string> = {
   DEBT_OUTSTANDING:
     "Paid calls are paused: your escrow owes for a call your agent already made. Settle it from the banner at the top. Free calls still work.",
   DEBT_REPLACEMENT_PENDING:
-    "This call is signed already and its payment is being collected (about a minute). Nothing to sign.",
+    "This call is signed already and its payment is being collected (usually within about 5 minutes). Nothing to sign.",
+  PAYMENT_UNSETTLED_LIMIT:
+    "Waiting for earlier payments to settle on chain; the call can be retried after the next settlement round. Nothing was charged.",
+  CHANNEL_ROTATE: "Assay could not take this payment on its payment channel. Ask again to pay. Nothing was charged.",
+  PROVIDER_PAYOUT_CADENCE_INVALID: "That payout schedule is not offered. Choose every 6 hours or hourly.",
   VALIDATION_FAILED: "Some of the details are not valid.",
   UNAUTHORIZED: "Your session expired. Sign in again.",
   FORBIDDEN: "You do not have access to this.",

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  HOLD_ENDED_NEXT_PAYOUT,
+  REFUNDABLE_BEFORE_RECORDED,
+  REFUND_WINDOW_EXTENDED,
   COLLECTION_STATES,
   chargedCheck,
   chargedHeadline,
+  receiptPayout,
   receiptStory,
   receiptTimeline,
   refundableUntil,
@@ -503,17 +507,18 @@ describe("receiptTimeline — the 1-hour hold", () => {
       "Money held",
       "Charged",
       "Refundable until then",
-      "Goes to the provider after the hold",
+      "Goes to the provider in the payout after the hold",
     ]);
     expect(rows[3]?.meta).toBe("report a bad result for a full refund");
     expect(rows.at(-1)?.meta).toBe("$0.05");
     expect(refundableUntil(receipt, INSIDE)).toMatch(/^Refundable until .*01:00 UTC$/);
   });
 
-  it("after the hold: the hour ended and the payment was released, never asserted 'Paid'", () => {
+  it("after the hold, before the payout: 'Hold ended. Paid to the provider in the next payout.', never 'Released' (SPEC-H H-3)", () => {
     const rows = receiptTimeline(receipt, "CHARGED", { now: AFTER });
-    expect(labels(rows).slice(-2)).toEqual(["Refundable hour ended", "Released to the provider"]);
-    expect(labels(rows).join(" ")).not.toMatch(/Paid to provider/);
+    expect(labels(rows).slice(-2)).toEqual(["Refundable hour ended", HOLD_ENDED_NEXT_PAYOUT]);
+    expect(HOLD_ENDED_NEXT_PAYOUT).toBe("Hold ended. Paid to the provider in the next payout.");
+    expect(labels(rows).join(" ")).not.toMatch(/Released|Paid to provider/);
     expect(refundableUntil(receipt, AFTER)).toBeNull();
   });
 
@@ -528,9 +533,80 @@ describe("receiptTimeline — the 1-hour hold", () => {
   // Re-review R2: an open report without the guarantee ("closed" here) does not stop collection.
   it("with a report not covered by the guarantee past collectableAt: released, and you reported it", () => {
     const rows = receiptTimeline(receipt, "CHARGED", { now: AFTER, report: "closed" });
-    expect(labels(rows).slice(-2)).toEqual(["Refundable hour ended", "Released to the provider"]);
+    expect(labels(rows).slice(-2)).toEqual(["Refundable hour ended", HOLD_ENDED_NEXT_PAYOUT]);
     expect(rows.find((r) => r.label === "Refundable hour ended")?.meta).toBe("you reported it");
     expect(labels(rows)).not.toContain("Held for your report until it is decided");
+  });
+
+  // Round-2 W2 (API-W2 §3.4): paid out once collected; a channel call says its bucket; a fold extends the window.
+  it("once collected: 'Paid to the provider' at collectedAt, never 'next payout'", () => {
+    const rows = receiptTimeline({ ...receipt, collectedAt: "2026-10-16T06:00:00.000Z" }, "CHARGED", { now: AFTER + 4 * 3600_000 });
+    expect(rows.at(-1)).toMatchObject({ at: "2026-10-16T06:00:00.000Z", label: "Paid to the provider", meta: "$0.05" });
+    expect(labels(rows)).not.toContain(HOLD_ENDED_NEXT_PAYOUT);
+    // A report the guarantee covers keeps the money held, whatever collectedAt says.
+    expect(labels(receiptTimeline({ ...receipt, collectedAt: "2026-10-16T06:00:00.000Z" }, "CHARGED", { now: AFTER, report: "open" }))).toContain(
+      "Held for your report until it is decided",
+    );
+  });
+
+  // BUG-R2-BUY-05: the receipt endpoint now sends collectedAt / payoutTxRef, so a collected channel call reads as paid.
+  it("a collected channel call: 'Paid to the provider' with its payout transaction, never 'next payout'", () => {
+    const collected: Receipt = {
+      ...receipt,
+      collectableAt: "2026-10-16T02:00:00.000Z",
+      collectedAt: "2026-10-16T02:00:22.000Z",
+      payoutTxRef: "0xcd4f68033e4ab3654804810988deefaabed013f37da0c252d0ceb4888bbee663",
+      voucherFormat: "CHANNEL",
+      channel: { cumulative: "170000", calls: 17, settled: true, bucketMaturesAt: "2026-10-16T02:00:00.000Z", refundWindowExtended: false },
+    };
+    const story = receiptStory(collected, "CHARGED", { now: AFTER + 3600_000 });
+    expect(story.timeline.at(-1)).toMatchObject({ at: "2026-10-16T02:00:22.000Z", label: "Paid to the provider" });
+    expect(labels(story.timeline)).not.toContain(HOLD_ENDED_NEXT_PAYOUT);
+    expect(story.payout).toEqual({ at: "2026-10-16T02:00:22.000Z", txRef: collected.payoutTxRef });
+  });
+
+  it("receiptPayout: only once collected, never while a covered report is open; no tx when none was recorded", () => {
+    expect(receiptPayout({ collectedAt: null, payoutTxRef: null })).toBeNull();
+    expect(receiptPayout({})).toBeNull();
+    expect(receiptPayout({ collectedAt: "2026-10-16T02:00:22.000Z" }, "open")).toBeNull();
+    expect(receiptPayout({ collectedAt: "2026-10-16T02:00:22.000Z", payoutTxRef: null })).toEqual({ at: "2026-10-16T02:00:22.000Z", txRef: null });
+    // Before the collect the receipt keeps its states: no payout on the story.
+    expect(receiptStory(receipt, "CHARGED", { now: AFTER }).payout).toBeNull();
+  });
+
+  it("a channel call: its bucket's maturity, and 'refund window extended' when a fold moved it", () => {
+    const channel: Receipt = {
+      ...receipt,
+      collectableAt: null,
+      voucherFormat: "CHANNEL",
+      channel: {
+        cumulative: "150000",
+        calls: 3,
+        settled: true,
+        bucketMaturesAt: "2026-10-16T02:00:00.000Z",
+        refundWindowExtended: true,
+      },
+    };
+    const inside = receiptTimeline(channel, "CHARGED", { now: INSIDE });
+    expect(inside.find((r) => r.label === "Refundable until then")?.meta).toBe(
+      `report a bad result for a full refund · ${REFUND_WINDOW_EXTENDED}`,
+    );
+    expect(inside.at(-1)).toMatchObject({
+      at: "2026-10-16T02:00:00.000Z",
+      label: "Channel bucket matures; paid to the provider in the next payout",
+    });
+    expect(labels(receiptTimeline(channel, "CHARGED", { now: AFTER })).at(-1)).toBe(HOLD_ENDED_NEXT_PAYOUT);
+    // Absent fields (older server): no channel or extension words.
+    expect(inside.map((r) => `${r.label} ${r.meta ?? ""}`).join(" ")).toContain("extended");
+    expect(receiptTimeline(receipt, "CHARGED", { now: INSIDE }).map((r) => `${r.label} ${r.meta ?? ""}`).join(" ")).not.toMatch(
+      /extended|bucket/,
+    );
+  });
+
+  it("before the payment is recorded on chain: refundable, the deadline to come (SPEC-H H-3)", () => {
+    expect(REFUNDABLE_BEFORE_RECORDED).toBe(
+      "Refundable: report now for a full refund. The exact deadline appears once the payment is recorded on chain.",
+    );
   });
 
   // B2 review I2: no refund promise on a call that cannot be reported, or already was.

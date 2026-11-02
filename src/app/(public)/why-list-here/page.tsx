@@ -176,7 +176,7 @@ function Calculator({
                   nodes={[
                     { label: "Buyer pays", amount: result.perCall.price },
                     { label: `Assay fee ${feePercent}`, amount: result.perCall.fee, tone: "neutral" },
-                    { label: "You receive", amount: result.perCall.youGet, tone: "success", note: "on chain, as calls settle" },
+                    { label: "You receive", amount: result.perCall.youGet, tone: "success", note: "on chain, in scheduled payouts" },
                   ]}
                 />
                 <p className="text-body-xs text-03">
@@ -262,7 +262,7 @@ function StepsToList() {
             <span className="text-label-sm text-01">Stake, for paid calls. </span>
             Free listings need none. To charge per call, add a <Term k="stake">stake</Term> that covers{" "}
             {terms.minimumStake} or 1,000 calls at your price, whichever is more; you get it back when you stop, after
-            a waiting period. Once a call&apos;s {terms.holdWindow} report window has closed, the stake is the only
+            a waiting period. Once a call&apos;s report window (at least {terms.holdWindow}) has closed, the stake is the only
             money at risk. {definitionOf("stake-rule", terms)}
           </p>
         </div>
@@ -374,7 +374,7 @@ export default function WhyListHerePage() {
 function facts(terms: ChainTerms): ReadonlyArray<{ value: string; key: string; sub: string }> {
   return [
     { value: "Per call", key: "paid on chain", sub: "to your own wallet" },
-    { value: "0%", key: "standing reserve", sub: `No standing reserve: each paid call is held for ${terms.holdWindow} for buyer reports` },
+    { value: "0%", key: "standing reserve", sub: `No standing reserve: each paid call is held for at least ${terms.holdWindow} for buyer reports` },
     { value: "Never", key: "clawed back", sub: "a payout stays paid" },
     { value: terms.dailyCapPercent, key: "most taken per 24 h", sub: "of your stake, enforced on chain" },
   ];

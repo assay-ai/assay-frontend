@@ -168,8 +168,9 @@ describe("demo debt pictures and the settle sheet's escrow check", () => {
       const { debts } = demoResponse("GET", "/escrow/debts") as { debts: BuyerDebt[] };
       const owedIds = new Set(debts.map((debt) => debt.intentId));
       const label = heldSegmentLabel(holds, owedIds);
-      if (held === "1217700") expect(label, search).toBe("Held by calls being checked");
-      else expect(label, search).toBe("Held by calls being checked and unpaid calls");
+      // The demo's holds carry no stage, as an older server: both stages are named (SPEC-H H-2).
+      if (held === "1217700") expect(label, search).toBe("Being checked or being paid to the provider");
+      else expect(label, search).toBe("Being checked or being paid to the provider, and unpaid calls");
       const balances = demoResponse("GET", "/balances") as { balances: { held: { amount: string } }[] };
       expect(balances.balances[0]!.held.amount, search).toBe(held);
     }

@@ -10,8 +10,22 @@ import { formatMoney } from "@/utils/money";
 
 import type { CallDebt } from "@/interfaces/buyer-debt";
 
-import { debtDeadline, isReplaceable, notYetSettleSentence } from "./debt-copy";
-import { debtBannerSummary, debtDeadlineLine, earliestWriteOff, owedCallState, owedRowText } from "./debt-summary";
+import {
+  channelDebtSentence,
+  debtDeadline,
+  debtsAgentRenews,
+  isReplaceable,
+  notYetSettleSentence,
+  splitDebts,
+} from "./debt-copy";
+import {
+  agentRenewsSentence,
+  debtBannerSummary,
+  debtDeadlineLine,
+  earliestWriteOff,
+  owedCallState,
+  owedRowText,
+} from "./debt-summary";
 import { useBuyerDebtsQuery, useSettleDebt } from "./settle-debt-sheet";
 import { useReplaceableNow } from "./use-replaceable-now";
 
@@ -33,8 +47,8 @@ export function OwedRowAction({
 }) {
   const debts = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
-  const state = owedCallState(debts.data, intentId);
   const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
+  const state = owedCallState(debts.data, intentId, now);
   // Its original payment can still be collected on chain until `replaceableAt`.
   const notYet = state.kind === "settle" && !isReplaceable(state.debt, now);
   const noteId = React.useId();
@@ -74,8 +88,8 @@ export function OwedRowAction({
 export function OwedReceiptAction({ intentId }: { intentId: string }) {
   const debts = useBuyerDebtsQuery();
   const { openSettle } = useSettleDebt();
-  const state = owedCallState(debts.data, intentId);
   const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
+  const state = owedCallState(debts.data, intentId, now);
   const noteId = React.useId();
   if (state.kind === "settle") {
     const deadline = debtDeadlineLine(state.debt);
@@ -105,6 +119,13 @@ export function OwedReceiptAction({ intentId }: { intentId: string }) {
       </>
     );
   }
+  if (state.kind === "agent") {
+    return (
+      <p className="text-body-xs text-02" data-testid="receipt-agent-settles">
+        {channelDebtSentence(state.debt, { now })}
+      </p>
+    );
+  }
   const text =
     state.kind === "collecting"
       ? "You signed it: it is being collected, and paid calls resume once it is."
@@ -126,6 +147,8 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
   const { openSettle } = useSettleDebt();
   const now = useReplaceableNow(debts.data, debts.dataUpdatedAt);
   const summary = debtBannerSummary(debts.data, { now });
+  const { own, others } = splitDebts(debts.data);
+  const allDebts = [...own, ...others];
   const settleBy = earliestWriteOff(debts.data);
   const noteId = React.useId();
   return (
@@ -139,6 +162,7 @@ export function OwedSummaryAction({ owed, calls }: { owed: string; calls: number
         are paused until it is settled.
         {settleBy ? ` Settle by ${debtDeadline(settleBy)}; after that it is written off, but still owed.` : ""}
         {summary?.waitingNote ? ` ${summary.waitingNote}` : ""}
+        {summary?.kind === "agent" ? ` ${agentRenewsSentence(debtsAgentRenews(allDebts, now), now)}` : ""}
       </p>
       <div className="flex shrink-0 items-center gap-2">
         <Button size="sm" variant="ghost" asChild>

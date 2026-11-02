@@ -11,13 +11,26 @@
  * the health tiles, the dispute record and the action bodies.
  */
 import type { Money } from "./api";
-import type { SlashProposalEvent, SlashRestorationRow } from "./provider-disputes";
+import type {
+  SlashProposalEvent,
+  SlashRestorationRow,
+} from "./provider-disputes";
 import type { SlashProposalCaseDetail } from "./provider-slash-cases";
 
 /** assay-backend `src/modules/operator/domain/override-register.ts` `OperatorRole`. */
 export type OperatorRole =
-  | "SRE" | "ADJ" | "ADJL" | "POL" | "POLA" | "TRE" | "TREA"
-  | "BD" | "SUP" | "CMP" | "SEC" | "OPS_ADMIN";
+  | "SRE"
+  | "ADJ"
+  | "ADJL"
+  | "POL"
+  | "POLA"
+  | "TRE"
+  | "TREA"
+  | "BD"
+  | "SUP"
+  | "CMP"
+  | "SEC"
+  | "OPS_ADMIN";
 
 export type OperatorStatus = "ACTIVE" | "SUSPENDED" | "REMOVED";
 
@@ -92,7 +105,8 @@ export interface RemoveOperatorBody {
 
 // ── Two-person approvals ────────────────────────────────────────────────────
 
-export type OperatorApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
+export type OperatorApprovalStatus =
+  "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 
 /** What a two-person route answers, with HTTP 202, when it queued the action. */
 export interface ApprovalQueued {
@@ -232,13 +246,26 @@ export interface ChainStateHealth {
  * to `CANCELLED`.
  */
 export type SlashProposalStatus =
-  | "PROPOSED" | "UPHELD" | "OVERTURNED" | "EXECUTING" | "EXECUTED"
-  | "REVERSED" | "WAIVED" | "CANCEL_REQUESTED" | "CANCELLED";
+  | "PROPOSED"
+  | "UPHELD"
+  | "OVERTURNED"
+  | "EXECUTING"
+  | "EXECUTED"
+  | "REVERSED"
+  | "WAIVED"
+  | "CANCEL_REQUESTED"
+  | "CANCELLED";
 
 /** assay-backend `src/modules/slash/domain/chain-slash-outcome.ts` `ChainProposalStatus`. */
 export type ChainProposalStatus =
-  | "NONE" | "PROPOSING" | "PENDING" | "CANCEL_REQUESTED" | "DISPUTED"
-  | "EXECUTED" | "CANCELLED" | "REFUSED";
+  | "NONE"
+  | "PROPOSING"
+  | "PENDING"
+  | "CANCEL_REQUESTED"
+  | "DISPUTED"
+  | "EXECUTED"
+  | "CANCELLED"
+  | "REFUSED";
 
 /**
  * Where a penalty stands, as `GET /operator/cases` groups it: the case status
@@ -722,4 +749,115 @@ export interface ArbiterBlockBody {
   reasonCode: string;
   note: string;
   ticketRef?: string;
+}
+
+/**
+ * `GET /operator/providers/{providerId}/settlement` (round-2 API-W2 §3.7): the
+ * provider's payout cadence and next run, and the last CONFIRMED settle and
+ * collect. 404 on older servers.
+ */
+export interface OperatorProviderSettlement {
+  providerId: string;
+  payoutCadence: "HOURLY" | "EVERY_6_HOURS";
+  nextPayoutAt: string | null;
+  lastSettleAt: string | null;
+  lastCollectAt: string | null;
+  openChannels: number;
+  pendingSettlement: Money | null;
+  /** The payout address the provider's newest channel pays (`0x…`); absent on an older server. */
+  payoutAddress?: string | null;
+}
+
+/**
+ * `POST /operator/channels/drain` — override `M-2`, `SRE` or `TRE`, one
+ * operator, recorded (round-2 API-W2 §3.8): every channel with value to
+ * settle (one asset, or all) gets an urgent round on the next scheduler tick.
+ * Idempotent.
+ */
+export interface DrainChannelsBody {
+  /** CAIP-19; absent = every asset. */
+  assetId?: string;
+  reasonCode: string;
+  /** At least 20 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+export interface DrainChannelsResult {
+  assetId: string | null;
+  /** Channels marked for an urgent round. */
+  channels: number;
+}
+
+/**
+ * `POST /operator/channels/claim-unpaid` — override `M-3`, `SRE` or `TRE`,
+ * one operator, recorded: claim an address's unpaid channel payouts (the
+ * token refused the transfer, so the escrow set them aside) once the issuer's
+ * block has lifted. The scheduler sends the claim on its next tick. Idempotent.
+ */
+export interface ClaimUnpaidBody {
+  /** CAIP-19, required. */
+  assetId: string;
+  /** The payout address, `0x` + 40 hex. */
+  address: string;
+  reasonCode: string;
+  /** At least 20 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+export interface ClaimUnpaidResult {
+  assetId: string;
+  /** Lower case. */
+  address: string;
+  /** Unpaid payouts marked for the claim. */
+  payouts: number;
+}
+
+/**
+ * `POST /operator/channels/clear-reconcile` — override `M-4`, `SRE` or `TRE`,
+ * one operator, recorded: clear the reconciler's stop (DESYNC/RECONCILE) on
+ * one channel once the chain agrees with the database again. The lane goes
+ * back to ROTATED (it takes no new voucher; what was signed settles again).
+ */
+export interface ClearReconcileBody {
+  /** The `voucher_channels` row id (a UUID). */
+  channelRowId: string;
+  reasonCode: string;
+  /** At least 20 characters. */
+  note: string;
+  ticketRef?: string;
+}
+
+export interface ClearReconcileResult {
+  channelRowId: string;
+  status: "ROTATED";
+}
+
+/**
+ * One lane the reconciler stopped (DESYNC / RECONCILE) and nobody cleared yet,
+ * as `GET /operator/channels/stopped` lists it (`SRE`, `TRE`, `OPS_ADMIN`;
+ * read only). Newest first, at most 200.
+ */
+export interface StoppedChannel {
+  /** The `voucher_channels` row id: what `POST /operator/channels/clear-reconcile` takes. */
+  channelRowId: string;
+  /** 0x, 32 bytes: the finding's `key`. */
+  channelKey: string;
+  /** CAIP-2. */
+  chainId: string;
+  /** CAIP-19. */
+  assetId: string;
+  providerId: string;
+  /** CAIP-10: the buyer's escrow account. */
+  payer: string;
+  /** ISO-8601: when the lane row last changed (the stop, or a settlement landing after it). */
+  lastUpdatedAt?: string;
+  /** Older servers' name for `lastUpdatedAt`. */
+  stoppedAt?: string;
+  /** `RECONCILE`. */
+  reason: string;
+  /** Atomic decimal strings: accepted (cumulative) and booked as settled on the lane. */
+  accepted: string;
+  settled: string;
 }

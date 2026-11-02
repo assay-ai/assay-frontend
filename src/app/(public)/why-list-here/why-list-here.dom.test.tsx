@@ -29,14 +29,14 @@ describe("Why list here", () => {
     expect(text).toContain(
       `Payouts are never clawed back. ${definitionOf("payout-final", terms)} ${definitionOf("stake-rule", terms)}`,
     );
-    expect(definitionOf("payout-final", terms)).toContain("1 hour after the call");
+    expect(definitionOf("payout-final", terms)).toContain("at least 1 hour after the payment is recorded on chain");
   });
 
   // B5 review M1/M2: the stake is the only risk only after the report window, and a call is held for it.
   it("never says the stake is the only risk without the report window, nor that nothing is held", () => {
     expect(text).not.toContain("Only your stake is at risk");
     expect(text).not.toContain("we hold nothing back");
-    expect(text).toContain("No standing reserve: each paid call is held for 1 hour for buyer reports");
+    expect(text).toContain("No standing reserve: each paid call is held for at least 1 hour for buyer reports");
     expect(text).toContain("a call that fails because of the provider");
   });
 

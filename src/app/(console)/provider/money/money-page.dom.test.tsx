@@ -141,8 +141,45 @@ describe("provider Money", () => {
   it("lists the redemption transactions as payments", () => {
     const words = render();
     expect(words).not.toMatch(/No payments yet/);
-    expect(words).toMatch(/Paid for 1 call from the buyer's escrow/);
-    expect(words).toMatch(/Paid for 2 calls from the buyer's escrow/);
+    // One transfer pays many calls (round-2 W2); the buyers are named only when the server counts them.
+    expect(words).toMatch(/Paid for 1 call in one transfer/);
+    expect(words).toMatch(/Paid for 2 calls in one transfer/);
+    const grouped = render([{ ...redemption("f6", "900000", 12, 1), buyers: 3 }]);
+    expect(grouped).toMatch(/Paid for 12 calls \(from 3 buyers\) in one transfer/);
+  });
+
+  it("states the payout timing as a schedule after the hold, never 'as each call settles' (SPEC-H H-4)", () => {
+    const words = render();
+    expect(words).toContain("Paid to your wallet on chain, automatically. Payouts run on a schedule, after a dispute hold of at least 1 hour.");
+    expect(words).not.toMatch(/as each call settles/);
+  });
+
+  it("an older server: no payout stages, the held line as before", () => {
+    const words = render();
+    expect(words).not.toMatch(/Passed, being recorded on chain/);
+  });
+
+  it("shows the four payout stages when the server reports them (round-2 SPEC-W2 §11)", () => {
+    // API-W2 §3.2: the current state, on the top level beside the month's figures.
+    const staged: ProviderEarnings = {
+      ...earnings,
+      totals: { ...earnings.totals, pendingInWindow: usd("63000"), pendingInWindowCalls: 7 },
+      awaitingSettlement: usd("120000"),
+      awaitingSettlementCalls: 3,
+      inDisputeHold: usd("63000"),
+      inDisputeHoldCalls: 7,
+      disputeHoldEndsAt: "2026-10-18T13:00:00.000Z",
+      readyForPayout: usd("40000"),
+      readyForPayoutCalls: 2,
+      nextPayoutAt: "2026-10-18T18:00:00.000Z",
+      payoutCadence: "EVERY_6_HOURS",
+    };
+    const words = text(renderToStaticMarkupRaw(undefined, staged));
+    expect(words).toMatch(
+      /Passed, being recorded on chain \$0\.12 3 calls In the dispute hold, the first until 13:00 UTC \$0\.063 7 calls Ready, paid in the next payout \(about 18:00 UTC\) \$0\.04 2 calls In your wallet \$6\.084/,
+    );
+    // The stages replace the older held line.
+    expect(words).not.toMatch(/Held in the dispute window/);
   });
 
   it("calls a 30-day unpaid debt overdue, not written off", () => {

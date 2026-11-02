@@ -5,7 +5,7 @@ import { plainApiError, plainError } from "@/libs/plain-language";
 import type { CallDispute, CallDisputeReason } from "@/services/call-disputes.service";
 import { formatMoney } from "@/utils/money";
 import { formatClock, formatDate } from "@/libs/utc-time";
-import { UNKNOWN } from "@/libs/chain-terms";
+import { disputeHoldText, UNKNOWN } from "@/libs/chain-terms";
 import { DECISION_HOURS, PROVIDER_REPLY_HOURS, REPORTS_PER_DAY } from "@/libs/dispute-deadlines";
 import { refundPromiseLive } from "@/features/g30/refund-promise";
 
@@ -224,7 +224,7 @@ export function disputeTimeline(
   dispute: CallDispute,
   now: number,
   side: "buyer" | "provider" | "operator" = "buyer",
-  /** The chain's hold as an adjective, `1-hour` (`ChainTerms.holdCompound`); "—" until known. */
+  /** The chain's hold length, `1 hour` (`ChainTerms.holdWindow`): a minimum (BUG-R2-DEV-02); "—" until known. */
   hold: string = UNKNOWN,
 ): StatusTimelineStep[] {
   const steps: StatusTimelineStep[] = [];
@@ -240,8 +240,8 @@ export function disputeTimeline(
     state: "done",
     date: dispute.createdAt,
     description: dispute.refundGuaranteed
-      ? `Inside the ${hold} hold: the payment${amount ? ` of ${amount}` : ""} is held, not paid out.`
-      : `After the ${hold} hold: the payment had already been collected.`,
+      ? `Inside ${disputeHoldText(hold)}: the payment${amount ? ` of ${amount}` : ""} is held, not paid out.`
+      : "After the dispute hold: the payment had already been collected.",
   });
 
   const blocked = dispute.refundState === "REFUNDED" && !decided && !withdrawn;
@@ -389,7 +389,7 @@ export interface ReportWindowView {
  * `refundableIfReportedUntil` or the hold's end: a page left open must not keep
  * a promise the backend has dropped (W1A review C1). While a report is
  * accepted:
- *  - guaranteed, inside the 1-hour hold: a full refund if accepted;
+ *  - guaranteed, inside the dispute hold: a full refund if accepted;
  *  - guaranteed, the payment not collected yet: also a full refund;
  *  - the hold has really ended (`disputeWindowEndsAt` passed): no refund;
  *  - anything else promises neither a refund nor "no refund".
@@ -404,8 +404,6 @@ export function reportWindow(
     chargedPrice: Money;
   },
   now: number,
-  /** The chain's hold as an adjective, `1-hour` (`ChainTerms.holdCompound`); "—" until known. */
-  hold: string = UNKNOWN,
 ): ReportWindowView {
   const closes = receipt.disputeFilingClosesAt ?? null;
   const open = closes !== null && now < Date.parse(closes);
@@ -426,10 +424,10 @@ export function reportWindow(
     return { open, guaranteed, holdEndsAt: promiseEnds, text: "The payment is still held. Report it now and, if your report is accepted, you are refunded in full." };
   }
   if (guaranteed && holdEnds === null) {
-    return { open, guaranteed, holdEndsAt: null, text: "The payment has not been collected yet. Report it now and, if your report is accepted, you are refunded in full." };
+    return { open, guaranteed, holdEndsAt: null, text: "The payment is not recorded on chain yet. Report it now and, if your report is accepted, you are refunded in full. The exact deadline appears once it is recorded." };
   }
   if (holdEnds !== null && !inHold) {
-    return { open, guaranteed, holdEndsAt: null, text: `The ${hold} hold has ended, so ${AFTER_HOLD_OUTCOME}` };
+    return { open, guaranteed, holdEndsAt: null, text: `The dispute hold has ended, so ${AFTER_HOLD_OUTCOME}` };
   }
   // No guarantee from the backend (no escrow hold on this chain, a released hold, a debt, a forfeit): say only what is certain.
   return { open, guaranteed, holdEndsAt: null, text: "If your report is accepted, it counts against the provider's quality." };
@@ -530,6 +528,21 @@ export function refundPlanText(plan: string, disputeState: string): string {
 
 /* ----------------------------------------------------------------- errors */
 
+/** A channel call's 409 when the server sent no message (round-2 B-3): the wait is the channel settle, not a minute. */
+const CHANNEL_COLLECTION_TEXT =
+  "The call was paid on a payment channel that has not settled yet. The dispute keeps the payment in the dispute hold when it settles (usually within 30 minutes). Decide again then: an upheld decision refunds it on chain.";
+
+/**
+ * 409 `DISPUTE_COLLECTION_IN_PROGRESS`: the server's own sentence, which says
+ * how long to wait (a channel call waits for its channel to settle, a per-call
+ * payment for its collection). The generic line only when it sent none.
+ */
+function collectionInProgressText(error: ApiError): string {
+  const message = error.message?.trim();
+  if (message && message !== error.code) return /[.!?]$/.test(message) ? message : `${message}.`;
+  return error.context?.channel === true ? CHANNEL_COLLECTION_TEXT : "The payment is moving right now. Try again in a minute.";
+}
+
 export function disputeErrorText(error: unknown): string {
   if (!(error instanceof ApiError)) return error instanceof Error ? error.message : "That did not work. Try again.";
   switch (error.code) {
@@ -548,7 +561,7 @@ export function disputeErrorText(error: unknown): string {
     case "DISPUTE_NOT_DECIDABLE":
       return "This report was already decided or withdrawn.";
     case "DISPUTE_COLLECTION_IN_PROGRESS":
-      return "The payment is moving right now. Try again in a minute.";
+      return collectionInProgressText(error);
     case "DISPUTE_NOT_WITHDRAWABLE":
       return "This report can no longer be withdrawn.";
     case "DISPUTE_NOT_FOUND":

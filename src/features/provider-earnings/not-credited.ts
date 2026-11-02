@@ -13,11 +13,23 @@ export interface NotCreditedReason {
   detail: string;
 }
 
+/*
+ * Neutral on purpose (REVIEW L-1): the class covers a held payment refunded to
+ * the buyer and a debt voided before it was ever collected (the buyer never
+ * paid). Either way the buyer does not pay for the call and it is not credited.
+ */
+const UPHELD_REFUND: NotCreditedReason = {
+  title: "Not credited: the buyer's report was upheld",
+  detail:
+    "The call passed our checks, but the buyer reported it and Assay upheld the report, so the buyer does not pay for this call. No stake is taken for it.",
+};
+
 const REASONS: Record<string, NotCreditedReason> = {
   PAID_UNCREDITED: {
     title: "Failed our checks",
     detail: "Your API answered, but the result did not pass the tool's checks (a value out of range, a missing field, stale data). The buyer was not charged.",
   },
+  REFUNDED_UPHELD: UPHELD_REFUND,
   SYSTEM_ERROR: {
     title: "Endpoint error (5xx or timeout)",
     detail: "It answered with a server error (5xx) or did not answer within your timeout.",
@@ -39,6 +51,72 @@ export function notCreditedReason(className: string): NotCreditedReason {
       detail: "These calls did not settle to you.",
     }
   );
+}
+
+/** The class the server sends for a call refunded after an upheld report (API-fix §3). */
+const UPHELD_CLASS = "REFUNDED_UPHELD";
+
+/** The `reason` an upheld report's refund writes on the per-call row (`voided:DISPUTE_UPHELD`). */
+export const UPHELD_REFUND_REASON = "voided:DISPUTE_UPHELD";
+
+/**
+ * Whether the server lists upheld refunds apart from failed checks: it sends
+ * the `REFUNDED_UPHELD` entry (always, even with 0 calls), so its figures are
+ * the primary path and the per-call fallback is not used.
+ */
+export function listsUpheldApart(breakdown: NotCreditedBreakdown): boolean {
+  return breakdown.listsUpheld === true || breakdown.reasons.some((reason) => reason.className === UPHELD_CLASS);
+}
+
+/** The per-call fields {@link splitUpheldRefunds} reads. */
+export interface UpheldRefundRow {
+  readonly classification: string;
+  readonly reason: string;
+  readonly toolId: string;
+  readonly providerAmount: string;
+  readonly asset: string;
+}
+
+/**
+ * Older servers only (BUG-R2-PRV-03): a server without `REFUNDED_UPHELD` counts a
+ * call refunded after an upheld report under failed checks. When the
+ * per-call rows are at hand, those calls (`PAID_UNCREDITED`, reason
+ * `voided:DISPUTE_UPHELD`) move to their own reason; the summary is
+ * unchanged. Rows in another asset than the figure are left out. Pure.
+ */
+export function splitUpheldRefunds(
+  breakdown: NotCreditedBreakdown,
+  rows: readonly UpheldRefundRow[] | null | undefined,
+): NotCreditedBreakdown {
+  if (!rows || listsUpheldApart(breakdown)) return breakdown;
+  const failed = breakdown.reasons.find((reason) => reason.className === "PAID_UNCREDITED");
+  if (!failed) return breakdown;
+  const asset = failed.amount?.asset ?? null;
+  const upheld = rows.filter(
+    (row) => row.classification === "PAID_UNCREDITED" && row.reason === UPHELD_REFUND_REASON && (!asset || row.asset === asset),
+  );
+  if (upheld.length === 0) return breakdown;
+  const calls = Math.min(upheld.length, failed.calls);
+  const moved = upheld.reduce((sum, row) => sum + BigInt(row.providerAmount || "0"), 0n);
+  const failedAtomic = BigInt(failed.amount?.amount || "0");
+  const movedAtomic = moved > failedAtomic ? failedAtomic : moved;
+  const refunded: NotCreditedReasonRow = {
+    className: "REFUNDED_UPHELD",
+    calls,
+    amount: failed.amount ? { ...failed.amount, amount: movedAtomic.toString() } : null,
+    toolIds: [...new Set(upheld.map((row) => row.toolId))],
+  };
+  const rest: NotCreditedReasonRow = {
+    ...failed,
+    calls: failed.calls - calls,
+    amount: failed.amount ? { ...failed.amount, amount: (failedAtomic - movedAtomic).toString() } : null,
+  };
+  const reasons = breakdown.reasons
+    .flatMap((reason) => (reason === failed ? (rest.calls > 0 ? [rest, refunded] : [refunded]) : [reason]))
+    .map((reason, index) => ({ reason, index }))
+    .sort((a, b) => b.reason.calls - a.reason.calls || a.index - b.index)
+    .map(({ reason }) => reason);
+  return { ...breakdown, reasons };
 }
 
 /**
@@ -147,6 +225,8 @@ export interface NotCreditedBreakdown {
   readonly amount: Money | null;
   /** Reasons with calls, most calls first. Empty when the backend sent no breakdown. */
   readonly reasons: NotCreditedReasonRow[];
+  /** The server sent the `REFUNDED_UPHELD` entry (with or without calls). */
+  readonly listsUpheld?: boolean;
 }
 
 /**
@@ -181,7 +261,12 @@ export function notCreditedBreakdown(
   const amount = denom
     ? { ...denom, amount: byClass.reduce((sum, row) => sum + BigInt(row.amount?.amount || "0"), 0n).toString() }
     : null;
-  return { calls: byClass.reduce((sum, row) => sum + row.calls, 0), amount, reasons };
+  return {
+    calls: byClass.reduce((sum, row) => sum + row.calls, 0),
+    amount,
+    reasons,
+    listsUpheld: byClass.some((row) => row.class === UPHELD_CLASS),
+  };
 }
 
 /**
