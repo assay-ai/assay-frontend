@@ -48,7 +48,7 @@ export function designTerms(chain: ChainTerms): ProviderTermsSummary {
         key: "reserveHeld",
         label: "Standing reserve",
         value: "$0.00",
-        caption: `No standing reserve: each paid call is held for ${chain.holdWindow} for buyer reports`,
+        caption: `No standing reserve: each paid call is held for at least ${chain.holdWindow} for buyer reports`,
       },
       { key: "clawback", label: "Clawback", value: "never", caption: "a paid payout stays paid" },
       {

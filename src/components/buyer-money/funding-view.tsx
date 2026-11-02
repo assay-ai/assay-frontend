@@ -22,7 +22,7 @@ import { windowRefillAt } from "@/features/buyer-money/refill";
 import { isLowBalance, runwayDays, runwayLine } from "@/features/buyer-money/runway";
 import { escrowHeldText, heldSegmentLabel, onChainHeldText } from "@/features/buyer-debt/debt-copy";
 import { debtBlocksPaidCalls } from "@/features/buyer-debt/debt-summary";
-import { useOpenHoldIntentIds, usePayingIntentIds } from "@/features/buyer-debt/use-open-hold-intent-ids";
+import { heldBesidePending, useOpenHoldIntentIds, usePayingIntentIds, useSettlingHolds } from "@/features/buyer-debt/use-open-hold-intent-ids";
 import { useOwedIntentIds } from "@/features/buyer-debt/use-owed-intent-ids";
 import { useBuyerDebtsQuery } from "@/features/buyer-debt/settle-debt-sheet";
 import { chainBalances, type Hold } from "@/features/g30/balance";
@@ -188,6 +188,14 @@ export function FundingView() {
   const unsettledQuery = useEscrowUnsettled(Boolean(escrow?.exists) && !escrowReportsSettlement(escrow));
   const unsettled = unsettledQuery.data?.unsettled ?? null;
   const pendingLine = noEscrow ? null : pendingSettlementLine(pendingSettlement(escrow, unsettled));
+  // Passed, not settled yet: said on the pending line only, never also as "being paid" (BUG-R2-DEV-01).
+  const settlingHolds = useSettlingHolds();
+  const held = heldBesidePending({
+    openHolds: escrow?.openHolds,
+    openHoldIntentIds: openHoldIds,
+    settling: settlingHolds,
+    pendingShown: pendingLine !== null,
+  });
   // Passed and already out of the escrow on chain, in the dispute hold (BUG-R2-BUY-01): never part of the held figure.
   const onChain = noEscrow ? null : onChainHeld(escrow);
 
@@ -243,8 +251,8 @@ export function FundingView() {
           ) : (
             <span className="text-body-xs text-03">
               {money.symbol} on {money.chainName ?? "your chain"}
-              {escrow?.openHolds && positive(escrow.openHolds)
-                ? ` · ${escrowHeldText(formatLimit(escrow.openHolds), openHoldIds, owedIntentIds, payingIds)}`
+              {held.amount && positive(held.amount)
+                ? ` · ${escrowHeldText(formatLimit(held.amount), held.intentIds, owedIntentIds, payingIds)}`
                 : ""}
             </span>
           )}
@@ -326,7 +334,7 @@ export function FundingView() {
           matured={matured}
           withdrawalPending={withdrawalPending}
           freeOnly={freeOnly}
-          heldLabel={heldSegmentLabel(openHoldIds, owedIntentIds, payingIds)}
+          heldLabel={heldSegmentLabel(held.intentIds, owedIntentIds, payingIds, { pendingSettlementCalls: held.pendingCalls })}
           ready={confirmingOnChain(ledgerRow) || uncredited ? spendable : null}
           unsettled={unsettled}
           onAction={onAction}

@@ -16,7 +16,6 @@ import { listCallDisputes, type CallDispute } from "@/services/call-disputes.ser
 
 import { buyerStatus, disputeReasonLabel, fullDateTime, reportUntilText, reportWindow } from "./model";
 import { callDisputeKeys, DisputeChip, ReportSheet, useNow } from "./ui";
-import { useChainTerms } from "@/hooks/useChainTerms";
 
 /** The reports filed on this call; one query, shared by the page, the headline and the report box. */
 export function useCallReports(intentId: string) {
@@ -57,8 +56,7 @@ export function RefundableNow({ receipt, toolName, now: nowProp }: { receipt: Re
   const now = nowProp ?? ticking;
   const [open, setOpen] = React.useState(false);
   const reports = useCallReports(receipt.intentId);
-  const { terms } = useChainTerms();
-  const hold = reportWindow(receipt, now, terms.holdCompound);
+  const hold = reportWindow(receipt, now);
   if (!hold.guaranteed) return null;
   if ((reports.data?.items?.length ?? 0) > 0) return null;
   const until = refundableUntil(receipt, now);
@@ -103,8 +101,7 @@ export function ReceiptReport({
   const [open, setOpen] = React.useState(false);
   const reports = useCallReports(receipt.intentId);
   const latest = [...(reports.data?.items ?? [])].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0] ?? null;
-  const { terms } = useChainTerms();
-  const hold = reportWindow(receipt, now, terms.holdCompound);
+  const hold = reportWindow(receipt, now);
   // The API takes a new report only when every earlier one was withdrawn: one open at a time, and a decided one is final.
   const canReportAgain = (reports.data?.items ?? []).every((d) => d.state === "WITHDRAWN");
 

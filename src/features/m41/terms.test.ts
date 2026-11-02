@@ -24,7 +24,7 @@ describe("provider terms copy (BUG-R5-03)", () => {
   // B5 review M2: "we hold nothing back" contradicted the 1-hour hold for buyer reports.
   it("says each paid call is held for buyer reports, not that nothing is held", () => {
     const reserve = DESIGN_TERMS.commercialTerms.find((term) => term.key === "reserveHeld");
-    expect(reserve?.caption).toBe("No standing reserve: each paid call is held for 1 hour for buyer reports");
+    expect(reserve?.caption).toBe("No standing reserve: each paid call is held for at least 1 hour for buyer reports");
     expect(reserve?.caption).not.toMatch(/nothing back/);
   });
 

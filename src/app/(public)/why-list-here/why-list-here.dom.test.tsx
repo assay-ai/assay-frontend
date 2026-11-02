@@ -36,7 +36,7 @@ describe("Why list here", () => {
   it("never says the stake is the only risk without the report window, nor that nothing is held", () => {
     expect(text).not.toContain("Only your stake is at risk");
     expect(text).not.toContain("we hold nothing back");
-    expect(text).toContain("No standing reserve: each paid call is held for 1 hour for buyer reports");
+    expect(text).toContain("No standing reserve: each paid call is held for at least 1 hour for buyer reports");
     expect(text).toContain("a call that fails because of the provider");
   });
 

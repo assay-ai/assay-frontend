@@ -32,6 +32,18 @@ export function compoundDurationText(seconds: number | null | undefined): string
   return words === UNKNOWN ? UNKNOWN : words.replace(/ (day|hour|minute|second)s?$/, "-$1");
 }
 
+/**
+ * The dispute hold named in a sentence: `1 hour` → "the dispute hold (at least
+ * 1 hour)". The chain's `collectHoldSeconds` is a minimum, never the length: a
+ * channel payment's hold ends at the next full hour after its settle plus that
+ * figure, so it can run close to twice as long (BUG-R2-DEV-02). The exact end
+ * is the receipt's own "Refundable until" time. "the dispute hold" alone while
+ * the figure is unknown.
+ */
+export function disputeHoldText(holdWindow: string | null | undefined): string {
+  return holdWindow && holdWindow !== UNKNOWN ? `the dispute hold (at least ${holdWindow})` : "the dispute hold";
+}
+
 /** `1000` bps → `10%`, `1250` → `12.5%`. */
 export function percentText(bps: number | null | undefined): string {
   if (bps === null || bps === undefined || !Number.isFinite(bps)) return UNKNOWN;

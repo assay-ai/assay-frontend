@@ -107,12 +107,20 @@ describe("the timeline", () => {
   });
 
   it("filed after the hold, upheld, provider already paid", () => {
-    const steps = disputeTimeline(dispute({ refundGuaranteed: false, state: "UPHELD", resolvedAt: FILED, refundState: "NOT_REFUNDABLE" }), t0 + H, "buyer", "1-hour");
-    expect(steps[0]!.description).toMatch(/After the 1-hour hold/);
-    // The hold is the chain's: another value reads as another value, and none before it is known.
-    expect(disputeTimeline(dispute({ refundGuaranteed: false }), t0 + H, "buyer", "2-hour")[0]!.description).toMatch(/After the 2-hour hold/);
-    expect(disputeTimeline(dispute({ refundGuaranteed: false }), t0 + H)[0]!.description).toMatch(/After the — hold/);
+    const steps = disputeTimeline(dispute({ refundGuaranteed: false, state: "UPHELD", resolvedAt: FILED, refundState: "NOT_REFUNDABLE" }), t0 + H, "buyer", "1 hour");
+    expect(steps[0]!.description).toBe("After the dispute hold: the payment had already been collected.");
     expect(steps.at(-1)).toMatchObject({ label: "Not refundable", state: "failed" });
+  });
+
+  // BUG-R2-DEV-02: a channel bucket's hold ends at the next full hour after settle + the chain's figure,
+  // so the copy names that figure as a minimum, never as the hold's length.
+  it("filed inside the hold: the chain's hold is a minimum, and nothing is guessed before it is known", () => {
+    expect(disputeTimeline(dispute({ refundGuaranteed: true }), t0 + H, "buyer", "1 hour")[0]!.description).toMatch(
+      /^Inside the dispute hold \(at least 1 hour\): the payment of \$[\d.]+ is held, not paid out\.$/,
+    );
+    expect(disputeTimeline(dispute({ refundGuaranteed: true }), t0 + H, "buyer", "2 hours")[0]!.description).toMatch(/^Inside the dispute hold \(at least 2 hours\):/);
+    expect(disputeTimeline(dispute({ refundGuaranteed: true }), t0 + H)[0]!.description).toMatch(/^Inside the dispute hold:/);
+    expect(disputeTimeline(dispute({ refundGuaranteed: true }), t0 + H, "buyer", "1 hour")[0]!.description).not.toMatch(/1-hour/);
   });
 
   it("withdrawn ends the timeline", () => {
@@ -159,7 +167,7 @@ describe("the report window on a receipt", () => {
   it("after the hold: still open, no refund, a quality signal", () => {
     const after = { ...receipt, refundableIfReportedNow: false };
     expect(reportWindow(after, t0 + 2 * H)).toMatchObject({ open: true, guaranteed: false });
-    expect(reportWindow(after, t0 + 2 * H, "1-hour").text).toMatch(/^The 1-hour hold has ended, so there is no refund/);
+    expect(reportWindow(after, t0 + 2 * H).text).toMatch(/^The dispute hold has ended, so there is no refund/);
   });
   // B2 review C1: a rail-B voucher not yet redeemed into the hold has no hold fields, and a report filed then IS guaranteed.
   it("before the payment is collected, when the backend guarantees it: a full refund, never 'No refund'", () => {
@@ -189,10 +197,10 @@ describe("the report window on a receipt", () => {
   });
   // W1A review C1: the flag was true when fetched; the page stayed open past the hold.
   it("a stale 'true' after the hold has ended never says 'refunded in full'", () => {
-    const view = reportWindow(receipt, t0 + 2 * H, "1-hour");
+    const view = reportWindow(receipt, t0 + 2 * H);
     expect(view).toMatchObject({ open: true, guaranteed: false, holdEndsAt: null });
     expect(view.text).not.toMatch(/refunded in full/);
-    expect(view.text).toMatch(/^The 1-hour hold has ended/);
+    expect(view.text).toMatch(/^The dispute hold has ended/);
   });
   it("a stale 'true' past the backend's refundableIfReportedUntil promises nothing, even with no hold fields", () => {
     const until = "2026-10-18T10:20:00.000Z";

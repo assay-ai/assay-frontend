@@ -8,6 +8,7 @@ import { TEST_CHAIN } from "@/test/chain-fixture";
 import {
   chainTerms,
   compoundDurationText,
+  disputeHoldText,
   durationText,
   fillTerms,
   percentText,
@@ -63,6 +64,14 @@ describe("chain terms: every on-chain number comes from GET /chains", () => {
     expect(compoundDurationText(3600)).toBe("1-hour");
     expect(percentText(1000)).toBe("10%");
     expect(usdText("1234567890", 6)).toBe("$1,234.56");
+  });
+
+  // BUG-R2-DEV-02: a channel bucket's hold can run to the next full hour past settle + the chain's figure.
+  it("names the dispute hold with the chain's figure as a minimum, never a guess", () => {
+    expect(disputeHoldText(chainTerms(TEST_CHAIN).holdWindow)).toBe("the dispute hold (at least 1 hour)");
+    expect(disputeHoldText(durationText(7200))).toBe("the dispute hold (at least 2 hours)");
+    expect(disputeHoldText(UNKNOWN)).toBe("the dispute hold");
+    expect(disputeHoldText(null)).toBe("the dispute hold");
   });
 
   it("fills placeholders in static copy", () => {
