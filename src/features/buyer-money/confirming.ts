@@ -7,16 +7,18 @@ import { formatMoney } from "@/utils/money";
  * yet (BUG-A-06). The ledger credits a deposit once the chain confirms it
  * (on eip155 the sequencer's soft confirmation, swept every 5 seconds), so for
  * those few seconds the chain's escrow balance already counts it while a paid
- * call is refused with `PAYMENT_INSUFFICIENT_FUNDS`.
+ * call is refused with `PAYMENT_INSUFFICIENT_FUNDS`. A settled deposit can
+ * stay pending longer when the escrow on chain does not cover it yet, so the
+ * copy says "sometimes longer" and never promises it is spendable.
  *
  * `pending` (seen on chain, not final) and `pendingDeposits` (sent, not yet
  * seen) are the two ledger buckets for it, the same two the Overview tile adds.
  */
-export const CONFIRMING_TEXT = "still confirming on chain (usually a few seconds)";
+export const CONFIRMING_TEXT = "still confirming (usually a few seconds, sometimes longer)";
 
 /** The deposit sheet's success line, matching what the ledger actually does. */
 export const DEPOSIT_CREDIT_TEXT =
-  "Paid calls can use it once the chain confirms it, usually within a few seconds; until then it shows as still confirming on chain.";
+  "Paid calls can use it once it is confirmed, usually within a few seconds but sometimes longer; until then it shows as still confirming and is not spendable.";
 
 /** The ledger row for the escrow's chain, or null when there is none or more than one. */
 export function escrowLedgerRow(balances: readonly FullBalance[] | undefined, chainId: string | null): FullBalance | null {
@@ -110,7 +112,7 @@ export function uncreditedLine(uncredited: Money | null | undefined): string | n
   return amount ? `${formatMoney(amount)} on chain, not yet usable by agents` : null;
 }
 
-/** "$20.00 still confirming on chain (usually a few seconds)", or null. */
+/** "$20.00 still confirming (usually a few seconds, sometimes longer)", or null. */
 export function confirmingLine(row: FullBalance | null | undefined): string | null {
   const confirming = confirmingOnChain(row);
   return confirming ? `${formatMoney(confirming)} ${CONFIRMING_TEXT}` : null;

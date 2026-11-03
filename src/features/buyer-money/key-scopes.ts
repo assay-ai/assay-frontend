@@ -9,8 +9,12 @@ import { formatDate } from "@/libs/utc-time";
  * - `payments`: take part in paid calls (needs `tools:call`).
  * - `activity:read`: read its own balance, calls and receipts.
  * - `reports:write`: report a bad result. Off unless asked for.
+ * - `deposits:write`: create a deposit request for its own agent and report the
+ *   transaction the agent's wallet sent for it. It never signs or moves funds,
+ *   needs no other scope, and is off unless asked for. Polling the deposit
+ *   needs `activity:read`.
  */
-export type KeyScope = "tools:call" | "payments" | "activity:read" | "reports:write";
+export type KeyScope = "tools:call" | "payments" | "activity:read" | "reports:write" | "deposits:write";
 
 export type KeyPresetId = "agent" | "free" | "read";
 
@@ -34,12 +38,20 @@ export const KEY_PRESETS: readonly KeyPreset[] = [
 
 export const DEFAULT_KEY_PRESET: KeyPresetId = "agent";
 export const REPORTS_SCOPE: KeyScope = "reports:write";
+export const DEPOSITS_SCOPE: KeyScope = "deposits:write";
 
-/** The scopes a key made with `preset` gets; "Can report bad results" adds `reports:write` (not on Read only). */
-export function scopesFor(preset: KeyPresetId, canReport = false): KeyScope[] {
+/** What the "Can create deposits" option grants, in the key form. */
+export const DEPOSITS_HINT = "Create deposit requests and report deposits this agent's wallet sent. It never moves funds.";
+
+/**
+ * The scopes a key made with `preset` gets; "Can report bad results" adds `reports:write` (not on Read only),
+ * "Can create deposits" adds `deposits:write` (on any preset: it needs no other scope).
+ */
+export function scopesFor(preset: KeyPresetId, canReport = false, canDeposit = false): KeyScope[] {
   const chosen = KEY_PRESETS.find((p) => p.id === preset) ?? KEY_PRESETS[0]!;
   const scopes = [...chosen.scopes];
   if (canReport && preset !== "read") scopes.push(REPORTS_SCOPE);
+  if (canDeposit) scopes.push(DEPOSITS_SCOPE);
   return scopes;
 }
 
@@ -54,12 +66,13 @@ export function expiryLabel(days: KeyExpiryDays): string {
 
 /**
  * The current choice in one line, shown next to the closed "Advanced" section:
- * "Agent · expires in 90 days", "Free calls only · can report · expires in 1 year".
+ * "Agent · expires in 90 days", "Free calls only · can report · can create deposits · expires in 1 year".
  */
-export function keyChoiceSummary(preset: KeyPresetId, canReport: boolean, days: KeyExpiryDays): string {
+export function keyChoiceSummary(preset: KeyPresetId, canReport: boolean, days: KeyExpiryDays, canDeposit = false): string {
   const label = (KEY_PRESETS.find((p) => p.id === preset) ?? KEY_PRESETS[0]!).label;
   const report = canReport && preset !== "read" ? " · can report" : "";
-  return `${label}${report} · expires in ${expiryLabel(days)}`;
+  const deposit = canDeposit ? " · can create deposits" : "";
+  return `${label}${report}${deposit} · expires in ${expiryLabel(days)}`;
 }
 
 const DAY_MS = 86_400_000;
@@ -72,12 +85,12 @@ export function expiresAtFor(days: KeyExpiryDays, nowMs: number = Date.now()): s
 /** The body of `POST /agents/:agentId/credentials`. */
 export function createKeyBody(
   name: string,
-  choice: { preset?: KeyPresetId; canReport?: boolean; days?: KeyExpiryDays } = {},
+  choice: { preset?: KeyPresetId; canReport?: boolean; canDeposit?: boolean; days?: KeyExpiryDays } = {},
   nowMs: number = Date.now(),
 ): { name: string; scopes: KeyScope[]; expiresAt: string } {
   return {
     name,
-    scopes: scopesFor(choice.preset ?? DEFAULT_KEY_PRESET, choice.canReport ?? false),
+    scopes: scopesFor(choice.preset ?? DEFAULT_KEY_PRESET, choice.canReport ?? false, choice.canDeposit ?? false),
     expiresAt: expiresAtFor(choice.days ?? DEFAULT_KEY_EXPIRY_DAYS, nowMs),
   };
 }
@@ -93,6 +106,7 @@ export function scopesText(scopes: readonly string[] | null | undefined): string
   if (has("payments") && has("tools:call")) parts.push("pays");
   if (has("activity:read")) parts.push("reads activity");
   if (has("reports:write")) parts.push("reports bad results");
+  if (has("deposits:write")) parts.push("creates deposits");
   if (parts.length === 0) return "Can do nothing";
   const text = parts.join(" · ");
   return text.charAt(0).toUpperCase() + text.slice(1);

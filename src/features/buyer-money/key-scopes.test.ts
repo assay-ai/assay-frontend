@@ -18,6 +18,14 @@ describe("key presets", () => {
     expect(scopesFor("read", true)).toEqual(["activity:read"]);
   });
 
+  it("deposits:write only when ticked, on any preset, never by default", () => {
+    expect(scopesFor("agent", false, true)).toEqual(["tools:call", "payments", "activity:read", "deposits:write"]);
+    expect(scopesFor("free", true, true)).toEqual(["tools:call", "reports:write", "deposits:write"]);
+    expect(scopesFor("read", true, true)).toEqual(["activity:read", "deposits:write"]);
+    expect(createKeyBody("Key 1", {}, NOW).scopes).not.toContain("deposits:write");
+    expect(createKeyBody("Key 1", { canDeposit: true }, NOW).scopes).toContain("deposits:write");
+  });
+
   it("the body: Agent for 90 days by default; a chosen expiry otherwise", () => {
     expect(createKeyBody("Key 1", {}, NOW)).toEqual({
       name: "Key 1",
@@ -32,6 +40,7 @@ describe("key presets", () => {
 describe("a key's scopes and expiry in words", () => {
   it("names only scopes the API grants", () => {
     expect(scopesText(["tools:call", "payments", "activity:read"])).toBe("Calls tools · pays · reads activity");
+    expect(scopesText(["activity:read", "deposits:write"])).toBe("Reads activity · creates deposits");
     expect(scopesText(["payments"])).toBe("Can do nothing");
     expect(scopesText(["something:else"])).toBe("Can do nothing");
     expect(scopesText(null)).toBe("Can do nothing");
@@ -56,5 +65,7 @@ describe("keyChoiceSummary", () => {
     expect(keyChoiceSummary("agent", false, 90)).toBe("Agent · expires in 90 days");
     expect(keyChoiceSummary("free", true, 365)).toBe("Free calls only · can report · expires in 1 year");
     expect(keyChoiceSummary("read", true, 30)).toBe("Read only · expires in 30 days");
+    expect(keyChoiceSummary("free", true, 90, true)).toBe("Free calls only · can report · can create deposits · expires in 90 days");
+    expect(keyChoiceSummary("read", false, 30, true)).toBe("Read only · can create deposits · expires in 30 days");
   });
 });

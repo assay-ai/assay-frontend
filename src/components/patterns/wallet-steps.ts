@@ -16,8 +16,11 @@ export interface WalletStepResult {
   data?: unknown;
 }
 
-/** Where a running step is. Reported by the step itself through `context.report`. */
-export type WalletStepStage = "preparing" | "wallet" | "submitted";
+/**
+ * Where a running step is. Reported by the step itself through `context.report`.
+ * `processing`: sent, and the backend is still settling it (it can take minutes).
+ */
+export type WalletStepStage = "preparing" | "wallet" | "submitted" | "processing";
 
 export interface WalletStepReport {
   stage: WalletStepStage;
