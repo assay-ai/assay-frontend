@@ -287,7 +287,9 @@ export function SignAction({
         ? "Preparing the transaction…"
         : state.stage === "submitted"
           ? "Sent. Waiting for the chain to confirm it…"
-          : `Confirm ${what} in your wallet.`;
+          : state.stage === "processing"
+            ? "Sent. Assay is still processing it; this can take a few minutes. It will appear automatically."
+            : `Confirm ${what} in your wallet.`;
   } else if (state.phase === "declined") {
     message = anyDone
       ? "You declined in your wallet. Nothing more was sent; the steps already done stay done."
@@ -363,7 +365,9 @@ export function SignAction({
             {running
               ? state.stage === "submitted"
                 ? "Confirming…"
-                : "Waiting for your wallet…"
+                : state.stage === "processing"
+                  ? "Processing…"
+                  : "Waiting for your wallet…"
               : state.phase === "declined" || state.phase === "failed"
                 ? "Try again"
                 : label}

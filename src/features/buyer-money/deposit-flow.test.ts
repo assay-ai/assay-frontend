@@ -25,7 +25,17 @@ vi.mock("@/libs/chains/solana/deposit-transaction", () => ({
 
 import type { Signer } from "@/hooks/useSigner";
 
-import { DepositNoAnswer, DepositStillChecking, isNoAnswer, runDepositStep, type DepositRun } from "./deposit-flow";
+import {
+  DepositNoAnswer,
+  DepositNotCredited,
+  DepositStillChecking,
+  DepositStillProcessing,
+  isAlreadyClaimed,
+  isNoAnswer,
+  PROCESSING_LIMIT_MS,
+  runDepositStep,
+  type DepositRun,
+} from "./deposit-flow";
 import { describeMoneyError, describeSubmittedDepositError, DEPOSIT_NOT_OBSERVED_TEXT } from "./money-errors";
 
 const CHAIN = "eip155:46630";
@@ -313,5 +323,72 @@ describe("injected wallet: Try again on an intent that can no longer take the ha
     service.settleDepositByBroadcast.mockRejectedValue(new ApiError("PAYMENT_DEPOSIT_TRANSACTION_ALREADY_CLAIMED", "x", 409));
     const retry = { ...hooks(), previous: { kind: "hash" as const, hash: HASH, depositId: "dep-1" } };
     expect(await settle(runDepositStep(freshRun(), signer, retry))).toBe("already-credited");
+  });
+});
+
+describe("isAlreadyClaimed: only codes that say this hash was credited", () => {
+  it("is ALREADY_CLAIMED / ALREADY_CREDITED, never ALREADY_SETTLED (settled by another transaction)", () => {
+    expect(isAlreadyClaimed(new ApiError("PAYMENT_DEPOSIT_TRANSACTION_ALREADY_CLAIMED", "x", 409))).toBe(true);
+    expect(isAlreadyClaimed(new ApiError("PAYMENT_DEPOSIT_ALREADY_CREDITED", "x", 409))).toBe(true);
+    expect(isAlreadyClaimed(new ApiError("PAYMENT_DEPOSIT_ALREADY_SETTLED", "x", 409))).toBe(false);
+  });
+});
+
+describe("PAYMENT_DEPOSIT_ALREADY_SETTLED: the intent took another transaction, this hash was not credited", () => {
+  it("is an error naming the hash, never already-credited", async () => {
+    evm.sendEvmDepositFor.mockResolvedValue({ kind: "broadcast", transactionHash: HASH });
+    service.settleDepositByBroadcast.mockRejectedValue(new ApiError("PAYMENT_DEPOSIT_ALREADY_SETTLED", "x", 409));
+    const error = await settle(runDepositStep(freshRun(), signer, hooks())).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DepositNotCredited);
+    expect((error as Error).message).toContain(HASH);
+    expect((error as Error).message).toMatch(/not credited/);
+    expect(describeSubmittedDepositError(error)).toEqual({ text: (error as Error).message, tone: "danger" });
+    expect(describeMoneyError(error)).toBe((error as Error).message);
+  });
+
+  it("a raw ApiError with that code is described as not credited too", () => {
+    const error = new ApiError("PAYMENT_DEPOSIT_ALREADY_SETTLED", "x", 409);
+    expect(describeSubmittedDepositError(error)?.tone).toBe("danger");
+    expect(describeMoneyError(error)).toMatch(/not credited/);
+  });
+});
+
+describe("embedded-wallet retry while the backend is still settling (409 invalid state)", () => {
+  const retry = () => ({ ...hooks(), onProcessing: vi.fn(), previous: { kind: "signed" as const, raw: RAW, depositId: "dep-1" } });
+
+  it("shows processing and polls the deposit until it SETTLED, settling once", async () => {
+    service.getDeposit
+      .mockResolvedValueOnce(deposit("CREATED"))
+      .mockResolvedValueOnce(deposit("SETTLING"))
+      .mockResolvedValueOnce(deposit("SETTLING"))
+      .mockResolvedValueOnce(deposit("SETTLED"));
+    service.settleDeposit.mockRejectedValue(new ApiError("PAYMENT_DEPOSIT_INVALID_STATE_TRANSITION", "x", 409));
+    const hooksWithProcessing = retry();
+    const result = await settle(runDepositStep(freshRun(), signer, hooksWithProcessing));
+    expect(result).toMatchObject({ status: "SETTLED" });
+    expect(hooksWithProcessing.onProcessing).toHaveBeenCalled();
+    expect(service.settleDeposit).toHaveBeenCalledTimes(1);
+    expect(evm.sendEvmDepositFor).not.toHaveBeenCalled();
+  });
+
+  it("a FAILED outcome while processing says the transfer was not seen", async () => {
+    service.getDeposit.mockResolvedValueOnce(deposit("CREATED")).mockResolvedValue(deposit("FAILED"));
+    service.settleDeposit.mockRejectedValue(new ApiError("PAYMENT_DEPOSIT_INVALID_STATE_TRANSITION", "x", 409));
+    const error = await settle(runDepositStep(freshRun(), signer, retry())).catch((e: unknown) => e);
+    expect((error as ApiError).code).toBe("PAYMENT_DEPOSIT_TRANSFER_NOT_OBSERVED");
+  });
+
+  it("gives up after the limit with a still-processing warning, not an error", async () => {
+    service.getDeposit.mockResolvedValue(deposit("SETTLING"));
+    const hooksWithProcessing = retry();
+    const started = Date.now();
+    const error = await settle(runDepositStep(freshRun(), signer, hooksWithProcessing)).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(DepositStillProcessing);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(PROCESSING_LIMIT_MS);
+    expect(hooksWithProcessing.onProcessing).toHaveBeenCalled();
+    expect(service.settleDeposit).not.toHaveBeenCalled();
+    const outcome = describeSubmittedDepositError(error);
+    expect(outcome?.tone).toBe("warning");
+    expect(outcome?.text).toMatch(/appear in Funding automatically/);
   });
 });
