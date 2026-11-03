@@ -80,6 +80,7 @@ describe("Create key: what it can do and when it ends", () => {
     openAdvanced();
     expect((screen.getByRole("radio", { name: "Agent" }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole("checkbox", { name: "Can report bad results" }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("checkbox", { name: "Can create deposits" }) as HTMLInputElement).checked).toBe(false);
     expect((screen.getByRole("radio", { name: "90 days" }) as HTMLInputElement).checked).toBe(true);
     create();
     await waitFor(() => expect(account.createCredential).toHaveBeenCalledTimes(1));
@@ -116,6 +117,20 @@ describe("Create key: what it can do and when it ends", () => {
     expect(sent().scopes).toEqual(["activity:read"]);
     expect(daysFromNow(sent().expiresAt)).toBe(365);
     expect((await screen.findByTestId("key-free-calls")).textContent).toBe("This key cannot call tools: it reads its own activity only.");
+  });
+
+  it("Read only with deposits: adds deposits:write and nothing else", async () => {
+    mount();
+    openAdvanced();
+    fireEvent.click(screen.getByRole("radio", { name: "Read only" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Can create deposits" }));
+    expect(screen.getByTestId("key-advanced-summary").textContent).toBe("Read only · can create deposits · expires in 90 days");
+    create();
+    await waitFor(() => expect(account.createCredential).toHaveBeenCalledTimes(1));
+    expect(sent().scopes).toEqual(["activity:read", "deposits:write"]);
+    expect((await screen.findByTestId("key-free-calls")).textContent).toBe(
+      "This key cannot call tools: it reads its own activity and creates deposits only.",
+    );
   });
 
   it.each([
