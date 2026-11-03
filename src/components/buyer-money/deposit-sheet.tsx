@@ -180,6 +180,7 @@ export function DepositSheet({ open, onOpenChange, onSetCaps, onlyChainId = null
             onWallet: () => report({ stage: "wallet" }),
             previous,
             onSigned: (attempt) => report({ stage: "submitted", data: attempt }),
+            onProcessing: () => report({ stage: "processing" }),
             onSubmitted: (hash, depositId) => {
               const explorerUrl = chain ? explorerTxUrl(chain, hash) : undefined;
               report({ stage: "submitted", data: { kind: "hash", hash, depositId } satisfies DepositAttempt, explorerUrl });

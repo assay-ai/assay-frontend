@@ -19,7 +19,7 @@ import {
 /**
  * The deposit as two wallet steps, so SignAction can show "Approve → Deposit":
  *
- *   approve: POST /deposits (opens a 120 s intent) → checks → approve() if
+ *   approve: POST /deposits (opens a 10-minute intent) → checks → approve() if
  *            the allowance is short (no prompt when it is not);
  *   deposit: depositFor() → settle (embedded: signed bytes; injected: by hash).
  *
@@ -75,6 +75,37 @@ export class DepositStillChecking extends Error {
   }
 }
 
+/**
+ * The backend is still settling the deposit (its intent is `SETTLING`) and
+ * did not finish within {@link PROCESSING_LIMIT_MS}. Not a failure: the
+ * backend resumes it on its own and the balance updates when it lands. Its
+ * message is shown as is.
+ */
+export class DepositStillProcessing extends Error {
+  constructor() {
+    super(
+      "Your deposit is still processing. It will appear in Funding automatically once it settles; do not send it again.",
+    );
+    this.name = "DepositStillProcessing";
+  }
+}
+
+/**
+ * `PAYMENT_DEPOSIT_ALREADY_SETTLED`: the intent was settled by a DIFFERENT
+ * transaction, so the one reported here was NOT credited. Never "already
+ * credited". Names the transaction, for support. Its message is shown as is.
+ */
+export class DepositNotCredited extends Error {
+  constructor(readonly transaction: string | null) {
+    super(
+      transaction
+        ? `Transaction ${transaction} was not credited: this deposit was already settled by another transaction. Contact support with this transaction hash.`
+        : "This deposit was not credited: it was already settled by another transaction. Contact support.",
+    );
+    this.name = "DepositNotCredited";
+  }
+}
+
 /** Pauses between re-reads of a deposit whose settle answer was lost (~26 s, past the backend's ~20 s chain wait). */
 export const RECHECK_DELAYS_MS: readonly number[] = [2_000, 4_000, 8_000, 12_000];
 
@@ -127,6 +158,38 @@ export async function recheckDeposit(depositId: string): Promise<SettledDeposit>
   throw new DepositStillChecking();
 }
 
+/** How long a deposit the backend is still settling is waited on before {@link DepositStillProcessing}. */
+export const PROCESSING_LIMIT_MS = 5 * 60_000;
+/** How often such a deposit is read again. */
+export const PROCESSING_POLL_MS = 5_000;
+
+/**
+ * Waits for a deposit the backend is still settling (`SETTLING`, or a settle
+ * refused with `409 PAYMENT_DEPOSIT_INVALID_STATE_TRANSITION` because it is):
+ * only GETs, every {@link PROCESSING_POLL_MS}, for up to
+ * {@link PROCESSING_LIMIT_MS}. SETTLED → the deposit; FAILED → not observed;
+ * EXPIRED → expired; still unsettled at the end → `DepositStillProcessing`.
+ */
+export async function waitWhileProcessing(depositId: string, onProcessing?: () => void): Promise<SettledDeposit> {
+  onProcessing?.();
+  const deadline = Date.now() + PROCESSING_LIMIT_MS;
+  while (Date.now() < deadline) {
+    await pause(PROCESSING_POLL_MS);
+    const deposit = await readDeposit(depositId);
+    if (deposit?.status === "SETTLED") return asSettled(deposit);
+    if (deposit?.status === "FAILED") throw notObserved(deposit);
+    if (deposit?.status === "EXPIRED") {
+      throw new ApiError("PAYMENT_DEPOSIT_EXPIRED", deposit.statusReason ?? "The deposit expired.", 409);
+    }
+  }
+  throw new DepositStillProcessing();
+}
+
+/** A settle refused because the intent is mid-settlement (`SETTLING`). */
+export function isStillSettling(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "PAYMENT_DEPOSIT_INVALID_STATE_TRANSITION";
+}
+
 /** One settle request; a lost answer is resolved by re-reading the deposit, never by sending again. */
 async function settleOrRecheck<T>(depositId: string, send: () => Promise<T>): Promise<T | SettledDeposit> {
   try {
@@ -140,7 +203,7 @@ async function settleOrRecheck<T>(depositId: string, send: () => Promise<T>): Pr
 /**
  * A retry of a submitted deposit step reads where the intent stands first.
  * Returns the outcome when it is known (or still settling, re-read until it
- * is), else the status of an intent that never settled:
+ * is, showing "processing"), else the status of an intent that never settled:
  *
  * - `CREATED` — nothing reached the chain through it; the same payload may go back.
  * - `EXPIRED` — reachable only from CREATED, so its payload was never broadcast by us.
@@ -151,6 +214,7 @@ async function settleOrRecheck<T>(depositId: string, send: () => Promise<T>): Pr
  */
 async function outcomeBeforeRetry(
   depositId: string,
+  onProcessing?: () => void,
 ): Promise<SettledDeposit | { unsettled: "CREATED" | "EXPIRED" | "FAILED"; deposit: Deposit }> {
   let deposit: Deposit;
   try {
@@ -160,7 +224,7 @@ async function outcomeBeforeRetry(
     throw error;
   }
   if (deposit.status === "SETTLED") return asSettled(deposit);
-  if (deposit.status === "SETTLING") return recheckDeposit(depositId);
+  if (deposit.status === "SETTLING") return waitWhileProcessing(depositId, onProcessing);
   return { unsettled: deposit.status, deposit };
 }
 
@@ -243,6 +307,7 @@ async function settleHashOnFreshIntent(
     return await settleOrRecheck(fresh.depositId, () => settleDepositByBroadcast(fresh.depositId, hash));
   } catch (again) {
     if (isAlreadyClaimed(again)) return "already-credited";
+    if (isSettledByAnother(again)) throw new DepositNotCredited(hash);
     throw again;
   }
 }
@@ -258,14 +323,24 @@ export async function settleByHash(
     return await settleOrRecheck(depositId, () => settleDepositByBroadcast(depositId, hash));
   } catch (caught) {
     if (isAlreadyClaimed(caught)) return "already-credited";
+    if (isSettledByAnother(caught)) throw new DepositNotCredited(hash);
     if (!(caught instanceof ApiError) || caught.code !== "PAYMENT_DEPOSIT_EXPIRED") throw caught;
     return settleHashOnFreshIntent(run, hash, onReplaced);
   }
 }
 
-/** The hash was credited already (by this page, another tab, or a retry): the job is done. */
+/**
+ * The hash was credited already (by this page, another tab, or a retry): the
+ * job is done. Never `PAYMENT_DEPOSIT_ALREADY_SETTLED`: that intent was settled
+ * by a different transaction and this one was not credited.
+ */
 export function isAlreadyClaimed(error: unknown): boolean {
-  return error instanceof ApiError && /ALREADY_(CLAIMED|SETTLED|CREDITED)/.test(error.code);
+  return error instanceof ApiError && /ALREADY_(CLAIMED|CREDITED)$/.test(error.code);
+}
+
+/** `409 PAYMENT_DEPOSIT_ALREADY_SETTLED`: the intent took another transaction; the reported one was not credited. */
+export function isSettledByAnother(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "PAYMENT_DEPOSIT_ALREADY_SETTLED";
 }
 
 /** What a submitted deposit step hands back to a retry, so it never signs twice. */
@@ -284,6 +359,8 @@ export async function runDepositStep(
     onSubmitted: (hash: `0x${string}`, depositId: string) => void;
     /** Signed bytes about to be handed to the settle route (embedded wallet). */
     onSigned?: (attempt: DepositAttempt) => void;
+    /** The backend is still settling it: show "processing" while it is waited on. */
+    onProcessing?: () => void;
     previous?: DepositAttempt;
   },
 ): Promise<SettledDeposit | "already-credited"> {
@@ -292,7 +369,7 @@ export async function runDepositStep(
   // was never settled.
   if (hooks.previous?.kind === "hash") {
     const { depositId, hash } = hooks.previous;
-    const read = await outcomeBeforeRetry(depositId);
+    const read = await outcomeBeforeRetry(depositId, hooks.onProcessing);
     if (!("unsettled" in read)) return read;
     await waitForSuccess(run.chainId, hash);
     // The wallet's own transaction is mined. An EXPIRED or FAILED intent can no
@@ -304,7 +381,7 @@ export async function runDepositStep(
   }
   if (hooks.previous?.kind === "signed") {
     const { depositId, raw } = hooks.previous;
-    const read = await outcomeBeforeRetry(depositId);
+    const read = await outcomeBeforeRetry(depositId, hooks.onProcessing);
     if (!("unsettled" in read)) return read;
     if (read.unsettled === "FAILED") throw notObserved(read.deposit);
     if (read.unsettled === "CREATED") {
@@ -312,6 +389,9 @@ export async function runDepositStep(
         return await settleOrRecheck(depositId, () => settleDeposit(depositId, run.chainId, raw));
       } catch (error) {
         if (isAlreadyClaimed(error)) return "already-credited";
+        // 409: the intent turned SETTLING between the read and this settle; the backend finishes it.
+        if (isStillSettling(error)) return waitWhileProcessing(depositId, hooks.onProcessing);
+        if (isSettledByAnother(error)) throw new DepositNotCredited(null);
         throw error;
       }
     }

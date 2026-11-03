@@ -67,7 +67,7 @@ describe("money still confirming on chain (BUG-A-06)", () => {
 
   it("names the amount and the wait", () => {
     expect(confirmingLine(row())).toBe(`$20.00 ${CONFIRMING_TEXT}`);
-    expect(CONFIRMING_TEXT).toBe("still confirming on chain (usually a few seconds)");
+    expect(CONFIRMING_TEXT).toBe("still confirming (usually a few seconds, sometimes longer)");
     expect(confirmingLine(row({ pending: m("0") }))).toBeNull();
   });
 
@@ -75,7 +75,8 @@ describe("money still confirming on chain (BUG-A-06)", () => {
     const sheet = readFileSync(resolve(__dirname, "../../components/buyer-money/deposit-sheet.tsx"), "utf8");
     expect(sheet).not.toMatch(/within about a minute/);
     expect(sheet).toMatch(/DEPOSIT_CREDIT_TEXT/);
-    expect(DEPOSIT_CREDIT_TEXT).toMatch(/usually within a few seconds/);
+    expect(DEPOSIT_CREDIT_TEXT).toMatch(/usually within a few seconds but sometimes longer/);
+    expect(DEPOSIT_CREDIT_TEXT).toMatch(/not spendable/);
   });
 
   it("the Funding page uses the ledger-capped figure and shows the confirming line", () => {
@@ -91,7 +92,7 @@ describe("ConfirmingNote", () => {
   // under a full parallel run, though the assertion never failed.
   it("renders the line with when paid calls can use it", () => {
     const html = renderToStaticMarkup(React.createElement(ConfirmingNote, { line: confirmingLine(row())! }));
-    expect(html).toContain("$20.00 still confirming on chain (usually a few seconds). Paid calls can use it once the chain confirms it.");
+    expect(html).toContain("$20.00 still confirming (usually a few seconds, sometimes longer). Paid calls can use it once it is confirmed.");
   });
 });
 

@@ -542,7 +542,7 @@ function EscrowCard({
 export function ConfirmingNote({ line }: { line: string }) {
   return (
     <span className="text-body-13 text-warning-700" data-testid="funding-confirming">
-      {line}. Paid calls can use it once the chain confirms it.
+      {line}. Paid calls can use it once it is confirmed.
     </span>
   );
 }

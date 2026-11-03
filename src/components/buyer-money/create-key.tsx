@@ -16,6 +16,7 @@ import {
   createKeyBody,
   DEFAULT_KEY_EXPIRY_DAYS,
   DEFAULT_KEY_PRESET,
+  DEPOSITS_HINT,
   expiryLabel,
   KEY_EXPIRY_DAYS,
   KEY_PRESETS,
@@ -61,7 +62,11 @@ export function payingKeyName(readiness: Pick<AgentReadiness, "boundCredential" 
 }
 
 export function newKeyPaysNote(payingKey?: string | null, scopes?: readonly string[] | null): string {
-  if (scopes && !scopes.includes("tools:call")) return "This key cannot call tools: it reads its own activity only.";
+  if (scopes && !scopes.includes("tools:call")) {
+    return scopes.includes("deposits:write")
+      ? "This key cannot call tools: it reads its own activity and creates deposits only."
+      : "This key cannot call tools: it reads its own activity only.";
+  }
   if (scopes && !keyMayPay(scopes)) return "This key makes free calls only: it can never pay.";
   return payingKey
     ? `This key makes free calls only. Your agent pays through its key “${payingKey}”. If you switch the agent to this key, it can make paid calls only once a payment key is bound to this key as well.`
@@ -119,11 +124,12 @@ export function CreateKeyForm({
   const [name, setName] = React.useState(defaultName);
   const [preset, setPreset] = React.useState<KeyPresetId>(DEFAULT_KEY_PRESET);
   const [canReport, setCanReport] = React.useState(false);
+  const [canDeposit, setCanDeposit] = React.useState(false);
   const [days, setDays] = React.useState<KeyExpiryDays>(DEFAULT_KEY_EXPIRY_DAYS);
   const [advanced, setAdvanced] = React.useState(false);
   const [created, setCreated] = React.useState<CreatedKey | null>(null);
   const create = useMutation({
-    mutationFn: () => createCredential(agentId, createKeyBody(name.trim(), { preset, canReport, days })) as Promise<CreatedKey>,
+    mutationFn: () => createCredential(agentId, createKeyBody(name.trim(), { preset, canReport, canDeposit, days })) as Promise<CreatedKey>,
     onSuccess: (key) => {
       setCreated(key);
       onCreated?.(key);
@@ -197,7 +203,7 @@ export function CreateKeyForm({
           <ChevronRight aria-hidden="true" className={`size-3.5 shrink-0 transition-transform${advanced ? " rotate-90" : ""}`} />
           Advanced
           <span className="text-body-xs font-normal text-03" data-testid="key-advanced-summary">
-            {keyChoiceSummary(preset, canReport, days)}
+            {keyChoiceSummary(preset, canReport, days, canDeposit)}
           </span>
         </button>
         {advanced ? (
@@ -226,6 +232,14 @@ export function CreateKeyForm({
                   <span className="pl-[26px] text-body-xs text-03">Lets it flag a tool result that was wrong. Off unless you need it.</span>
                 </div>
               ) : null}
+              <div className="flex flex-col gap-0.5 pt-1">
+                <Checkbox
+                  checked={canDeposit}
+                  onChange={(event) => setCanDeposit(event.currentTarget.checked)}
+                  label="Can create deposits"
+                />
+                <span className="pl-[26px] text-body-xs text-03">{DEPOSITS_HINT} Off unless you need it.</span>
+              </div>
             </fieldset>
             <fieldset className="flex flex-col gap-2" data-testid="key-expiry">
               <legend className="mb-1 text-label-13 text-01">Expires after</legend>
