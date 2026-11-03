@@ -27,6 +27,10 @@ export const DEPOSIT_NOT_OBSERVED_TEXT =
 export const DEPOSIT_SETTLED_BY_ANOTHER_TEXT =
   "This deposit was not credited: it was already settled by another transaction. Contact support with your transaction hash.";
 
+/** 409 PAYMENT_DEPOSIT_ESCROW_SHORTFALL: an earlier deposit is still not covered by the escrow; new deposits wait for support. */
+export const DEPOSIT_ESCROW_SHORTFALL_TEXT =
+  "Your escrow has an unresolved shortfall, so new deposits are paused. Do not send funds; contact support.";
+
 /**
  * One sentence for a failed money action (deposit, caps, withdraw, claim,
  * pay permission). The raw message stays under SignAction's Details.
@@ -45,6 +49,7 @@ const ESCROW_REFUSALS: Record<string, string> = {
   PAYMENT_DEPOSIT_ACCOUNT_NOT_LINKED: "This wallet is not linked to your account on that chain. Nothing was sent.",
   PAYMENT_DEPOSIT_TRANSFER_NOT_OBSERVED: DEPOSIT_NOT_OBSERVED_TEXT,
   PAYMENT_DEPOSIT_ALREADY_SETTLED: DEPOSIT_SETTLED_BY_ANOTHER_TEXT,
+  PAYMENT_DEPOSIT_ESCROW_SHORTFALL: DEPOSIT_ESCROW_SHORTFALL_TEXT,
 };
 
 /** A wallet problem the person can fix, thrown from a step before any prompt. Its message is shown as is. */
@@ -95,6 +100,9 @@ export function describeSubmittedDepositError(error: unknown): SubmittedOutcome 
   if (error instanceof DepositNotCredited) return { text: error.message, tone: "danger" };
   if (error instanceof ApiError && error.code === "PAYMENT_DEPOSIT_ALREADY_SETTLED") {
     return { text: DEPOSIT_SETTLED_BY_ANOTHER_TEXT, tone: "danger" };
+  }
+  if (error instanceof ApiError && error.code === "PAYMENT_DEPOSIT_ESCROW_SHORTFALL") {
+    return { text: DEPOSIT_ESCROW_SHORTFALL_TEXT, tone: "danger" };
   }
   if (error instanceof ApiError && error.code === "PAYMENT_DEPOSIT_TRANSFER_NOT_OBSERVED") {
     return { text: DEPOSIT_NOT_OBSERVED_TEXT, tone: "danger" };
