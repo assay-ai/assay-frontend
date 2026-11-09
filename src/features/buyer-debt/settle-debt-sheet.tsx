@@ -215,6 +215,7 @@ function SettleDebtSheet({
             return intent;
           },
           submit: submitDebtVoucher,
+          providerName: debt.providerId ? providerName(debt.providerId) : undefined,
         });
         setLastResult(result);
         signedIds.current.add(debt.intentId);

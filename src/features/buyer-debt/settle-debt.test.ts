@@ -152,6 +152,7 @@ describe("settleDebt", () => {
       createIntent: async () => issued,
       submit,
       now: () => NOW,
+      providerName: "Acme Data",
     });
 
     expect(result.remainingDebts).toBe(0);
@@ -160,6 +161,8 @@ describe("settleDebt", () => {
     expect(options.showWalletUIs).toBe(true);
     expect(options.title).toMatch(/^Pay debt: .*\d/);
     expect(options.description).toMatch(/\d/);
+    // The payee as signed, in full, and its name.
+    expect(options.description).toContain(`to Acme Data (${PROVIDER})`);
     expect(submit).toHaveBeenCalledWith("int_1", { voucher: issued.voucher, signature: "0xsig" });
   });
 

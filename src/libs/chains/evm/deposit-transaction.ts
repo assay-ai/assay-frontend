@@ -57,7 +57,15 @@ const GAS_MARGIN_PERCENT = 120n;
  * app sends costs well under a million gas, and the pinned chain's fees are a
  * fraction of a gwei, so a value above these is refused, not signed.
  */
-export const MAX_FEE_PER_GAS_WEI = 50_000_000_000n; // 50 gwei
+/*
+ * 5 gwei (security review 2026-11-09, F4; was 50 gwei). Robinhood Chain's base
+ * fee sits near 0.02 gwei and has been seen up to about 0.08 gwei, and viem's
+ * estimate asks for 1.2x the base fee plus the tip; a local test chain (anvil)
+ * asks for about 2-3 gwei. 5 gwei is about 60x the chain's busiest observed
+ * fee and still fits a local chain, while it caps what a lying RPC can burn
+ * at 5 gwei x MAX_GAS_LIMIT = 0.015 ETH per transaction (was 0.15 ETH).
+ */
+export const MAX_FEE_PER_GAS_WEI = 5_000_000_000n; // 5 gwei
 export const MAX_GAS_LIMIT = 3_000_000n;
 
 /** Throws when a filled transaction's gas limit or fees exceed the bounds above. */
