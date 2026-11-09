@@ -13,6 +13,16 @@ const { completeHeaders } = require("../../scripts/connect-csp.js") as {
 };
 const { addSri } = require("../../scripts/add-sri.js") as { addSri: (dir: string) => { scripts: number; preloads: number; inline: number } };
 const { checkOut } = require("../../scripts/check-built-headers.js") as { checkOut: (dir: string) => string[] };
+const { pagesFor, urlPathOf } = require("../../scripts/connect-csp.js") as {
+  pagesFor: (dir: string, pattern: string) => string[];
+  urlPathOf: (dir: string, file: string) => string;
+};
+const { STRICT_PATHS } = require("../../scripts/csp-policy.js") as { STRICT_PATHS: string[] };
+
+/** One exported page per strict path: the splat's first page, or the exact path's own file. */
+const STRICT_PAGE_FILES = STRICT_PATHS.map((pattern) =>
+  pattern === "/connect/*" ? "connect/authorize.html" : pattern.endsWith("/*") ? `${pattern.slice(1, -2)}/page-one.html` : `${pattern.slice(1)}.html`,
+);
 
 const SCRIPT = "console.log('chunk');";
 const HEADERS = readFileSync(join(__dirname, "../../public/_headers"), "utf8");
@@ -41,14 +51,17 @@ afterEach(() => {
 function build(connectOrigins: string[] = [API_ORIGIN], siteOrigins: string[] = [API_ORIGIN, MCP_ORIGIN]): string {
   const dir = mkdtempSync(join(tmpdir(), "built-"));
   dirs.push(dir);
-  execFileSync("mkdir", ["-p", join(dir, "connect"), join(dir, "agents"), join(dir, "_next/static/chunks")]);
+  const subdirs = STRICT_PAGE_FILES.map((file) => join(dir, file, "..")).filter((sub) => sub !== dir);
+  execFileSync("mkdir", ["-p", ...subdirs, join(dir, "_next/static/chunks")]);
   writeFileSync(join(dir, "_next/static/chunks/a.js"), SCRIPT);
-  for (const file of ["connect/authorize.html", "agents/enable-paid.html"]) writeFileSync(join(dir, file), page());
+  for (const file of STRICT_PAGE_FILES) writeFileSync(join(dir, file), page());
   addSri(dir);
-  const pages = {
-    "/connect/*": { "/connect/authorize": readFileSync(join(dir, "connect/authorize.html"), "utf8") },
-    "/agents/enable-paid": { "/agents/enable-paid": readFileSync(join(dir, "agents/enable-paid.html"), "utf8") },
-  };
+  const pages = Object.fromEntries(
+    STRICT_PATHS.map((pattern) => [
+      pattern,
+      Object.fromEntries(pagesFor(dir, pattern).map((file) => [urlPathOf(dir, file), readFileSync(file, "utf8")])),
+    ]),
+  );
   writeFileSync(join(dir, "_headers"), completeHeaders(HEADERS, pages, connectOrigins, siteOrigins));
   return dir;
 }

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Completes the strict Content-Security-Policy of `/connect/*` and
- * `/agents/enable-paid` in `out/_headers`, after `next build` (spec R-WEB-2),
+ * Completes the strict Content-Security-Policy of every `STRICT_PATHS` block
+ * (`/connect/*`, `/agents/enable-paid`, and the money and operator pages) in
+ * `out/_headers`, after `next build` (spec R-WEB-2),
  * and the site-wide Report-Only policy of `/*` (`sitePolicy()`, checklist P12),
  * which gets the API and MCP origins of the build's environment.
  *

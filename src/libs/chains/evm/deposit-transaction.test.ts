@@ -67,6 +67,24 @@ describe("the chain registry the API fills", () => {
     );
   });
 
+  it("takes a served RPC only from the pinned origins; anything else falls back to the bundle's pinned RPC or none", () => {
+    // A keyed or hostile URL is never used: the pinned chain gets its pinned RPC instead.
+    setEvmRpcUrls([{ ...ROBINHOOD, publicRpcUrl: "https://evil.example/rpc?key=secret" }]);
+    expect(evmRpcUrl("eip155:46630")).toBe("https://rpc.testnet.chain.robinhood.com");
+    expect(evmChainsFrom([{ ...ROBINHOOD, publicRpcUrl: "https://evil.example/rpc" }])[0].rpcUrls.default.http).toEqual([
+      "https://rpc.testnet.chain.robinhood.com",
+    ]);
+    // Plain http on a pinned host is not the pinned origin.
+    setEvmRpcUrls([{ ...ROBINHOOD, publicRpcUrl: "http://rpc.testnet.chain.robinhood.com" }]);
+    expect(evmRpcUrl("eip155:46630")).toBe("https://rpc.testnet.chain.robinhood.com");
+    // A chain this bundle pins nothing for gets no RPC at all.
+    setEvmRpcUrls([{ ...ROBINHOOD, chainId: "eip155:1", publicRpcUrl: "https://evil.example/rpc" }]);
+    expect(evmRpcUrl("eip155:1")).toBeNull();
+    // A local chain, outside production builds.
+    setEvmRpcUrls([{ ...ROBINHOOD, publicRpcUrl: "http://127.0.0.1:8547" }]);
+    expect(evmRpcUrl("eip155:46630")).toBe("http://127.0.0.1:8547");
+  });
+
   it("builds Privy's chain from the id, the served name and the served rpc", () => {
     const [chain] = evmChainsFrom([ROBINHOOD, SOLANA]);
 
@@ -84,6 +102,11 @@ describe("assertSaneFees", () => {
 
   it("accepts the fees the pinned chain charges", () => {
     expect(() => assertSaneFees(ok)).not.toThrow();
+  });
+
+  it("caps the fee at 5 gwei", () => {
+    expect(() => assertSaneFees({ ...ok, maxFeePerGas: "5000000000" })).not.toThrow();
+    expect(() => assertSaneFees({ ...ok, maxFeePerGas: "5000000001" })).toThrow(/Nothing was sent/);
   });
 
   it("refuses a fee, a gas limit or a tip no transaction here needs", () => {

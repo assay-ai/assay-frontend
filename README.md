@@ -91,27 +91,6 @@ changing them. See `.env.local.example` for the full list and comments.
 | `pnpm check:tokens`    | Checks design tokens against the `cn()` merge config |
 | `pnpm check:refusals`  | Compares gas-grant refusal reasons with a backend checkout (needs `ASSAY_BACKEND_SRC`) |
 
-## Docker
-
-Not used by the Cloudflare Pages deployment, and out of date: the image runs
-`next start`, which a static export does not support.
-
-```bash
-docker build \
-  --build-arg NEXT_PUBLIC_BASE_URL=https://app.example.com \
-  --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.com/api/v1 \
-  --build-arg NEXT_PUBLIC_PRIVY_APP_ID=<your-privy-app-id> \
-  --build-arg NEXT_PUBLIC_ASSAY_MCP_VERSION=<exact-version> \
-  --build-arg NEXT_PUBLIC_MCP_URL=<mcp-host-url> \
-  -t assay-frontend .
-docker run -p 3000:3000 assay-frontend
-```
-
-The image serves on port 3000 (the Next.js default; `pnpm start --port 4000` in
-the quick start is a separate local setup). `NEXT_PUBLIC_BASE_URL` is inlined
-at build time, so it must match the URL the app is published at, including the
-port.
-
 ## Repository layout
 
 ```

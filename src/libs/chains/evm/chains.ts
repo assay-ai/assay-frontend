@@ -1,6 +1,9 @@
 import { defineChain, type Chain as ViemChain } from "viem";
 
+import strictRpcOrigins from "@/config/strict-rpc-origins.json";
 import type { Chain } from "@/interfaces/chain";
+
+import { PINNED_STAKE } from "./stake-slashes/deployments";
 
 /**
  * The eip155 chains this browser can sign for, and the RPC each one is read
@@ -26,13 +29,38 @@ import type { Chain } from "@/interfaces/chain";
  */
 const rpcUrls = new Map<string, string>();
 
+/** `http://localhost:*` and `http://127.0.0.1:*`: a local chain, accepted outside production builds only. */
+const LOOPBACK_RPC = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
+/**
+ * The RPC this browser uses for `chain`, or `null` (security review
+ * 2026-11-09, F4). The served `publicRpcUrl` fills nonces, gas and fees and
+ * reads allowances and receipts, so only an origin on the pinned list
+ * (`src/config/strict-rpc-origins.json`, the same list the strict CSP allows)
+ * is taken; a non-production build also takes a loopback RPC (a local chain).
+ * Anything else falls back to the RPC pinned for that chain in this bundle,
+ * or none.
+ */
+export function trustedRpcUrl(chain: Pick<Chain, "chainId" | "publicRpcUrl">): string | null {
+  const served = chain.publicRpcUrl;
+  if (served) {
+    try {
+      const url = new URL(served);
+      if (url.protocol === "https:" && strictRpcOrigins.includes(url.origin)) return served;
+      if (process.env.NEXT_PUBLIC_EVM_DEPLOYMENT !== "production" && LOOPBACK_RPC.test(url.origin)) return served;
+    } catch {
+      /* not a URL: the pinned one below, if any */
+    }
+  }
+  return chain.chainId === PINNED_STAKE.chainId ? PINNED_STAKE.rpcUrl : null;
+}
+
 /** Seeded once by `Providers` from the server-fetched chain list. */
 export function setEvmRpcUrls(chains: readonly Chain[]): void {
   rpcUrls.clear();
   for (const chain of chains) {
-    if (chain.namespace === "eip155" && chain.publicRpcUrl) {
-      rpcUrls.set(chain.chainId, chain.publicRpcUrl);
-    }
+    const url = chain.namespace === "eip155" && chain.publicRpcUrl ? trustedRpcUrl(chain) : null;
+    if (url) rpcUrls.set(chain.chainId, url);
   }
 }
 
@@ -54,14 +82,16 @@ export function evmChainNumber(chainId: string): number {
  * hardcoded name here is a copy that would drift.
  */
 export function evmChainsFrom(chains: readonly Chain[]): ViemChain[] {
-  return chains
-    .filter((chain) => chain.namespace === "eip155" && chain.publicRpcUrl)
-    .map((chain) =>
+  return chains.flatMap((chain) => {
+    const url = chain.namespace === "eip155" && chain.publicRpcUrl ? trustedRpcUrl(chain) : null;
+    if (!url) return [];
+    return [
       defineChain({
         id: evmChainNumber(chain.chainId),
         name: chain.displayName,
         nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-        rpcUrls: { default: { http: [chain.publicRpcUrl as string] } },
+        rpcUrls: { default: { http: [url] } },
       }),
-    );
+    ];
+  });
 }
