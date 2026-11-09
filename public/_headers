@@ -57,6 +57,105 @@
   ! X-Frame-Options
   ! Referrer-Policy
 
+# The money and operator pages (security review 2026-11-09): the same strict,
+# enforced policy as above (no 'unsafe-inline' script), framing and referrer,
+# without the opener policy. Funding and withdrawals, the let-agent-pay sheet,
+# debt settlement, the provider console (stake, disputes, payouts) and the
+# operator console. `pnpm build` completes each one like the blocks above:
+# exact paths in place, each splat with one block per page it serves. The
+# splats do not match their own root (`/provider/*` is not `/provider`), so
+# each root has its own block too. A client-side navigation keeps the policy
+# of the page the tab first loaded, so this covers a page opened directly.
+/agents
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/funding
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/funding/auto-top-up
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/spend/calls
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/receipts/view
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/settings/close
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/provider
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/provider/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/operator
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
+/operator/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; frame-src https://auth.privy.io https://privy.goassay.ai https://verify.walletconnect.com https://verify.walletconnect.org https://challenges.cloudflare.com; connect-src 'self' https://auth.privy.io https://privy.goassay.ai https://*.rpc.privy.systems wss://relay.walletconnect.com wss://relay.walletconnect.org wss://www.walletlink.org https://explorer-api.walletconnect.com https://pulse.walletconnect.org https://api.web3modal.org https://rpc.testnet.chain.robinhood.com https://rpc.mainnet.chain.robinhood.com https://*.solana.com; worker-src 'self' blob:; manifest-src 'self'
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  ! Content-Security-Policy-Report-Only
+  ! Content-Security-Policy
+  ! X-Frame-Options
+  ! Referrer-Policy
+
 # Content-hashed build assets never change under the same name.
 /_next/static/*
   Cache-Control: public, max-age=31536000, immutable

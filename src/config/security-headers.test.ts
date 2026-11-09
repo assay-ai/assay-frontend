@@ -136,10 +136,23 @@ const directives = (policy: string) =>
     }),
   );
 
-describe("strict pages: /connect/* and /agents/enable-paid", () => {
+describe("strict pages: /connect/*, /agents/enable-paid, and the money and operator pages", () => {
   it("_headers /connect/* has frame-ancestors 'none', X-Frame-Options DENY, Referrer-Policy no-referrer", async () => {
     const text = await headersFile();
-    expect(csp.STRICT_PATHS).toEqual(["/connect/*", "/agents/enable-paid"]);
+    expect(csp.STRICT_PATHS).toEqual([
+      "/connect/*",
+      "/agents/enable-paid",
+      "/agents",
+      "/funding",
+      "/funding/auto-top-up",
+      "/spend/calls",
+      "/receipts/view",
+      "/settings/close",
+      "/provider",
+      "/provider/*",
+      "/operator",
+      "/operator/*",
+    ]);
     for (const path of csp.STRICT_PATHS) {
       const headers = block(text, path);
       expect(headers["X-Frame-Options"]).toBe("DENY");
