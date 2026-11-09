@@ -56,8 +56,28 @@ const SITE_CONNECT_ORIGINS = ["wss://*.solana.com"];
 const SITE_PATH = "/*";
 const SITE_HEADER = "Content-Security-Policy-Report-Only";
 
-/** The pages that get the strict policy (spec R-WEB-2): `_headers` path patterns. */
-const STRICT_PATHS = ["/connect/*", "/agents/enable-paid"];
+/**
+ * The pages that get the strict policy: `_headers` path patterns. The consent
+ * and enable-paid pages (spec R-WEB-2), then the money and operator pages
+ * (security review 2026-11-09): funding and withdrawals, the let-agent-pay
+ * sheet, debt settlement, close account, the provider console and the
+ * operator console. A splat does not match its own root, so `/provider` and
+ * `/operator` are listed as well.
+ */
+const STRICT_PATHS = [
+  "/connect/*",
+  "/agents/enable-paid",
+  "/agents",
+  "/funding",
+  "/funding/auto-top-up",
+  "/spend/calls",
+  "/receipts/view",
+  "/settings/close",
+  "/provider",
+  "/provider/*",
+  "/operator",
+  "/operator/*",
+];
 
 /**
  * The strict policy of spec R-WEB-2 for `/connect/*` and `/agents/enable-paid`:

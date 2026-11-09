@@ -1,5 +1,6 @@
 import type { OperatorChallenge, OperatorSignIn } from "@/interfaces/operator";
 import { ApiError } from "@/libs/ApiClient";
+import { operatorSignInMessageProblem } from "@/libs/chains/evm/operator-wallet";
 import { saveOperatorSession, type OperatorSessionEnd } from "@/libs/operator-session";
 
 /**
@@ -7,8 +8,10 @@ import { saveOperatorSession, type OperatorSessionEnd } from "@/libs/operator-se
  * be tested with a mocked wallet.
  *
  *  1. `POST /operator/auth/challenge { address }` → an EIP-4361 message.
- *  2. The wallet `personal_sign`s that message EXACTLY as returned. The
- *     backend refuses any message that is not byte-for-byte the one it issued.
+ *  2. The message is checked (`operatorSignInMessageProblem`: this site's
+ *     domain and origin, the wallet, a pinned chain, a fresh short expiry),
+ *     then the wallet `personal_sign`s it EXACTLY as returned. The backend
+ *     refuses any message that is not byte-for-byte the one it issued.
  *  3. `POST /operator/auth/verify { message, signature }` → `{ token, expiresAt }`,
  *     stored under the operator's own key, never the buyer `accessToken`.
  */
@@ -16,10 +19,25 @@ export interface SignInDeps {
   readonly challenge: (address: string) => Promise<OperatorChallenge>;
   readonly sign: (message: string) => Promise<string>;
   readonly verify: (body: { message: string; signature: string }) => Promise<OperatorSignIn>;
+  /** The page's own location; `window.location` by default. */
+  readonly site?: { readonly host: string; readonly origin: string };
+  readonly now?: () => number;
 }
+
+export const SIGN_IN_MESSAGE_REFUSED = "SIGN_IN_MESSAGE_REFUSED";
 
 export async function signInWithWallet(address: string, deps: SignInDeps): Promise<OperatorSignIn> {
   const { message } = await deps.challenge(address);
+  const site = deps.site ?? window.location;
+  const problem = operatorSignInMessageProblem(message, {
+    address,
+    host: site.host,
+    origin: site.origin,
+    nowMs: deps.now?.() ?? Date.now(),
+  });
+  if (problem) {
+    throw new Error(`${SIGN_IN_MESSAGE_REFUSED}: the sign-in message was refused because ${problem}. Nothing was signed.`);
+  }
   const signature = await deps.sign(message);
   const session = await deps.verify({ message, signature });
   saveOperatorSession({ token: session.token, expiresAt: session.expiresAt });
@@ -58,6 +76,9 @@ export function signInErrorMessage(error: unknown): string {
     return `Sign-in failed: ${error.message} (${error.code})`;
   }
   if (isWalletRejection(error)) return "Nothing was signed: the wallet prompt was closed or declined.";
+  if (error instanceof Error && error.message.startsWith(SIGN_IN_MESSAGE_REFUSED)) {
+    return error.message.slice(SIGN_IN_MESSAGE_REFUSED.length + 2);
+  }
   if (error instanceof Error && error.message) return `The wallet did not sign: ${error.message}`;
   return "Sign-in failed. Try again.";
 }

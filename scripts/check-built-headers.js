@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Checks the built `out/` of the strict pages (`/connect/*`,
- * `/agents/enable-paid`) after `pnpm build` (spec R-WEB-2, R-WEB-3, R-WEB-4, T18).
+ * Checks the built `out/` of the strict pages (`STRICT_PATHS` in
+ * `csp-policy.js`: `/connect/*`, `/agents/enable-paid` and the money and
+ * operator pages) after `pnpm build` (spec R-WEB-2, R-WEB-3, R-WEB-4, T18).
  *
  * Static checks, always:
  * - every `<script src>` and script preload of those pages carries a `sha384`
@@ -37,8 +38,8 @@ const { SITE_HEADER, SITE_PATH, STRICT_PATHS, STRICT_SCRIPT_ORIGINS, originsOf, 
 const { integrityOf, attr } = require("./add-sri");
 const { pagesFor, urlPathOf, inlineScriptHashes } = require("./connect-csp");
 
-/** Site pages the browser check loads under the site-wide Report-Only policy. */
-const SITE_PAGES = ["/", "/agents", "/provider", "/explore"];
+/** Site pages the browser check loads under the site-wide Report-Only policy (none of them strict). */
+const SITE_PAGES = ["/", "/explore", "/spend", "/catalogue"];
 
 const SCRIPT_TAG = /<script\b[^>]*>/gi;
 const PRELOAD_SCRIPT_TAG = /<link\b(?=[^>]*\brel=["']?preload\b)(?=[^>]*\bas=["']?script\b)[^>]*>/gi;

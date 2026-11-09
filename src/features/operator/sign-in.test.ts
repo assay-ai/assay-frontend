@@ -17,6 +17,7 @@ import {
   sessionEndMessage,
   signInErrorMessage,
   signInWithWallet,
+  SIGN_IN_MESSAGE_REFUSED,
 } from "./sign-in";
 
 const ADDRESS = "0x52908400098527886E0F7030069857D2E4169EE7";
@@ -53,7 +54,10 @@ let storage: ReturnType<typeof memoryStorage>;
 
 beforeEach(() => {
   storage = memoryStorage();
-  vi.stubGlobal("window", { localStorage: storage });
+  vi.stubGlobal("window", {
+    localStorage: storage,
+    location: { host: "console.goassay.ai", origin: "https://console.goassay.ai" },
+  });
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-15T10:00:30.000Z"));
 });
@@ -165,6 +169,45 @@ describe("signInWithWallet, with a mocked wallet and a scripted API", () => {
       signInWithWallet(ADDRESS, { challenge, sign: async () => SIGNATURE, verify }),
     ).rejects.toBeInstanceOf(ApiError);
     expect(storage.getItem(OPERATOR_SESSION_KEY)).toBeNull();
+  });
+});
+
+describe("signInWithWallet refuses a challenge message it should not sign", () => {
+  const cases: [string, string, RegExp][] = [
+    ["another site's domain", MESSAGE.replace("console.goassay.ai wants", "evil.example wants"), /signs in to evil\.example/],
+    ["a URI on another origin", MESSAGE.replace("URI: https://console.goassay.ai/operator", "URI: https://evil.example/operator"), /URI/],
+    ["another wallet", MESSAGE.replace(ADDRESS, "0x0000000000000000000000000000000000000001"), /another wallet/],
+    ["an unknown chain", MESSAGE.replace("Chain ID: 46630", "Chain ID: 1"), /chain 1/],
+    ["another statement", MESSAGE.replace("Sign in to the Assay operator console", "Approve everything"), /not the operator console/],
+    ["an expired challenge", MESSAGE.replace("Expiration Time: 2026-10-15T10:05:00.000Z", "Expiration Time: 2026-10-15T10:00:10.000Z"), /expired/],
+    ["a long-lived challenge", MESSAGE.replace("Expiration Time: 2026-10-15T10:05:00.000Z", "Expiration Time: 2026-10-16T10:05:00.000Z"), /too long/],
+    ["a challenge issued far in the future", MESSAGE.replace("Issued At: 2026-10-15T10:00:00.000Z", "Issued At: 2026-10-15T10:10:00.000Z").replace("Expiration Time: 2026-10-15T10:05:00.000Z", "Expiration Time: 2026-10-15T10:15:00.000Z"), /issued in the future/],
+    ["no expiry", MESSAGE.replace("\nExpiration Time: 2026-10-15T10:05:00.000Z", ""), /no issue or expiry/],
+    ["something that is not SIWE", "please sign this", /not a Sign-In with Ethereum/],
+  ];
+  it.each(cases)("%s", async (_name, message, reason) => {
+    const sign = vi.fn(async () => SIGNATURE);
+    const verify = vi.fn();
+    const failed = await signInWithWallet(ADDRESS, { challenge: async () => ({ message, nonce: "n", expiresAt: EXPIRES }), sign, verify }).catch(
+      (e: unknown) => e,
+    );
+    expect(failed).toBeInstanceOf(Error);
+    expect((failed as Error).message).toContain(SIGN_IN_MESSAGE_REFUSED);
+    expect((failed as Error).message).toMatch(reason);
+    expect(signInErrorMessage(failed)).toMatch(/Nothing was signed/);
+    expect(sign).not.toHaveBeenCalled();
+    expect(verify).not.toHaveBeenCalled();
+  });
+
+  it("accepts the console's own message, and a browser clock a little behind", async () => {
+    const sign = vi.fn(async () => SIGNATURE);
+    const verify = vi.fn(async () => ({ token: "t", expiresAt: EXPIRES, operator }));
+    const message = MESSAGE.replace("Issued At: 2026-10-15T10:00:00.000Z", "Issued At: 2026-10-15T10:03:00.000Z").replace(
+      "Expiration Time: 2026-10-15T10:05:00.000Z",
+      "Expiration Time: 2026-10-15T10:08:00.000Z",
+    );
+    await signInWithWallet(ADDRESS, { challenge: async () => ({ message, nonce: "n", expiresAt: EXPIRES }), sign, verify });
+    expect(sign).toHaveBeenCalledWith(message);
   });
 });
 

@@ -113,5 +113,5 @@ npx wrangler@4.147.0 pages dev out --port 4020 --ip localhost
 `wrangler pages dev` serves `out/` the way Pages does, including `_headers`
 and `404.html`. `next dev` is unchanged for day-to-day work.
 
-The `Dockerfile` still runs `next start`, which a static export does not
-support; it is not part of this deployment.
+There is no Docker image: the site is a static export served by Cloudflare
+Pages.

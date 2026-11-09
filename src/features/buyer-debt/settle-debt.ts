@@ -119,6 +119,29 @@ export interface SettleDebtDeps {
   createIntent: (intentId: string) => Promise<DebtVoucherIntent>;
   submit: (intentId: string, body: SettleDebtBody) => Promise<SettleDebtResult>;
   now?: () => number;
+  /** The provider's display name, shown in the wallet prompt beside its payee address. */
+  providerName?: string;
+}
+
+/**
+ * The wallet prompt's words: the amount and the payee, exactly as signed.
+ *
+ * The payee (`provider`) is the one field of the voucher the app cannot tie to
+ * anything but the API's word: no record the buyer can see names the
+ * provider's wallet independently. So the prompt names it in full, with the
+ * amount, and the person signing sees who the voucher pays before signing.
+ */
+export function debtPromptText(
+  debt: BuyerDebt,
+  payee: string,
+  providerName?: string,
+): { title: string; description: string } {
+  const amount = formatMoney(debt.amount, { decimals: 4 });
+  const who = providerName ? `${providerName} (${payee})` : payee;
+  return {
+    title: `Pay debt: ${amount}`,
+    description: `Sign a payment of ${amount} from your escrow to ${who}, for a call you already received.`,
+  };
 }
 
 /** Get the replacement voucher, check it, sign it with the payer's wallet, send it. */
@@ -129,10 +152,11 @@ export async function settleDebt(
 ): Promise<SettleDebtResult> {
   const intent = await deps.createIntent(debt.intentId);
   const request = debtSigningRequest(intent, debt, signer, deps.now?.() ?? Date.now());
+  // The payee as signed: `debtSigningRequest` pinned the message's provider to this address.
+  const payee = splitAccount(intent.voucher.provider)?.address ?? intent.voucher.provider;
   const signature = await signer.signTypedData(request, {
     showWalletUIs: true,
-    title: `Pay debt: ${formatMoney(debt.amount, { decimals: 4 })}`,
-    description: `Sign a payment of ${formatMoney(debt.amount, { decimals: 4 })} from your escrow for a call you already received.`,
+    ...debtPromptText(debt, payee, deps.providerName),
   });
   // The voucher goes back exactly as it was issued, with the signature.
   return deps.submit(debt.intentId, { voucher: intent.voucher, signature });
