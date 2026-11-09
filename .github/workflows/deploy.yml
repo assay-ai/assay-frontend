@@ -58,9 +58,15 @@ jobs:
       contents: read
     # The environment is bound only to read its NEXT_PUBLIC_* values. This job
     # must never reference CLOUDFLARE_API_TOKEN or CLOUDFLARE_ACCOUNT_ID.
+    # An explicit map: only main binds "production", and only develop and demo
+    # bind their own environments. Never the branch name itself, so a branch
+    # named "production" cannot bind the production environment. Set each
+    # environment's deployment-branch policy in GitHub too (main, develop,
+    # demo only).
     environment:
-      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name }}
+      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'develop' && 'develop' || github.ref_name == 'demo' && 'demo' || 'none' }}
     env:
+      BRANCH: ${{ github.ref_name }}
       NEXT_PUBLIC_BASE_URL: ${{ vars.NEXT_PUBLIC_BASE_URL || secrets.NEXT_PUBLIC_BASE_URL }}
       NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL || secrets.NEXT_PUBLIC_API_BASE_URL }}
       NEXT_PUBLIC_PRIVY_APP_ID: ${{ vars.NEXT_PUBLIC_PRIVY_APP_ID || secrets.NEXT_PUBLIC_PRIVY_APP_ID }}
@@ -89,7 +95,7 @@ jobs:
           done
           [ ${#NEXT_PUBLIC_PRIVY_APP_ID} -eq 25 ] || { echo "::error::NEXT_PUBLIC_PRIVY_APP_ID must be 25 characters"; missing=1; }
           # The demo data layer only ever ships from the demo branch.
-          if [ "${{ github.ref_name }}" = demo ]; then
+          if [ "$BRANCH" = demo ]; then
             [ "$NEXT_PUBLIC_DEMO_CHAINS" = robinhood ] || { echo "::error::NEXT_PUBLIC_DEMO_CHAINS must be robinhood in the demo environment"; missing=1; }
           elif [ -n "$NEXT_PUBLIC_DEMO_CHAINS" ]; then
             echo "::error::NEXT_PUBLIC_DEMO_CHAINS must not be set outside the demo environment"; missing=1
@@ -132,11 +138,12 @@ jobs:
 
   deploy:
     needs: build
+    if: github.ref_name == 'main' || github.ref_name == 'develop' || github.ref_name == 'demo'
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     environment:
-      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name }}
+      name: ${{ github.ref_name == 'main' && 'production' || github.ref_name == 'develop' && 'develop' || github.ref_name == 'demo' && 'demo' || 'none' }}
       url: ${{ vars.NEXT_PUBLIC_BASE_URL }}
     env:
       CLOUDFLARE_PAGES_PROJECT: ${{ vars.CLOUDFLARE_PAGES_PROJECT || secrets.CLOUDFLARE_PAGES_PROJECT }}
@@ -183,6 +190,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Passed through the environment, never pasted into the script.
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
         run: |
           branch=$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$CLOUDFLARE_PAGES_PROJECT" \
@@ -192,5 +202,5 @@ jobs:
           deploy/wrangler/node_modules/.bin/wrangler pages deploy out \
             --project-name "$CLOUDFLARE_PAGES_PROJECT" \
             --branch "$branch" \
-            --commit-hash "${{ github.sha }}" \
-            --commit-message "${{ github.ref_name }} ${{ github.sha }}"
+            --commit-hash "$COMMIT" \
+            --commit-message "$BRANCH $COMMIT"
